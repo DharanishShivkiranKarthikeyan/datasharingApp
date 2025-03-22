@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dcrypt Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background-color: #1a202c;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    .toast {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      background-color: #48bb78;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      display: none;
+    }
+    .loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      display: none;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      padding: 0.5rem;
+      border: 1px solid #4a5568;
+      text-align: left;
+    }
+    th {
+      background-color: #2d3748;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+  <script type="module" crossorigin src="/dcrypt/assets/index-yOOycbJY.js"></script>
+</head>
+<body>
+  <div class="loading" id="loading">
+    <div class="text-white">Loading...</div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <div class="container">
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-2xl font-bold">Dcrypt Dashboard</h1>
+      <div>
+        <button id="loginButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600 mr-2">Sign in with Google</button>
+        <button id="logoutButton" onclick="logout()" class="p-2 bg-red-500 text-white rounded hover:bg-red-600 hidden">Logout</button>
+      </div>
+    </div>
+    <div class="mb-4">
+      <h2 class="text-xl font-semibold mb-2">User Info</h2>
+      <p id="userBalance">Balance: Loading...</p>
+    </div>
+    <div class="mb-4">
+      <h2 class="text-xl font-semibold mb-2">Publish Snippet</h2>
+      <input id="snippetTitle" type="text" placeholder="Title" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
+      <input id="snippetDescription" type="text" placeholder="Description" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
+      <input id="snippetTags" type="text" placeholder="Tags (comma-separated)" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
+      <textarea id="snippetContent" placeholder="Content or leave blank to upload a file" class="w-full p-2 mb-2 bg-gray-700 text-white rounded"></textarea>
+      <input id="fileUpload" type="file" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
+      <button id="publishButton" onclick="publishSnippet(document.getElementById('snippetTitle').value, document.getElementById('snippetDescription').value, document.getElementById('snippetTags').value, document.getElementById('snippetContent').value, document.getElementById('fileUpload'))" class="w-full p-2 bg-green-500 text-white rounded hover:bg-green-600" disabled>Publish</button>
+    </div>
+    <div class="mb-4">
+      <h2 class="text-xl font-semibold mb-2">Search Snippets</h2>
+      <input id="searchQuery" type="text" placeholder="Search..." class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
+      <button id="searchButton" onclick="searchSnippets(document.getElementById('searchQuery').value)" class="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600" disabled>Search</button>
+    </div>
+    <div class="mb-4">
+      <h2 class="text-xl font-semibold mb-2">Buy Snippet</h2>
+      <input id="buyHash" type="text" placeholder="Snippet Hash" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
+      <button id="buyButton" onclick="buySnippet(document.getElementById('buyHash').value)" class="w-full p-2 bg-purple-500 text-white rounded hover:bg-purple-600" disabled>Buy</button>
+    </div>
+    <div class="mb-4">
+      <h2 class="text-xl font-semibold mb-2">Withdraw Funds</h2>
+      <label class="block mb-2">
+        <input type="checkbox" id="isPremium" class="mr-2"> Premium Content
+      </label>
+      <input id="withdrawAmount" type="number" placeholder="Amount" class="w-full p-2 mb-2 bg-gray-700 text-white rounded hidden" />
+      <button id="withdrawButton" onclick="withdraw(parseFloat(document.getElementById('withdrawAmount').value))" class="w-full p-2 bg-yellow-500 text-white rounded hover:bg-yellow-600" disabled>Withdraw</button>
+    </div>
+    <div class="mb-4">
+      <h2 class="text-xl font-semibold mb-2">Transaction History</h2>
+      <button id="toggleHistoryButton" onclick="toggleTransactionHistory()" class="p-2 bg-gray-500 text-white rounded hover:bg-gray-600" disabled>Toggle History</button>
+      <div id="transactionHistory" style="display: none;">
+        <p id="transactionList">Transaction history will be displayed here.</p>
+      </div>
+    </div>
+    <div>
+      <h2 class="text-xl font-semibold mb-2">Live Feed</h2>
+      <table id="publishedItems">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Description</th>
+            <th>Tag</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
