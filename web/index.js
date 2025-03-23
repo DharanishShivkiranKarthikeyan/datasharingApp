@@ -5,7 +5,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebas
 import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
-// Firebase configuration (replace with your actual Firebase project config)
+// Firebase configuration (using the values you provided)
 const firebaseConfig = {
   apiKey: "AIzaSyBrdrwvY-lPObZgortEgw7YWycUOGsBlyM",
   authDomain: "dcrypt-edb9c.firebaseapp.com",
@@ -15,7 +15,6 @@ const firebaseConfig = {
   appId: "1:952133736604:web:32d799360f200bce84f559",
   measurementId: "G-7KCDLQ6JNH"
 };
-
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -27,6 +26,7 @@ let wasmModule = null;
 let dht = null;
 let currentUser = null;
 
+// Initialize the app with Firebase authentication
 document.addEventListener('DOMContentLoaded', () => {
   const loginButton = document.getElementById('loginButton');
   const logoutButton = document.getElementById('logoutButton');
@@ -39,7 +39,10 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUser = result.user;
         loginButton.classList.add('hidden');
         logoutButton.classList.remove('hidden');
-        init().catch(console.error);
+        init().catch(error => {
+          console.error('Initialization after redirect failed:', error);
+          showToast(`Initialization failed: ${error.message}`);
+        });
       }
     })
     .catch(error => {
@@ -54,7 +57,10 @@ document.addEventListener('DOMContentLoaded', () => {
       logoutButton.classList.remove('hidden');
       // Only call init if we haven't already (e.g., from getRedirectResult)
       if (!dht) {
-        init().catch(console.error);
+        init().catch(error => {
+          console.error('Initialization on auth state change failed:', error);
+          showToast(`Initialization failed: ${error.message}`);
+        });
       }
     } else {
       currentUser = null;
@@ -72,29 +78,43 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast(`Sign-in failed: ${error.message}`);
     }
   });
+
+  logoutButton.addEventListener('click', async () => {
+    await logout();
+  });
 });
+
 // Exported Functions
 export async function init() {
   console.log('Initializing app...');
   showLoading(true);
   try {
-    let keypair;
-    const userData = await fetchUserDataFromFirebase();
-    if (userData && userData.keypair) {
-      keypair = dht.hexToUint8Array(userData.keypair);
-      await restoreIndexedDB(userData);
-    } else {
-      keypair = new Uint8Array(32);
-      crypto.getRandomValues(keypair);
-    }
-
+    // Load Wasm module first (since DHT might depend on it)
     console.log('Loading WASM module...');
     wasmModule = await loadWasmModule();
     console.log('WASM module loaded successfully.');
 
+    // Create a temporary keypair for DHT instantiation
+    let keypair = new Uint8Array(32);
+    crypto.getRandomValues(keypair);
+
+    // Instantiate DHT early
     console.log('Initializing DHT...');
     dht = new DHT(keypair);
     window.dht = dht;
+
+    // Fetch user data and update keypair if necessary
+    const userData = await fetchUserDataFromFirebase();
+    if (userData && userData.keypair) {
+      // Ensure dht is defined before calling hexToUint8Array
+      if (!dht) throw new Error('DHT not initialized before accessing hexToUint8Array');
+      keypair = dht.hexToUint8Array(userData.keypair);
+      // Re-instantiate DHT with the correct keypair
+      dht = new DHT(keypair);
+      window.dht = dht;
+      await restoreIndexedDB(userData);
+    }
+
     await dht.initDB();
     await dht.initSwarm();
     console.log('DHT initialized.');
@@ -113,6 +133,7 @@ export async function init() {
   } catch (error) {
     console.error('Error initializing application:', error);
     showToast(`Initialization failed: ${error.message}`);
+    throw error; // Re-throw to catch in calling context
   } finally {
     showLoading(false);
     exposeGlobalFunctions();
@@ -183,6 +204,7 @@ async function exportIndexedDB() {
     return null;
   }
 }
+
 async function uploadUserDataToFirebase() {
   if (!currentUser) return;
   const maxRetries = 3;
@@ -213,7 +235,6 @@ async function uploadUserDataToFirebase() {
 // Upload data on session close
 window.onunload = () => {
   if (!currentUser) return;
-  // Since window.onunload doesn't support async operations well, rely on periodic syncing
   console.log('Session closing, relying on periodic sync for data upload');
 };
 
