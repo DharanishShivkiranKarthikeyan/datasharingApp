@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { cpSync } from 'fs'; // Node.js fs module for copying files
+import { cpSync } from 'fs';
 
 export default defineConfig({
   root: './web',
@@ -7,7 +7,7 @@ export default defineConfig({
     outDir: '../dist',
     emptyOutDir: true,
   },
-  base: '/dcrypt/', // Replace with your GitHub repository name
+  base: '/datasharingApp/', // Updated to match your repository name
   server: {
     open: '/index.html',
     port: 3000,
@@ -16,10 +16,9 @@ export default defineConfig({
       cert: './cert.pem'
     }
   },
-  assetsInclude: ['**/*.wasm'], // Ensure Vite recognizes .wasm files as assets
+  assetsInclude: ['**/*.wasm'],
   plugins: [
     {
-      // Custom plugin to copy the pkg/ folder to dist/ after build
       name: 'copy-pkg',
       writeBundle() {
         console.log('Copying pkg/ folder to dist/pkg/');
