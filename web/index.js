@@ -3,9 +3,9 @@ import { DHT } from './dht.js';
 import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
-// Firebase configuration (using the values you provided)
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBrdrwvY-lPObZgortEgw7YWycUOGsBlyM",
   authDomain: "dcrypt-edb9c.firebaseapp.com",
@@ -25,6 +25,7 @@ const db = getFirestore(app);
 let wasmModule = null;
 let dht = null;
 let currentUser = null;
+let isNode = false;
 
 // Initialize the app with Firebase authentication
 document.addEventListener('DOMContentLoaded', () => {
@@ -70,26 +71,24 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// Exported Functions
 export async function init() {
   console.log('Initializing app...');
   showLoading(true);
   try {
-    // Load Wasm module first (since DHT might depend on it)
     console.log('Loading WASM module...');
     wasmModule = await loadWasmModule();
     console.log('WASM module loaded successfully.');
 
-    // Create a temporary keypair for DHT instantiation
     let keypair = new Uint8Array(32);
     crypto.getRandomValues(keypair);
 
-    // Instantiate DHT early
+    isNode = await checkIfUserIsNode();
+    console.log(`User is ${isNode ? '' : 'not '}a node.`);
+
     console.log('Initializing DHT...');
-    dht = new DHT(keypair);
+    dht = new DHT(keypair, isNode, wasmModule); // Pass wasmModule to DHT
     window.dht = dht;
 
-    // Initialize IndexedDB before restoring data
     await dht.initDB();
     console.log('IndexedDB initialized.');
 
@@ -99,7 +98,7 @@ export async function init() {
       if (!dht) throw new Error('DHT not initialized before accessing hexToUint8Array');
       keypair = dht.hexToUint8Array(userData.keypair);
       // Re-instantiate DHT with the correct keypair
-      dht = new DHT(keypair);
+      dht = new DHT(keypair, isNode);
       window.dht = dht;
       // Re-initialize IndexedDB since we re-instantiated DHT
       await dht.initDB();
@@ -117,8 +116,17 @@ export async function init() {
 
     await updateBalanceDisplay();
 
+    // Register service worker
     if ('serviceWorker' in navigator) {
-      console.log('Service worker registration skipped for debugging');
+      try {
+        const registration = await navigator.serviceWorker.register('/sw.js');
+        console.log('Service worker registered successfully:', registration);
+      } catch (error) {
+        console.error('Service worker registration failed:', error);
+        showToast('Failed to register service worker.');
+      }
+    } else {
+      console.warn('Service workers are not supported in this browser.');
     }
   } catch (error) {
     console.error('Error initializing application:', error);
@@ -128,6 +136,18 @@ export async function init() {
     showLoading(false);
     exposeGlobalFunctions();
     setupPremiumToggle();
+  }
+}
+
+// Check if the user is a node by querying Firebase
+async function checkIfUserIsNode() {
+  if (!currentUser) return false;
+  try {
+    const nodeDoc = await getDoc(doc(db, 'nodes', currentUser.uid));
+    return nodeDoc.exists();
+  } catch (error) {
+    console.error('Failed to check node status:', error);
+    return false;
   }
 }
 
@@ -248,28 +268,34 @@ export async function publishSnippet(title, description, tags, content, fileInpu
     if (!dht) throw new Error('DHT not initialized');
     if (!title) throw new Error('Title is required');
     let finalContent = content || '';
+    let fileType = 'text/plain';
 
     if (fileInput && fileInput.files && fileInput.files.length > 0) {
       const file = fileInput.files[0];
+      fileType = file.type || 'application/octet-stream';
       const reader = new FileReader();
       finalContent = await new Promise((resolve, reject) => {
-        reader.onload = (e) => resolve(e.target.result);
+        reader.onload = (e) => resolve(new Uint8Array(e.target.result));
         reader.onerror = (e) => reject(new Error('Failed to read file'));
-        reader.readAsText(file);
+        reader.readAsArrayBuffer(file);
       });
-    } else if (!finalContent) {
-      throw new Error('Content or file is required');
+    } else {
+      finalContent = new TextEncoder().encode(finalContent);
     }
 
     const isPremium = document.getElementById('isPremium').checked;
-    const metadata = { content_type: title, description: description || '', tags: tags ? tags.split(',').map(t => t.trim()) : [], isPremium };
-    const chunks = [finalContent];
-    await dht.publishIP(metadata, chunks);
+    const metadata = {
+      content_type: title,
+      description: description || '',
+      tags: tags ? tags.split(',').map(t => t.trim()) : [],
+      isPremium
+    };
+    await dht.publishIP(metadata, finalContent, fileType);
     showToast('Snippet published successfully!');
     updateLiveFeed();
     updateTransactionHistory();
     updateBalanceDisplay();
-    await uploadUserDataToFirebase(); // Sync after significant change
+    await uploadUserDataToFirebase();
   } catch (error) {
     console.error('publishSnippet failed:', error);
     showToast(`Publish failed: ${error.message}`);
@@ -320,16 +346,18 @@ export async function buySnippet(hash) {
     const balance = await dht.getBalance(dht.keypair);
     if (balance < buyCost) throw new Error('Insufficient balance');
 
+    const commission = buyCost * 0.05;
+    await dht.distributeCommission(commission);
+
     await dht.putBalance(dht.keypair, balance - buyCost);
     await dht.dbAdd('transactions', { type: 'buy', amount: buyCost, timestamp: Date.now() });
 
-    const chunk = await dht.requestData(hash);
-    await dht.dbPut('chunkCache', { id: hash, value: chunk });
+    const { data, fileType } = await dht.requestData(hash);
     showToast('Snippet purchased and cached!');
     updateTransactionHistory();
     updateBalanceDisplay();
-    await uploadUserDataToFirebase(); // Sync after significant change
-    return chunk;
+    await uploadUserDataToFirebase();
+    return { data, fileType };
   } catch (error) {
     console.error('buySnippet failed:', error);
     showToast(`Purchase failed: ${error.message}`);
@@ -338,7 +366,6 @@ export async function buySnippet(hash) {
     showLoading(false);
   }
 }
-
 export async function withdraw(amount) {
   if (!isAuthenticated()) {
     showToast('Please sign in to withdraw.');
