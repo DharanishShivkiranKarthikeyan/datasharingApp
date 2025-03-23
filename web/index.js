@@ -27,17 +27,35 @@ let wasmModule = null;
 let dht = null;
 let currentUser = null;
 
-// Initialize the app with Firebase authentication
 document.addEventListener('DOMContentLoaded', () => {
   const loginButton = document.getElementById('loginButton');
   const logoutButton = document.getElementById('logoutButton');
+
+  // Handle redirect result after sign-in
+  getRedirectResult(auth)
+    .then(result => {
+      if (result && result.user) {
+        // User signed in via redirect
+        currentUser = result.user;
+        loginButton.classList.add('hidden');
+        logoutButton.classList.remove('hidden');
+        init().catch(console.error);
+      }
+    })
+    .catch(error => {
+      console.error('Sign-in redirect failed:', error.code, error.message);
+      showToast(`Sign-in failed: ${error.message}`);
+    });
 
   auth.onAuthStateChanged(user => {
     if (user) {
       currentUser = user;
       loginButton.classList.add('hidden');
       logoutButton.classList.remove('hidden');
-      init().catch(console.error);
+      // Only call init if we haven't already (e.g., from getRedirectResult)
+      if (!dht) {
+        init().catch(console.error);
+      }
     } else {
       currentUser = null;
       loginButton.classList.remove('hidden');
@@ -48,14 +66,13 @@ document.addEventListener('DOMContentLoaded', () => {
   loginButton.addEventListener('click', async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error('Sign-in failed:', error.code, error.message);
       showToast(`Sign-in failed: ${error.message}`);
     }
   });
 });
-
 // Exported Functions
 export async function init() {
   console.log('Initializing app...');
