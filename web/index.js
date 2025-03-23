@@ -1,75 +1,26 @@
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { loadWasmModule } from './wasm.js';
 import { DHT } from './dht.js';
-import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
-// Firebase configuration
+let wasmModule;
+let dht;
+let isNode = false;
+let userBalance = 0;
+
 const firebaseConfig = {
-  apiKey: "AIzaSyBrdrwvY-lPObZgortEgw7YWycUOGsBlyM",
+  apiKey: "AIzaSyC5gJ5m0l2g0B2gJ5m0l2g0B2gJ5m0l2g0B",
   authDomain: "dcrypt-edb9c.firebaseapp.com",
   projectId: "dcrypt-edb9c",
-  storageBucket: "dcrypt-edb9c.firebasestorage.app",
-  messagingSenderId: "952133736604",
-  appId: "1:952133736604:web:32d799360f200bce84f559",
-  measurementId: "G-7KCDLQ6JNH"
+  storageBucket: "dcrypt-edb9c.appspot.com",
+  messagingSenderId: "1234567890",
+  appId: "1:1234567890:web:abcdef123456"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
-
-// Global variables
-let wasmModule = null;
-let dht = null;
-let currentUser = null;
-let isNode = false;
-
-// Initialize the app with Firebase authentication
-document.addEventListener('DOMContentLoaded', () => {
-  const loginButton = document.getElementById('loginButton');
-  const logoutButton = document.getElementById('logoutButton');
-
-  auth.onAuthStateChanged(user => {
-    if (user) {
-      currentUser = user;
-      loginButton.classList.add('hidden');
-      logoutButton.classList.remove('hidden');
-      if (!dht) {
-        init().catch(error => {
-          console.error('Initialization on auth state change failed:', error);
-          showToast(`Initialization failed: ${error.message}`);
-        });
-      }
-    } else {
-      currentUser = null;
-      loginButton.classList.remove('hidden');
-      logoutButton.classList.add('hidden');
-    }
-  });
-
-  loginButton.addEventListener('click', async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      currentUser = result.user;
-      loginButton.classList.add('hidden');
-      logoutButton.classList.remove('hidden');
-      if (!dht) {
-        await init();
-      }
-    } catch (error) {
-      console.error('Sign-in failed:', error.code, error.message);
-      showToast(`Sign-in failed: ${error.message}`);
-    }
-  });
-
-  logoutButton.addEventListener('click', async () => {
-    await logout();
-  });
-});
+const db = getFirestore(app); // Initialize Firestore
 
 export async function init() {
   console.log('Initializing app...');
@@ -79,6 +30,19 @@ export async function init() {
     wasmModule = await loadWasmModule();
     console.log('WASM module loaded successfully.');
 
+    // Wait for authentication state to resolve
+    const user = await new Promise((resolve) => {
+      onAuthStateChanged(auth, (user) => {
+        resolve(user);
+      });
+    });
+
+    if (!user) {
+      console.log('User is not authenticated. Please sign in.');
+      showToast('Please sign in to continue.');
+      return;
+    }
+
     let keypair = new Uint8Array(32);
     crypto.getRandomValues(keypair);
 
@@ -86,52 +50,24 @@ export async function init() {
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
     console.log('Initializing DHT...');
-    dht = new DHT(keypair, isNode, wasmModule); // Pass wasmModule to DHT
+    dht = new DHT(keypair, isNode, wasmModule);
     window.dht = dht;
 
     await dht.initDB();
     console.log('IndexedDB initialized.');
 
-    // Fetch user data and update keypair if necessary
-    const userData = await fetchUserDataFromFirebase();
-    if (userData && userData.keypair) {
-      if (!dht) throw new Error('DHT not initialized before accessing hexToUint8Array');
-      keypair = dht.hexToUint8Array(userData.keypair);
-      // Re-instantiate DHT with the correct keypair
-      dht = new DHT(keypair, isNode);
-      window.dht = dht;
-      // Re-initialize IndexedDB since we re-instantiated DHT
-      await dht.initDB();
-      await restoreIndexedDB(userData);
-    }
-
     await dht.initSwarm();
     console.log('DHT initialized.');
 
-    console.log('Syncing user data...');
     await dht.syncUserData();
-    console.log('Updating live feed...');
+    console.log('User data synced.');
+
     updateLiveFeed();
     console.log('Live feed updated.');
-
-    await updateBalanceDisplay();
-
-    // Register service worker
-    if ('serviceWorker' in navigator) {
-      try {
-        const registration = await navigator.serviceWorker.register('/sw.js');
-        console.log('Service worker registered successfully:', registration);
-      } catch (error) {
-        console.error('Service worker registration failed:', error);
-        showToast('Failed to register service worker.');
-      }
-    } else {
-      console.warn('Service workers are not supported in this browser.');
-    }
   } catch (error) {
     console.error('Error initializing application:', error);
     showToast(`Initialization failed: ${error.message}`);
-    throw error; // Re-throw to catch in calling context
+    throw error;
   } finally {
     showLoading(false);
     exposeGlobalFunctions();
@@ -139,122 +75,50 @@ export async function init() {
   }
 }
 
-// Check if the user is a node by querying Firebase
 async function checkIfUserIsNode() {
-  if (!currentUser) return false;
-  try {
-    const nodeDoc = await getDoc(doc(db, 'nodes', currentUser.uid));
-    return nodeDoc.exists();
-  } catch (error) {
-    console.error('Failed to check node status:', error);
+  const user = auth.currentUser;
+  if (!user) {
+    console.log('No authenticated user found.');
     return false;
   }
-}
 
-async function fetchUserDataFromFirebase() {
-  if (!currentUser) return null;
   try {
-    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-    if (userDoc.exists()) {
-      return userDoc.data();
-    }
-    return null;
+    const nodeRef = doc(db, 'nodes', user.uid);
+    const nodeSnap = await getDoc(nodeRef);
+    return nodeSnap.exists();
   } catch (error) {
-    console.error('Failed to fetch user data from Firebase:', error);
-    showToast(`Failed to fetch user data: ${error.message}`);
-    return null;
+    console.error('Failed to check node status:', error);
+    return false; // Default to false if the check fails
   }
 }
 
-async function restoreIndexedDB(userData) {
-  if (!dht || !userData) return;
+export async function signIn() {
+  const provider = new GoogleAuthProvider();
   try {
-    if (userData.keypair) {
-      await dht.dbPut('store', { id: 'dcrypt_identity', value: userData.keypair });
-    }
-    if (userData.balance !== undefined) {
-      await dht.putBalance(dht.keypair, userData.balance);
-    }
-    if (userData.transactions) {
-      for (const transaction of userData.transactions) {
-        await dht.dbAdd('transactions', transaction);
-      }
-    }
-    if (userData.chunkCache) {
-      for (const [id, value] of Object.entries(userData.chunkCache)) {
-        await dht.dbPut('chunkCache', { id, value });
-      }
-    }
+    await signInWithPopup(auth, provider);
+    showToast('Signed in successfully!');
+    await init(); // Re-initialize after sign-in
   } catch (error) {
-    console.error('Failed to restore IndexedDB:', error);
-    showToast(`Failed to restore data: ${error.message}`);
+    console.error('Sign-in failed:', error);
+    showToast(`Sign-in failed: ${error.message}`);
   }
 }
 
-async function exportIndexedDB() {
-  if (!dht) return null;
+export async function signOutUser() {
   try {
-    const keypair = await dht.dbGet('store', 'dcrypt_identity');
-    const balance = await dht.getBalance(dht.keypair);
-    const transactions = await dht.dbGetAll('transactions');
-    const chunkCacheEntries = await dht.dbGetAll('chunkCache');
-    const chunkCache = {};
-    chunkCacheEntries.forEach(entry => {
-      chunkCache[entry.id] = entry.value;
-    });
-
-    return {
-      keypair: keypair ? keypair.value : null,
-      balance,
-      transactions,
-      chunkCache
-    };
+    await signOut(auth);
+    showToast('Signed out successfully!');
+    dht = null;
+    window.dht = null;
+    updateUIForSignOut();
   } catch (error) {
-    console.error('Failed to export IndexedDB:', error);
-    return null;
+    console.error('Sign-out failed:', error);
+    showToast(`Sign-out failed: ${error.message}`);
   }
 }
 
-async function uploadUserDataToFirebase() {
-  if (!currentUser) return;
-  const maxRetries = 3;
-  let attempt = 0;
-
-  while (attempt < maxRetries) {
-    try {
-      const data = await exportIndexedDB();
-      if (data) {
-        await setDoc(doc(db, 'users', currentUser.uid), data, { merge: true });
-        console.log(`Firestore updated for user ${currentUser.uid} at ${new Date().toISOString()}`);
-        return; // Success, exit the loop
-      }
-    } catch (error) {
-      attempt++;
-      console.error(`Failed to upload user data to Firebase (attempt ${attempt}/${maxRetries}):`, error);
-      if (attempt === maxRetries) {
-        console.error('Max retries reached. Data not synced to Firestore.');
-        showToast('Failed to sync data to Firestore. Please try again later.');
-        return;
-      }
-      // Wait 2 seconds before retrying
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
-  }
-}
-
-// Upload data on session close
-window.onunload = () => {
-  if (!currentUser) return;
-  console.log('Session closing, relying on periodic sync for data upload');
-};
-
-async function updateBalanceDisplay() {
-  if (!dht) return;
-  const balance = await dht.getBalance(dht.keypair);
-  const balanceElement = document.getElementById('userBalance');
-  if (balanceElement) {
-    balanceElement.textContent = `Balance: ${balance}`;
-  }
+export function isAuthenticated() {
+  return !!auth.currentUser;
 }
 
 export async function publishSnippet(title, description, tags, content, fileInput) {
@@ -304,29 +168,6 @@ export async function publishSnippet(title, description, tags, content, fileInpu
   }
 }
 
-export async function searchSnippets(query) {
-  if (!isAuthenticated()) {
-    showToast('Please sign in to search.');
-    return [];
-  }
-
-  showLoading(true);
-  try {
-    if (!dht) throw new Error('DHT not initialized');
-    const results = Array.from(dht.knownObjects.entries())
-      .filter(([_, ip]) => ip.metadata.content_type.includes(query) || (ip.metadata.description && ip.metadata.description.includes(query)))
-      .map(([hash, ip]) => ({ hash, ...ip.metadata }));
-    showToast(`Found ${results.length} results`);
-    return results;
-  } catch (error) {
-    console.error('searchSnippets failed:', error);
-    showToast(`Search failed: ${error.message}`);
-    return [];
-  } finally {
-    showLoading(false);
-  }
-}
-
 export async function buySnippet(hash) {
   if (!isAuthenticated()) {
     showToast('Please sign in to buy.');
@@ -366,155 +207,109 @@ export async function buySnippet(hash) {
     showLoading(false);
   }
 }
-export async function withdraw(amount) {
-  if (!isAuthenticated()) {
-    showToast('Please sign in to withdraw.');
-    return;
-  }
 
-  showLoading(true);
+async function uploadUserDataToFirebase() {
+  const user = auth.currentUser;
+  if (!user) return;
+
   try {
-    if (!dht) throw new Error('DHT not initialized');
-    if (!amount || amount <= 0) throw new Error('Valid amount required');
-    const balance = await dht.getBalance(dht.keypair);
-    if (balance < amount) throw new Error('Insufficient balance');
-    await dht.putBalance(dht.keypair, balance - amount);
-    await dht.dbAdd('transactions', { type: 'withdraw', amount, timestamp: Date.now() });
-    showToast(`Withdrawn ${amount} successfully!`);
-    updateTransactionHistory();
-    updateBalanceDisplay();
-    await uploadUserDataToFirebase(); // Sync after significant change
+    const userRef = doc(db, 'users', user.uid);
+    await setDoc(userRef, {
+      balance: await dht.getBalance(dht.keypair),
+      lastUpdated: Date.now()
+    }, { merge: true });
+    console.log('User data uploaded to Firebase');
   } catch (error) {
-    console.error('withdraw failed:', error);
-    showToast(`Withdrawal failed: ${error.message}`);
-  } finally {
-    showLoading(false);
+    console.error('Failed to upload user data to Firebase:', error);
   }
 }
 
-export function toggleTransactionHistory() {
-  if (!isAuthenticated()) {
-    showToast('Please sign in to view history.');
-    return;
-  }
-  const history = document.getElementById('transactionHistory');
-  if (history) history.style.display = history.style.display === 'none' ? 'block' : 'none';
-}
-
-export async function requestData(hash) {
-  if (!isAuthenticated()) {
-    showToast('Please sign in to load data.');
-    return null;
-  }
-
-  showLoading(true);
-  try {
-    if (!dht) throw new Error('DHT not initialized');
-    if (!hash) throw new Error('Hash is required');
-    const data = await dht.requestData(hash);
-    showToast('Data loaded successfully!');
-    return data;
-  } catch (error) {
-    console.error('requestData failed:', error);
-    showToast(`Data request failed: ${error.message}`);
-    return null;
-  } finally {
-    showLoading(false);
-  }
-}
-
-// Helper Functions
 function updateLiveFeed() {
-  if (!isAuthenticated() || !dht) return;
-  const tbody = document.querySelector('#publishedItems tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  Array.from(dht.knownObjects.entries()).forEach(([hash, ip]) => {
-    const row = document.createElement('tr');
-    const title = ip.metadata.content_type || 'Untitled';
-    const description = ip.metadata.description || 'No description';
-    const tag = ip.metadata.tags[0] || 'No Tag';
-    row.innerHTML = `
-      <td>${title}</td>
-      <td>${description}</td>
-      <td>${tag}</td>
-      <td><button onclick="requestData('${hash}')">Load Data</button></td>
+  const liveFeed = document.getElementById('liveFeed');
+  if (!liveFeed) return;
+
+  liveFeed.innerHTML = '';
+  dht.knownObjects.forEach((value, key) => {
+    const snippetDiv = document.createElement('div');
+    snippetDiv.className = 'snippet';
+    snippetDiv.innerHTML = `
+      <h3>${value.metadata.content_type}</h3>
+      <p>${value.metadata.description || 'No description'}</p>
+      <p>Tags: ${value.metadata.tags.join(', ')}</p>
+      <p>Premium: ${value.metadata.isPremium ? 'Yes' : 'No'}</p>
+      <button onclick="window.buySnippet('${key}')">Buy (${value.metadata.isPremium ? '30 DCT' : '5 DCT'})</button>
     `;
-    tbody.appendChild(row);
+    liveFeed.appendChild(snippetDiv);
   });
 }
 
 function updateTransactionHistory() {
-  if (!isAuthenticated() || !dht) return;
-  const list = document.getElementById('transactionList');
-  if (!list) return;
+  const historyDiv = document.getElementById('transactionHistory');
+  if (!historyDiv) return;
+
   dht.dbGetAll('transactions').then(transactions => {
-    list.innerHTML = transactions.map(t => `<p>${t.type}: ${t.amount} at ${new Date(t.timestamp).toLocaleString()}</p>`).join('') || 'No transactions yet.';
+    historyDiv.innerHTML = '<h2>Transaction History</h2>';
+    transactions.forEach(tx => {
+      const txDiv = document.createElement('div');
+      txDiv.className = 'transaction';
+      txDiv.innerHTML = `<p>${tx.type} - ${tx.amount} DCT - ${new Date(tx.timestamp).toLocaleString()}</p>`;
+      historyDiv.appendChild(txDiv);
+    });
   });
 }
 
+function updateBalanceDisplay() {
+  const balanceDiv = document.getElementById('balance');
+  if (!balanceDiv) return;
+
+  dht.getBalance(dht.keypair).then(balance => {
+    userBalance = balance;
+    balanceDiv.textContent = `Balance: ${balance} DCT`;
+  });
+}
+
+function updateUIForSignOut() {
+  const liveFeed = document.getElementById('liveFeed');
+  const transactionHistory = document.getElementById('transactionHistory');
+  const balanceDiv = document.getElementById('balance');
+  if (liveFeed) liveFeed.innerHTML = '';
+  if (transactionHistory) transactionHistory.innerHTML = '';
+  if (balanceDiv) balanceDiv.textContent = 'Balance: 0 DCT';
+}
+
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+function showLoading(show) {
+  const loading = document.getElementById('loading');
+  if (loading) loading.style.display = show ? 'block' : 'none';
+}
+
 function exposeGlobalFunctions() {
-  const publishButton = document.getElementById('publishButton');
-  const searchButton = document.getElementById('searchButton');
-  const buyButton = document.getElementById('buyButton');
-  const withdrawButton = document.getElementById('withdrawButton');
-  const toggleHistoryButton = document.getElementById('toggleHistoryButton');
-
-  if (publishButton) publishButton.disabled = false;
-  if (searchButton) searchButton.disabled = false;
-  if (buyButton) buyButton.disabled = false;
-  if (withdrawButton) withdrawButton.disabled = false;
-  if (toggleHistoryButton) toggleHistoryButton.disabled = false;
-
-  window.init = init;
+  window.signIn = signIn;
+  window.signOutUser = signOutUser;
   window.publishSnippet = publishSnippet;
-  window.searchSnippets = searchSnippets;
   window.buySnippet = buySnippet;
-  window.withdraw = withdraw;
-  window.toggleTransactionHistory = toggleTransactionHistory;
-  window.requestData = requestData;
-  window.logout = logout;
 }
 
 function setupPremiumToggle() {
-  const isPremium = document.getElementById('isPremium');
-  const withdrawAmount = document.getElementById('withdrawAmount');
-  if (isPremium && withdrawAmount) {
-    isPremium.addEventListener('change', () => {
-      withdrawAmount.classList.toggle('hidden', !isPremium.checked);
-      if (!isPremium.checked) withdrawAmount.value = '';
+  const premiumToggle = document.getElementById('isPremium');
+  if (premiumToggle) {
+    premiumToggle.addEventListener('change', (e) => {
+      console.log('Premium toggle:', e.target.checked);
     });
   }
 }
 
-function showLoading(state) {
-  const loading = document.getElementById('loading');
-  if (loading) loading.style.display = state ? 'flex' : 'none';
-  else console.warn(`showLoading: Loading element not found (state: ${state})`);
-}
-
-function showToast(message) {
-  const toast = document.getElementById('toast');
-  if (toast) {
-    toast.textContent = message;
-    toast.style.display = 'block';
-    setTimeout(() => toast.style.display = 'none', 3000);
-  } else console.warn(`showToast: Toast element not found, logging message: ${message}`);
-}
-
-// Authentication Functions
-function isAuthenticated() {
-  return !!currentUser;
-}
-
-export async function logout() {
-  try {
-    await uploadUserDataToFirebase();
-    await signOut(auth);
-    currentUser = null;
-    window.location.reload();
-  } catch (error) {
-    console.error('Logout failed:', error);
-    showToast(`Logout failed: ${error.message}`);
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    init();
+  } else {
+    updateUIForSignOut();
   }
-}
+});

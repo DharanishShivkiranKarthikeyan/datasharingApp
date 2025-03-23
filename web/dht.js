@@ -1,5 +1,8 @@
 import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
+import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+
+const db = getFirestore(); // Initialize Firestore
 
 export class DHT {
   constructor(keypair, isNode = false, wasmModule) {
@@ -26,24 +29,25 @@ export class DHT {
     this.initializeKnownNodes();
   }
 
-  // Fetch nodes from Firebase and periodically refresh
+  // Fetch nodes from Firestore and periodically refresh
   async initializeKnownNodes() {
     const fetchNodes = async () => {
       try {
-        const response = await fetch('https://dcrypt-edb9c.firebaseio.com/nodes.json');
-        const data = await response.json();
+        const nodesSnapshot = await getDocs(collection(db, 'nodes'));
         this.nodes.clear();
-        if (data) {
-          Object.keys(data).forEach(uid => {
-            const nodePeerId = `node-${uid}`; // Assuming node peerIds are stored as UIDs
+        if (!nodesSnapshot.empty) {
+          nodesSnapshot.forEach(doc => {
+            const nodePeerId = `node-${doc.id}`;
             this.nodes.add(nodePeerId);
           });
+        } else {
+          console.warn('No nodes found in Firestore. Using empty node list.');
         }
         console.log('Fetched nodes:', Array.from(this.nodes));
       } catch (error) {
-        console.error('Failed to fetch nodes from Firebase:', error);
-        // Fallback to a default list
-        ['node-1', 'node-2', 'node-3'].forEach(nodeId => this.nodes.add(nodeId));
+        console.error('Failed to fetch nodes from Firestore:', error);
+        this.nodes.clear();
+        console.warn('No nodes available. Peer discovery will be limited to regular peers.');
       }
     };
 
@@ -211,11 +215,13 @@ export class DHT {
   discoverPeers() {
     console.log('Discovering peers...');
     const knownPeerIds = [
-      ...Array.from(this.nodes),
-      'peer-1',
-      'peer-2',
-      'peer-3'
+      ...Array.from(this.nodes)
     ].filter(id => id !== this.peerId);
+
+    if (knownPeerIds.length === 0) {
+      console.warn('No known peers to connect to. Waiting for nodes to be discovered.');
+      return;
+    }
 
     knownPeerIds.forEach(peerId => {
       if (!this.peers.has(peerId)) {
@@ -262,7 +268,7 @@ export class DHT {
     });
 
     conn.on('error', err => {
-      console.error(`Connection error with peer ${peerId}:`, err);
+      console.warn(`Connection error with peer ${peerId}: ${err.message}`);
       this.handlePeerDisconnect(peerId);
     });
 
