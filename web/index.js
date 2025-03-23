@@ -2,7 +2,7 @@ import { loadWasmModule } from './wasm.js';
 import { DHT } from './dht.js';
 import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // Firebase configuration (using the values you provided)
@@ -31,31 +31,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginButton = document.getElementById('loginButton');
   const logoutButton = document.getElementById('logoutButton');
 
-  // Handle redirect result after sign-in
-  getRedirectResult(auth)
-    .then(result => {
-      if (result && result.user) {
-        // User signed in via redirect
-        currentUser = result.user;
-        loginButton.classList.add('hidden');
-        logoutButton.classList.remove('hidden');
-        init().catch(error => {
-          console.error('Initialization after redirect failed:', error);
-          showToast(`Initialization failed: ${error.message}`);
-        });
-      }
-    })
-    .catch(error => {
-      console.error('Sign-in redirect failed:', error.code, error.message);
-      showToast(`Sign-in failed: ${error.message}`);
-    });
-
   auth.onAuthStateChanged(user => {
     if (user) {
       currentUser = user;
       loginButton.classList.add('hidden');
       logoutButton.classList.remove('hidden');
-      // Only call init if we haven't already (e.g., from getRedirectResult)
       if (!dht) {
         init().catch(error => {
           console.error('Initialization on auth state change failed:', error);
@@ -72,7 +52,13 @@ document.addEventListener('DOMContentLoaded', () => {
   loginButton.addEventListener('click', async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      currentUser = result.user;
+      loginButton.classList.add('hidden');
+      logoutButton.classList.remove('hidden');
+      if (!dht) {
+        await init();
+      }
     } catch (error) {
       console.error('Sign-in failed:', error.code, error.message);
       showToast(`Sign-in failed: ${error.message}`);
@@ -103,19 +89,23 @@ export async function init() {
     dht = new DHT(keypair);
     window.dht = dht;
 
+    // Initialize IndexedDB before restoring data
+    await dht.initDB();
+    console.log('IndexedDB initialized.');
+
     // Fetch user data and update keypair if necessary
     const userData = await fetchUserDataFromFirebase();
     if (userData && userData.keypair) {
-      // Ensure dht is defined before calling hexToUint8Array
       if (!dht) throw new Error('DHT not initialized before accessing hexToUint8Array');
       keypair = dht.hexToUint8Array(userData.keypair);
       // Re-instantiate DHT with the correct keypair
       dht = new DHT(keypair);
       window.dht = dht;
+      // Re-initialize IndexedDB since we re-instantiated DHT
+      await dht.initDB();
       await restoreIndexedDB(userData);
     }
 
-    await dht.initDB();
     await dht.initSwarm();
     console.log('DHT initialized.');
 
