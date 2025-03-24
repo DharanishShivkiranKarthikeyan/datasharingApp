@@ -3,9 +3,20 @@ import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+import {
+  createIntellectualProperty,
+  getIpContent,
+  computeFullHash,
+  chunkEncrypt,
+  getChunkHash,
+  getIpMetadata,
+  getChunkIndex,
+  decryptChunk,
+  getChunkFileType,
+} from './utils.js';
 
 export class DHT {
-  constructor(keypair, isNode = false, wasmModule) {
+  constructor(keypair, isNode = false) {
     this.peers = new Map();
     this.channels = new Map();
     this.knownObjects = new Map();
@@ -22,7 +33,6 @@ export class DHT {
     this.connectionAttempts = new Map();
     this.maxConnectionAttempts = 3;
     this.connectionRetryDelay = 5000;
-    this.wasmModule = wasmModule;
     this.averageLatency = 0;
 
     this.initializeKnownNodes();
@@ -414,15 +424,8 @@ export class DHT {
 
   async publishIP(metadata, content, fileType) {
     if (!this.db) throw new Error('IndexedDB not initialized');
-    if (!this.wasmModule) throw new Error('Wasm module not initialized');
-  
-    console.log('WASM module in DHT:', this.wasmModule);
-    console.log('WASM module exports in DHT:', Object.keys(this.wasmModule));
-  
-    if (typeof this.wasmModule.create_intellectual_property !== 'function') {
-      throw new Error('create_intellectual_property is not a function in WASM module');
-    }
-  
+    if (!this.keypair) throw new Error('Keypair not initialized');
+
     try {
       // Ensure tags is an array of strings
       const tags = Array.isArray(metadata.tags)
@@ -435,64 +438,66 @@ export class DHT {
           }).filter(tag => tag.trim() !== '') // Remove empty strings
         : [];
       console.log('Processed tags:', tags);
-  
-      console.log('Calling create_intellectual_property with:', {
-        content: new Uint8Array(content),
-        content_type: metadata.content_type,
+
+      // Set pricing: free unless marked as premium with a price
+      const isPremium = !!metadata.isPremium;
+      const priceUsd = isPremium ? (metadata.priceUsd || 30) : 0; // Free unless premium
+
+      const contentArray = new Uint8Array(content);
+      const contentType = metadata.content_type || '';
+      const creatorId = this.keypair instanceof Uint8Array ? this.keypair : new Uint8Array(this.keypair);
+      const fileTypeSafe = fileType || 'text/plain';
+
+      // Create the Intellectual Property object
+      const ip = createIntellectualProperty(
+        contentArray,
+        contentType,
         tags,
-        isPremium: metadata.isPremium,
-        priceUsd: metadata.isPremium ? 30 : 5,
-        creatorId: this.keypair,
-        fileType
-      });
-  
-      const ip = this.wasmModule.create_intellectual_property(
-        new Uint8Array(content),
-        metadata.content_type,
-        tags, // Pass the validated tags array
-        metadata.isPremium,
-        metadata.isPremium ? 30 : 5, // price_usd as a float
-        this.keypair, // creator_id
-        fileType
+        isPremium,
+        priceUsd,
+        creatorId,
+        fileTypeSafe
       );
-  
-      const contentBytes = this.wasmModule.get_ip_content(ip);
-      const ipHashBytes = this.wasmModule.compute_full_hash(contentBytes);
+
+      const contentBytes = getIpContent(ip);
+      const ipHashBytes = await computeFullHash(contentBytes);
       const ipHash = this.uint8ArrayToHex(ipHashBytes);
-  
+
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
-      const chunks = this.wasmModule.chunk_encrypt(ip, Array.from(this.keypair), minChunks);
-  
+      const chunks = await chunkEncrypt(ip, Array.from(this.keypair), minChunks);
+
       const chunkHashes = [];
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
-        const chunkHashBytes = this.wasmModule.get_chunk_hash(chunk);
+        const chunkHashBytes = getChunkHash(chunk);
         const chunkHash = this.uint8ArrayToHex(chunkHashBytes);
         chunkHashes.push(chunkHash);
       }
-  
+
       const updatedMetadata = {
         ...metadata,
-        chunk_count: chunks.length
+        chunk_count: chunks.length,
+        isPremium, // Ensure metadata reflects the pricing
+        priceUsd: isPremium ? priceUsd : 0, // Free unless premium
       };
-  
+
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
       this.knownObjects.set(ipHash, ipObject);
       await this.dbPut('store', { id: ipHash, value: JSON.stringify(ipObject) });
-  
+
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const chunkHash = chunkHashes[i];
         await this.publishChunk(chunkHash, chunk, i, chunks.length);
       }
-  
+
       if (this.activeNodes.size > 0) {
         this.broadcastIP(ipHash, updatedMetadata, chunkHashes);
       } else {
         await this.queueOfflineOperation({ type: 'publishIP', ipHash, metadata: updatedMetadata, chunkHashes });
       }
-  
+
       return ipHash;
     } catch (error) {
       console.error('publishIP failed:', error);
@@ -508,7 +513,6 @@ export class DHT {
 
   async requestData(ipHash) {
     if (!this.db) throw new Error('IndexedDB not initialized');
-    if (!this.wasmModule) throw new Error('Wasm module not initialized');
     try {
       if (!ipHash || typeof ipHash !== 'string') throw new Error('Invalid IP hash');
 
@@ -555,14 +559,14 @@ export class DHT {
       }
 
       const sortedChunks = chunks.sort((a, b) => {
-        const indexA = this.wasmModule.get_chunk_index(a.chunk);
-        const indexB = this.wasmModule.get_chunk_index(b.chunk);
+        const indexA = getChunkIndex(a.chunk);
+        const indexB = getChunkIndex(b.chunk);
         return indexA - indexB;
       });
 
       const decryptedData = [];
       for (const { chunk } of sortedChunks) {
-        const decryptedChunk = this.wasmModule.decrypt_chunk(chunk, Array.from(this.keypair));
+        const decryptedChunk = await decryptChunk(chunk, Array.from(this.keypair));
         decryptedData.push(decryptedChunk);
       }
 
@@ -573,7 +577,7 @@ export class DHT {
         offset += chunk.length;
       }
 
-      const fileType = this.wasmModule.get_chunk_file_type(sortedChunks[0].chunk);
+      const fileType = getChunkFileType(sortedChunks[0].chunk);
       return { data: fullData, fileType };
     } catch (error) {
       console.error('requestData failed:', error);

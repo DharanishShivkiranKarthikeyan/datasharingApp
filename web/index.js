@@ -2,11 +2,9 @@
 import { auth, db } from './firebase.js';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-import { loadWasmModule } from './wasm.js';
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
 
-let wasmModule;
 let dht;
 let isNode = false;
 let userBalance = 0;
@@ -85,11 +83,6 @@ export async function init() {
   console.log('Initializing app...');
   showLoading(true);
   try {
-    console.log('Loading WASM module...');
-    wasmModule = await loadWasmModule();
-    console.log('WASM module loaded successfully:', wasmModule);
-    console.log('WASM module exports in init:', Object.keys(wasmModule));
-
     const user = await new Promise((resolve) => {
       onAuthStateChanged(auth, (user) => {
         resolve(user);
@@ -115,7 +108,7 @@ export async function init() {
     }
 
     console.log('Initializing DHT...');
-    dht = new DHT(keypair, isNode, wasmModule);
+    dht = new DHT(keypair, isNode);
     window.dht = dht;
 
     await dht.initDB();
@@ -141,6 +134,7 @@ export async function init() {
     setupPremiumToggle();
   }
 }
+
 async function checkIfUserIsNode() {
   const user = auth.currentUser;
   if (!user) {
@@ -217,11 +211,15 @@ export async function publishSnippet(title, description, tags, content, fileInpu
     }
 
     const isPremium = document.getElementById('isPremium').checked;
+    const priceInput = document.getElementById('priceInput');
+    const priceUsd = isPremium && priceInput ? parseFloat(priceInput.value) || 0 : 0;
+
     const metadata = {
       content_type: title,
       description: description || '',
       tags: tags ? tags.split(',').map(t => t.trim()) : [],
-      isPremium
+      isPremium,
+      priceUsd
     };
     await dht.publishIP(metadata, finalContent, fileType);
     showToast('Snippet published successfully!');
@@ -250,20 +248,27 @@ export async function buySnippet(hash) {
 
     const ipObject = dht.knownObjects.get(hash);
     if (!ipObject) throw new Error('Snippet not found');
+
     const isPremium = ipObject.metadata.isPremium || false;
-    const buyCost = isPremium ? 30 : 5;
+    const priceUsd = isPremium ? (ipObject.metadata.priceUsd || 0) : 0;
+    const buyCost = priceUsd; // Free if priceUsd is 0
 
-    const balance = await dht.getBalance(dht.keypair);
-    if (balance < buyCost) throw new Error('Insufficient balance');
+    if (buyCost > 0) {
+      const balance = await dht.getBalance(dht.keypair);
+      if (balance < buyCost) throw new Error('Insufficient balance');
 
-    const commission = buyCost * 0.05;
-    await dht.distributeCommission(commission);
+      const commission = buyCost * 0.05;
+      await dht.distributeCommission(commission);
 
-    await dht.putBalance(dht.keypair, balance - buyCost);
-    await dht.dbAdd('transactions', { type: 'buy', amount: buyCost, timestamp: Date.now() });
+      await dht.putBalance(dht.keypair, balance - buyCost);
+      await dht.dbAdd('transactions', { type: 'buy', amount: buyCost, timestamp: Date.now() });
+    } else {
+      console.log('This snippet is free!');
+      await dht.dbAdd('transactions', { type: 'buy', amount: 0, timestamp: Date.now() });
+    }
 
     const { data, fileType } = await dht.requestData(hash);
-    showToast('Snippet purchased and cached!');
+    showToast('Snippet retrieved successfully!');
     updateTransactionHistory();
     updateBalanceDisplay();
     await uploadUserDataToFirebase();
@@ -299,12 +304,15 @@ export async function searchSnippets(query) {
         (description && description.toLowerCase().includes(queryLower)) ||
         (tags && tags.some(tag => tag.toLowerCase().includes(queryLower)))
       ) {
+        const isPremium = value.metadata.isPremium || false;
+        const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
+        const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
         const row = document.createElement('tr');
         row.innerHTML = `
           <td>${content_type}</td>
           <td>${description || 'No description'}</td>
           <td>${tags.join(', ') || 'No tags'}</td>
-          <td><button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600">Buy (${value.metadata.isPremium ? '30 DCT' : '5 DCT'})</button></td>
+          <td><button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600">Get (${costDisplay})</button></td>
         `;
         publishedItemsTableBody.appendChild(row);
       }
@@ -379,12 +387,15 @@ function updateLiveFeed() {
 
   publishedItemsTableBody.innerHTML = '';
   dht.knownObjects.forEach((value, key) => {
+    const isPremium = value.metadata.isPremium || false;
+    const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
+    const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${value.metadata.content_type}</td>
       <td>${value.metadata.description || 'No description'}</td>
       <td>${value.metadata.tags.join(', ') || 'No tags'}</td>
-      <td><button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600">Buy (${value.metadata.isPremium ? '30 DCT' : '5 DCT'})</button></td>
+      <td><button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600">Get (${costDisplay})</button></td>
     `;
     publishedItemsTableBody.appendChild(row);
   });
@@ -444,11 +455,14 @@ function showLoading(show) {
 
 function setupPremiumToggle() {
   const premiumToggle = document.getElementById('isPremium');
-  const withdrawAmountInput = document.getElementById('withdrawAmount');
-  if (premiumToggle && withdrawAmountInput) {
+  const priceInput = document.getElementById('priceInput');
+  if (premiumToggle && priceInput) {
     premiumToggle.addEventListener('change', (e) => {
       console.log('Premium toggle:', e.target.checked);
-      withdrawAmountInput.classList.toggle('hidden', !e.target.checked);
+      priceInput.classList.toggle('hidden', !e.target.checked);
+      if (!e.target.checked) {
+        priceInput.value = '';
+      }
     });
   }
 }
