@@ -470,7 +470,7 @@ export class DHT {
       const chunkHashes = [];
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
-        const chunkHashBytes = getChunkHash(chunk);
+        const chunkHashBytes = await getChunkHash(chunk);
         const chunkHash = this.uint8ArrayToHex(chunkHashBytes);
         chunkHashes.push(chunkHash);
       }
