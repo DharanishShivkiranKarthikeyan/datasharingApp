@@ -13,6 +13,7 @@ let testPeers = [];
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
   // Get DOM elements
+  const signupButton = document.getElementById('signupButton'); // New
   const loginButton = document.getElementById('loginButton');
   const logoutButton = document.getElementById('logoutButton');
   const userBalanceElement = document.getElementById('userBalance');
@@ -26,8 +27,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
 
   // Verify that all required elements are found
-  if (!loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !buyButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody) {
+  if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !buyButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody) {
     console.error('Required DOM elements not found:', {
+      signupButton: !!signupButton, // New
       loginButton: !!loginButton,
       logoutButton: !!logoutButton,
       userBalanceElement: !!userBalanceElement,
@@ -51,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
   onAuthStateChanged(auth, (user) => {
     if (user) {
       console.log('User is signed in:', user.uid);
+      signupButton.classList.add('hidden'); // Hide Sign Up button
       loginButton.classList.add('hidden');
       logoutButton.classList.remove('hidden');
       publishButton.disabled = false;
@@ -62,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
       init();
     } else {
       console.log('No user is signed in.');
+      signupButton.classList.remove('hidden'); // Show Sign Up button
       loginButton.classList.remove('hidden');
       logoutButton.classList.add('hidden');
       publishButton.disabled = true;
@@ -82,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.deposit = deposit;
   window.withdraw = withdraw;
   window.toggleTransactionHistory = toggleTransactionHistory;
-  window.flagSnippet = flagSnippet; // New
+  window.flagSnippet = flagSnippet;
 });
 
 export async function init() {
