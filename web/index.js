@@ -1,7 +1,7 @@
 // web/index.js
 import { auth, db } from './firebase.js';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+import { doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
 
@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const publishButton = document.getElementById('publishButton');
   const searchButton = document.getElementById('searchButton');
   const buyButton = document.getElementById('buyButton');
-  const depositButton = document.getElementById('depositButton'); // New
+  const depositButton = document.getElementById('depositButton');
   const withdrawButton = document.getElementById('withdrawButton');
   const toggleHistoryButton = document.getElementById('toggleHistoryButton');
   const transactionHistory = document.getElementById('transactionHistory');
@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
       publishButton: !!publishButton,
       searchButton: !!searchButton,
       buyButton: !!buyButton,
-      depositButton: !!depositButton, // New
+      depositButton: !!depositButton,
       withdrawButton: !!withdrawButton,
       toggleHistoryButton: !!toggleHistoryButton,
       transactionHistory: !!transactionHistory,
@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
       publishButton.disabled = false;
       searchButton.disabled = false;
       buyButton.disabled = false;
-      depositButton.disabled = false; // New
+      depositButton.disabled = false;
       withdrawButton.disabled = false;
       toggleHistoryButton.disabled = false;
       init();
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
       publishButton.disabled = true;
       searchButton.disabled = true;
       buyButton.disabled = true;
-      depositButton.disabled = true; // New
+      depositButton.disabled = true;
       withdrawButton.disabled = true;
       toggleHistoryButton.disabled = true;
       updateUIForSignOut();
@@ -79,9 +79,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.publishSnippet = publishSnippet;
   window.buySnippet = buySnippet;
   window.searchSnippets = searchSnippets;
-  window.deposit = deposit; // New
+  window.deposit = deposit;
   window.withdraw = withdraw;
   window.toggleTransactionHistory = toggleTransactionHistory;
+  window.flagSnippet = flagSnippet; // New
 });
 
 export async function init() {
@@ -226,7 +227,18 @@ export async function publishSnippet(title, description, tags, content, fileInpu
       isPremium,
       priceUsd
     };
-    await dht.publishIP(metadata, finalContent, fileType);
+    const ipHash = await dht.publishIP(metadata, finalContent, fileType);
+
+    // Initialize snippet metadata in Firestore for ratings and moderation
+    const snippetRef = doc(db, 'snippets', ipHash);
+    await setDoc(snippetRef, {
+      ipHash,
+      flagCount: 0,
+      averageRating: 0,
+      reviewStatus: 'active',
+      createdAt: Date.now()
+    }, { merge: true });
+
     showToast('Snippet published successfully!');
     updateLiveFeed();
     updateTransactionHistory();
@@ -277,11 +289,91 @@ export async function buySnippet(hash) {
     updateTransactionHistory();
     updateBalanceDisplay();
     await uploadUserDataToFirebase();
+
+    // Prompt for rating
+    const rating = prompt('Please rate this snippet (1-5 stars):', '5');
+    if (rating !== null) {
+      const ratingValue = parseInt(rating);
+      if (ratingValue >= 1 && ratingValue <= 5) {
+        await submitRating(hash, ratingValue);
+        showToast(`Rated ${ratingValue} stars!`);
+        updateLiveFeed(); // Refresh live feed to show updated rating
+      } else {
+        showToast('Invalid rating. Please enter a number between 1 and 5.');
+      }
+    }
+
     return { data, fileType };
   } catch (error) {
     console.error('buySnippet failed:', error);
     showToast(`Purchase failed: ${error.message}`);
     return null;
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function submitRating(ipHash, rating) {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  try {
+    // Store the user's rating
+    const ratingRef = doc(db, 'snippets', ipHash, 'ratings', user.uid);
+    await setDoc(ratingRef, {
+      rating,
+      timestamp: Date.now()
+    });
+
+    // Calculate new average rating
+    const ratingsSnapshot = await getDocs(collection(db, 'snippets', ipHash, 'ratings'));
+    const ratings = ratingsSnapshot.docs.map(doc => doc.data().rating);
+    const averageRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
+
+    // Update the snippet's average rating
+    const snippetRef = doc(db, 'snippets', ipHash);
+    await updateDoc(snippetRef, {
+      averageRating: averageRating.toFixed(1)
+    });
+  } catch (error) {
+    console.error('Failed to submit rating:', error);
+    showToast(`Failed to submit rating: ${error.message}`);
+  }
+}
+
+export async function flagSnippet(ipHash) {
+  if (!isAuthenticated()) {
+    showToast('Please sign in to flag snippets.');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const snippetRef = doc(db, 'snippets', ipHash);
+    const snippetSnap = await getDoc(snippetRef);
+    if (!snippetSnap.exists()) throw new Error('Snippet not found');
+
+    // Increment flag count
+    await updateDoc(snippetRef, {
+      flagCount: increment(1)
+    });
+
+    // Check if flag count exceeds threshold (e.g., 3)
+    const updatedSnippet = await getDoc(snippetRef);
+    const flagCount = updatedSnippet.data().flagCount;
+    if (flagCount >= 3) {
+      await updateDoc(snippetRef, {
+        reviewStatus: 'under_review'
+      });
+      showToast('Snippet flagged and marked for review.');
+    } else {
+      showToast('Snippet flagged successfully.');
+    }
+
+    updateLiveFeed(); // Refresh live feed to hide flagged snippets
+  } catch (error) {
+    console.error('Failed to flag snippet:', error);
+    showToast(`Failed to flag snippet: ${error.message}`);
   } finally {
     showLoading(false);
   }
@@ -301,13 +393,24 @@ export async function searchSnippets(query) {
     const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
     publishedItemsTableBody.innerHTML = '';
 
+    const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
+    const snippetsData = {};
+    snippetsSnapshot.forEach(doc => {
+      snippetsData[doc.id] = doc.data();
+    });
+
     dht.knownObjects.forEach((value, key) => {
       const { content_type, description, tags } = value.metadata;
       const queryLower = query.toLowerCase();
+      const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
+
       if (
-        content_type.toLowerCase().includes(queryLower) ||
-        (description && description.toLowerCase().includes(queryLower)) ||
-        (tags && tags.some(tag => tag.toLowerCase().includes(queryLower)))
+        snippetInfo.reviewStatus === 'active' &&
+        (
+          content_type.toLowerCase().includes(queryLower) ||
+          (description && description.toLowerCase().includes(queryLower)) ||
+          (tags && tags.some(tag => tag.toLowerCase().includes(queryLower)))
+        )
       ) {
         const isPremium = value.metadata.isPremium || false;
         const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
@@ -317,7 +420,11 @@ export async function searchSnippets(query) {
           <td>${content_type}</td>
           <td>${description || 'No description'}</td>
           <td>${tags.join(', ') || 'No tags'}</td>
-          <td><button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600">Get (${costDisplay})</button></td>
+          <td>${snippetInfo.averageRating} / 5</td>
+          <td>
+            <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 mr-2">Get (${costDisplay})</button>
+            <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600">Flag</button>
+          </td>
         `;
         publishedItemsTableBody.appendChild(row);
       }
@@ -419,18 +526,32 @@ function updateLiveFeed() {
   if (!publishedItemsTableBody) return;
 
   publishedItemsTableBody.innerHTML = '';
-  dht.knownObjects.forEach((value, key) => {
-    const isPremium = value.metadata.isPremium || false;
-    const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
-    const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${value.metadata.content_type}</td>
-      <td>${value.metadata.description || 'No description'}</td>
-      <td>${value.metadata.tags.join(', ') || 'No tags'}</td>
-      <td><button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600">Get (${costDisplay})</button></td>
-    `;
-    publishedItemsTableBody.appendChild(row);
+  getDocs(collection(db, 'snippets')).then(snippetsSnapshot => {
+    const snippetsData = {};
+    snippetsSnapshot.forEach(doc => {
+      snippetsData[doc.id] = doc.data();
+    });
+
+    dht.knownObjects.forEach((value, key) => {
+      const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
+      if (snippetInfo.reviewStatus !== 'active') return; // Skip snippets under review
+
+      const isPremium = value.metadata.isPremium || false;
+      const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
+      const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${value.metadata.content_type}</td>
+        <td>${value.metadata.description || 'No description'}</td>
+        <td>${value.metadata.tags.join(', ') || 'No tags'}</td>
+        <td>${snippetInfo.averageRating} / 5</td>
+        <td>
+          <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 mr-2">Get (${costDisplay})</button>
+          <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600">Flag</button>
+        </td>
+      `;
+      publishedItemsTableBody.appendChild(row);
+    });
   });
 }
 
