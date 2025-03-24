@@ -85,11 +85,12 @@ export async function chunkEncrypt(ip, key, minChunks) {
 
   return chunks;
 }
-
 export function getChunkHash(chunk) {
-  const dataToHash = new Uint8Array([...chunk.data, ...chunk.nonce, chunk.index]);
-  return computeFullHash(dataToHash);
-}
+    // Convert chunk.index (a number) to a Uint8Array
+    const indexBytes = new Uint8Array(new Int32Array([chunk.index]).buffer);
+    const dataToHash = new Uint8Array([...chunk.data, ...chunk.nonce, ...indexBytes]);
+    return computeFullHash(dataToHash);
+  }
 
 export function getIpMetadata(ip) {
   return {
