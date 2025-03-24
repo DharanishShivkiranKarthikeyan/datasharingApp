@@ -5,6 +5,10 @@ import { doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, increment 
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
 
+// Import signup.js and node-instructions.js to include them in the bundle
+import './signup.js';
+import './node-instructions.js';
+
 let dht;
 let isNode = false;
 let userBalance = 0;
@@ -13,7 +17,7 @@ let testPeers = [];
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
   // Get DOM elements
-  const signupButton = document.getElementById('signupButton'); // New
+  const signupButton = document.getElementById('signupButton');
   const loginButton = document.getElementById('loginButton');
   const logoutButton = document.getElementById('logoutButton');
   const userBalanceElement = document.getElementById('userBalance');
@@ -29,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Verify that all required elements are found
   if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !buyButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody) {
     console.error('Required DOM elements not found:', {
-      signupButton: !!signupButton, // New
+      signupButton: !!signupButton,
       loginButton: !!loginButton,
       logoutButton: !!logoutButton,
       userBalanceElement: !!userBalanceElement,
@@ -53,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
   onAuthStateChanged(auth, (user) => {
     if (user) {
       console.log('User is signed in:', user.uid);
-      signupButton.classList.add('hidden'); // Hide Sign Up button
+      signupButton.classList.add('hidden');
       loginButton.classList.add('hidden');
       logoutButton.classList.remove('hidden');
       publishButton.disabled = false;
@@ -65,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
       init();
     } else {
       console.log('No user is signed in.');
-      signupButton.classList.remove('hidden'); // Show Sign Up button
+      signupButton.classList.remove('hidden');
       loginButton.classList.remove('hidden');
       logoutButton.classList.add('hidden');
       publishButton.disabled = true;
@@ -346,40 +350,33 @@ async function submitRating(ipHash, rating) {
 }
 
 export async function flagSnippet(ipHash) {
-  if (!isAuthenticated()) {
-    showToast('Please sign in to flag snippets.');
+  const user = auth.currentUser;
+  if (!user) {
+    showToast('Please sign in to flag content.');
     return;
   }
 
-  showLoading(true);
   try {
     const snippetRef = doc(db, 'snippets', ipHash);
-    const snippetSnap = await getDoc(snippetRef);
-    if (!snippetSnap.exists()) throw new Error('Snippet not found');
-
-    // Increment flag count
     await updateDoc(snippetRef, {
       flagCount: increment(1)
     });
 
-    // Check if flag count exceeds threshold (e.g., 3)
-    const updatedSnippet = await getDoc(snippetRef);
-    const flagCount = updatedSnippet.data().flagCount;
+    const snippetSnap = await getDoc(snippetRef);
+    const flagCount = snippetSnap.data().flagCount || 0;
+
     if (flagCount >= 3) {
       await updateDoc(snippetRef, {
         reviewStatus: 'under_review'
       });
-      showToast('Snippet flagged and marked for review.');
+      showToast('Snippet has been flagged and is under review.');
+      updateLiveFeed();
     } else {
-      showToast('Snippet flagged successfully.');
+      showToast('Snippet flagged. It will be reviewed if flagged by more users.');
     }
-
-    updateLiveFeed(); // Refresh live feed to hide flagged snippets
   } catch (error) {
     console.error('Failed to flag snippet:', error);
     showToast(`Failed to flag snippet: ${error.message}`);
-  } finally {
-    showLoading(false);
   }
 }
 

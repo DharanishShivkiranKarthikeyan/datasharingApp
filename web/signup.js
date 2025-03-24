@@ -3,15 +3,18 @@ import { auth, db } from './firebase.js';
 import { signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 
-document.addEventListener('DOMContentLoaded', () => {
-  const signupButton = document.getElementById('signupButton');
-  if (!signupButton) {
-    console.error('Sign-up button not found');
-    return;
-  }
+// Only run this code if we're on signup.html
+if (window.location.pathname === '/signup.html') {
+  document.addEventListener('DOMContentLoaded', () => {
+    const signupButton = document.getElementById('signupButton');
+    if (!signupButton) {
+      console.error('Sign-up button not found');
+      return;
+    }
 
-  signupButton.addEventListener('click', signUp);
-});
+    signupButton.addEventListener('click', signUp);
+  });
+}
 
 async function signUp() {
   showLoading(true);
