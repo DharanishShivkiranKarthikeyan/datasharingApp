@@ -19,13 +19,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const publishButton = document.getElementById('publishButton');
   const searchButton = document.getElementById('searchButton');
   const buyButton = document.getElementById('buyButton');
+  const depositButton = document.getElementById('depositButton'); // New
   const withdrawButton = document.getElementById('withdrawButton');
   const toggleHistoryButton = document.getElementById('toggleHistoryButton');
   const transactionHistory = document.getElementById('transactionHistory');
   const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
 
   // Verify that all required elements are found
-  if (!loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !buyButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody) {
+  if (!loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !buyButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody) {
     console.error('Required DOM elements not found:', {
       loginButton: !!loginButton,
       logoutButton: !!logoutButton,
@@ -33,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
       publishButton: !!publishButton,
       searchButton: !!searchButton,
       buyButton: !!buyButton,
+      depositButton: !!depositButton, // New
       withdrawButton: !!withdrawButton,
       toggleHistoryButton: !!toggleHistoryButton,
       transactionHistory: !!transactionHistory,
@@ -54,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
       publishButton.disabled = false;
       searchButton.disabled = false;
       buyButton.disabled = false;
+      depositButton.disabled = false; // New
       withdrawButton.disabled = false;
       toggleHistoryButton.disabled = false;
       init();
@@ -64,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
       publishButton.disabled = true;
       searchButton.disabled = true;
       buyButton.disabled = true;
+      depositButton.disabled = true; // New
       withdrawButton.disabled = true;
       toggleHistoryButton.disabled = true;
       updateUIForSignOut();
@@ -75,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.publishSnippet = publishSnippet;
   window.buySnippet = buySnippet;
   window.searchSnippets = searchSnippets;
+  window.deposit = deposit; // New
   window.withdraw = withdraw;
   window.toggleTransactionHistory = toggleTransactionHistory;
 });
@@ -322,6 +327,34 @@ export async function searchSnippets(query) {
   } catch (error) {
     console.error('searchSnippets failed:', error);
     showToast(`Search failed: ${error.message}`);
+  } finally {
+    showLoading(false);
+  }
+}
+
+export async function deposit(amount) {
+  if (!isAuthenticated()) {
+    showToast('Please sign in to deposit.');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    if (!dht) throw new Error('DHT not initialized');
+    if (!amount || amount <= 0) throw new Error('Invalid deposit amount');
+
+    const balance = await dht.getBalance(dht.keypair);
+    const newBalance = balance + amount;
+    await dht.putBalance(dht.keypair, newBalance);
+    await dht.dbAdd('transactions', { type: 'deposit', amount, timestamp: Date.now() });
+
+    showToast(`Deposited ${amount} DCT successfully!`);
+    updateTransactionHistory();
+    updateBalanceDisplay();
+    await uploadUserDataToFirebase();
+  } catch (error) {
+    console.error('deposit failed:', error);
+    showToast(`Deposit failed: ${error.message}`);
   } finally {
     showLoading(false);
   }
