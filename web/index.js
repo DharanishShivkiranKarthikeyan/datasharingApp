@@ -4,13 +4,82 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from
 import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { loadWasmModule } from './wasm.js';
 import { DHT } from './dht.js';
-import { createTestPeers } from './testPeers.js'; // Import the test peers
+import { createTestPeers } from './testPeers.js';
 
 let wasmModule;
 let dht;
 let isNode = false;
 let userBalance = 0;
-let testPeers = []; // Store the test peers
+let testPeers = [];
+
+// Wait for the DOM to load before accessing elements
+document.addEventListener('DOMContentLoaded', () => {
+  // Get DOM elements
+  const loginButton = document.getElementById('loginButton');
+  const logoutButton = document.getElementById('logoutButton');
+  const userBalanceElement = document.getElementById('userBalance');
+  const publishButton = document.getElementById('publishButton');
+  const searchButton = document.getElementById('searchButton');
+  const buyButton = document.getElementById('buyButton');
+  const withdrawButton = document.getElementById('withdrawButton');
+  const toggleHistoryButton = document.getElementById('toggleHistoryButton');
+  const transactionHistory = document.getElementById('transactionHistory');
+  const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
+
+  // Verify that all required elements are found
+  if (!loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !buyButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody) {
+    console.error('Required DOM elements not found:', {
+      loginButton: !!loginButton,
+      logoutButton: !!logoutButton,
+      userBalanceElement: !!userBalanceElement,
+      publishButton: !!publishButton,
+      searchButton: !!searchButton,
+      buyButton: !!buyButton,
+      withdrawButton: !!withdrawButton,
+      toggleHistoryButton: !!toggleHistoryButton,
+      transactionHistory: !!transactionHistory,
+      publishedItemsTableBody: !!publishedItemsTableBody
+    });
+    return;
+  }
+
+  // Set up event listeners
+  loginButton.addEventListener('click', signIn);
+  logoutButton.addEventListener('click', signOutUser);
+
+  // Update UI based on authentication state
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      console.log('User is signed in:', user.uid);
+      loginButton.classList.add('hidden');
+      logoutButton.classList.remove('hidden');
+      publishButton.disabled = false;
+      searchButton.disabled = false;
+      buyButton.disabled = false;
+      withdrawButton.disabled = false;
+      toggleHistoryButton.disabled = false;
+      init();
+    } else {
+      console.log('No user is signed in.');
+      loginButton.classList.remove('hidden');
+      logoutButton.classList.add('hidden');
+      publishButton.disabled = true;
+      searchButton.disabled = true;
+      buyButton.disabled = true;
+      withdrawButton.disabled = true;
+      toggleHistoryButton.disabled = true;
+      updateUIForSignOut();
+    }
+  });
+
+  // Expose additional functions to the global scope for HTML onclick handlers
+  window.logout = signOutUser;
+  window.publishSnippet = publishSnippet;
+  window.buySnippet = buySnippet;
+  window.searchSnippets = searchSnippets;
+  window.withdraw = withdraw;
+  window.toggleTransactionHistory = toggleTransactionHistory;
+});
 
 export async function init() {
   console.log('Initializing app...');
@@ -20,7 +89,6 @@ export async function init() {
     wasmModule = await loadWasmModule();
     console.log('WASM module loaded successfully.');
 
-    // Wait for authentication state to resolve
     const user = await new Promise((resolve) => {
       onAuthStateChanged(auth, (user) => {
         resolve(user);
@@ -33,14 +101,12 @@ export async function init() {
       return;
     }
 
-    // Use the user's UID as the keypair (convert to Uint8Array)
     const encoder = new TextEncoder();
     const keypair = encoder.encode(user.uid);
 
     isNode = await checkIfUserIsNode();
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
-    // Create test peers (only if not already created)
     if (testPeers.length === 0) {
       console.log('Creating test peers...');
       testPeers = await createTestPeers();
@@ -62,13 +128,15 @@ export async function init() {
 
     updateLiveFeed();
     console.log('Live feed updated.');
+
+    updateBalanceDisplay();
+    updateTransactionHistory();
   } catch (error) {
     console.error('Error initializing application:', error);
     showToast(`Initialization failed: ${error.message}`);
     throw error;
   } finally {
     showLoading(false);
-    exposeGlobalFunctions();
     setupPremiumToggle();
   }
 }
@@ -86,7 +154,7 @@ async function checkIfUserIsNode() {
     return nodeSnap.exists();
   } catch (error) {
     console.error('Failed to check node status:', error);
-    return false; // Default to false if the check fails
+    return false;
   }
 }
 
@@ -95,9 +163,9 @@ export async function signIn() {
   try {
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
-    console.log('Signed in user UID:', user.uid); // Log the UID
+    console.log('Signed in user UID:', user.uid);
     showToast('Signed in successfully!');
-    await init(); // Re-initialize after sign-in
+    await init();
   } catch (error) {
     console.error('Sign-in failed:', error);
     showToast(`Sign-in failed: ${error.message}`);
@@ -110,7 +178,7 @@ export async function signOutUser() {
     showToast('Signed out successfully!');
     dht = null;
     window.dht = null;
-    testPeers = []; // Reset test peers on sign-out
+    testPeers = [];
     updateUIForSignOut();
   } catch (error) {
     console.error('Sign-out failed:', error);
@@ -209,6 +277,86 @@ export async function buySnippet(hash) {
   }
 }
 
+export async function searchSnippets(query) {
+  if (!isAuthenticated()) {
+    showToast('Please sign in to search.');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    if (!dht) throw new Error('DHT not initialized');
+    if (!query) throw new Error('Search query is required');
+
+    const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
+    publishedItemsTableBody.innerHTML = '';
+
+    dht.knownObjects.forEach((value, key) => {
+      const { content_type, description, tags } = value.metadata;
+      const queryLower = query.toLowerCase();
+      if (
+        content_type.toLowerCase().includes(queryLower) ||
+        (description && description.toLowerCase().includes(queryLower)) ||
+        (tags && tags.some(tag => tag.toLowerCase().includes(queryLower)))
+      ) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${content_type}</td>
+          <td>${description || 'No description'}</td>
+          <td>${tags.join(', ') || 'No tags'}</td>
+          <td><button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600">Buy (${value.metadata.isPremium ? '30 DCT' : '5 DCT'})</button></td>
+        `;
+        publishedItemsTableBody.appendChild(row);
+      }
+    });
+
+    showToast('Search completed!');
+  } catch (error) {
+    console.error('searchSnippets failed:', error);
+    showToast(`Search failed: ${error.message}`);
+  } finally {
+    showLoading(false);
+  }
+}
+
+export async function withdraw(amount) {
+  if (!isAuthenticated()) {
+    showToast('Please sign in to withdraw.');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    if (!dht) throw new Error('DHT not initialized');
+    if (!amount || amount <= 0) throw new Error('Invalid withdrawal amount');
+
+    const balance = await dht.getBalance(dht.keypair);
+    if (balance < amount) throw new Error('Insufficient balance');
+
+    await dht.putBalance(dht.keypair, balance - amount);
+    await dht.dbAdd('transactions', { type: 'withdraw', amount, timestamp: Date.now() });
+
+    showToast(`Withdrew ${amount} DCT successfully!`);
+    updateTransactionHistory();
+    updateBalanceDisplay();
+    await uploadUserDataToFirebase();
+  } catch (error) {
+    console.error('withdraw failed:', error);
+    showToast(`Withdrawal failed: ${error.message}`);
+  } finally {
+    showLoading(false);
+  }
+}
+
+export function toggleTransactionHistory() {
+  const transactionHistory = document.getElementById('transactionHistory');
+  if (transactionHistory.style.display === 'none') {
+    transactionHistory.style.display = 'block';
+  } else {
+    transactionHistory.style.display = 'none';
+  }
+}
+
 async function uploadUserDataToFirebase() {
   const user = auth.currentUser;
   if (!user) return;
@@ -226,91 +374,81 @@ async function uploadUserDataToFirebase() {
 }
 
 function updateLiveFeed() {
-  const liveFeed = document.getElementById('liveFeed');
-  if (!liveFeed) return;
+  const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
+  if (!publishedItemsTableBody) return;
 
-  liveFeed.innerHTML = '';
+  publishedItemsTableBody.innerHTML = '';
   dht.knownObjects.forEach((value, key) => {
-    const snippetDiv = document.createElement('div');
-    snippetDiv.className = 'snippet';
-    snippetDiv.innerHTML = `
-      <h3>${value.metadata.content_type}</h3>
-      <p>${value.metadata.description || 'No description'}</p>
-      <p>Tags: ${value.metadata.tags.join(', ')}</p>
-      <p>Premium: ${value.metadata.isPremium ? 'Yes' : 'No'}</p>
-      <button onclick="window.buySnippet('${key}')">Buy (${value.metadata.isPremium ? '30 DCT' : '5 DCT'})</button>
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${value.metadata.content_type}</td>
+      <td>${value.metadata.description || 'No description'}</td>
+      <td>${value.metadata.tags.join(', ') || 'No tags'}</td>
+      <td><button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600">Buy (${value.metadata.isPremium ? '30 DCT' : '5 DCT'})</button></td>
     `;
-    liveFeed.appendChild(snippetDiv);
+    publishedItemsTableBody.appendChild(row);
   });
 }
 
 function updateTransactionHistory() {
-  const historyDiv = document.getElementById('transactionHistory');
-  if (!historyDiv) return;
+  const transactionList = document.getElementById('transactionList');
+  if (!transactionList) return;
 
   dht.dbGetAll('transactions').then(transactions => {
-    historyDiv.innerHTML = '<h2>Transaction History</h2>';
-    transactions.forEach(tx => {
-      const txDiv = document.createElement('div');
-      txDiv.className = 'transaction';
-      txDiv.innerHTML = `<p>${tx.type} - ${tx.amount} DCT - ${new Date(tx.timestamp).toLocaleString()}</p>`;
-      historyDiv.appendChild(txDiv);
-    });
+    if (transactions.length === 0) {
+      transactionList.innerHTML = 'No transactions yet.';
+      return;
+    }
+
+    transactionList.innerHTML = transactions.map(tx => {
+      return `<p>${tx.type} - ${tx.amount} DCT - ${new Date(tx.timestamp).toLocaleString()}</p>`;
+    }).join('');
   });
 }
 
 function updateBalanceDisplay() {
-  const balanceDiv = document.getElementById('balance');
-  if (!balanceDiv) return;
+  const userBalanceElement = document.getElementById('userBalance');
+  if (!userBalanceElement) return;
 
   dht.getBalance(dht.keypair).then(balance => {
     userBalance = balance;
-    balanceDiv.textContent = `Balance: ${balance} DCT`;
+    userBalanceElement.textContent = `Balance: ${balance} DCT`;
   });
 }
 
 function updateUIForSignOut() {
-  const liveFeed = document.getElementById('liveFeed');
-  const transactionHistory = document.getElementById('transactionHistory');
-  const balanceDiv = document.getElementById('balance');
-  if (liveFeed) liveFeed.innerHTML = '';
-  if (transactionHistory) transactionHistory.innerHTML = '';
-  if (balanceDiv) balanceDiv.textContent = 'Balance: 0 DCT';
+  const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
+  const transactionList = document.getElementById('transactionList');
+  const userBalanceElement = document.getElementById('userBalance');
+
+  if (publishedItemsTableBody) publishedItemsTableBody.innerHTML = '';
+  if (transactionList) transactionList.innerHTML = 'No transactions yet.';
+  if (userBalanceElement) userBalanceElement.textContent = 'Balance: 0 DCT';
 }
 
 function showToast(message) {
-  const toast = document.createElement('div');
-  toast.className = 'toast';
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+
   toast.textContent = message;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
+  toast.style.display = 'block';
+  setTimeout(() => {
+    toast.style.display = 'none';
+  }, 3000);
 }
 
 function showLoading(show) {
   const loading = document.getElementById('loading');
-  if (loading) loading.style.display = show ? 'block' : 'none';
-}
-
-function exposeGlobalFunctions() {
-  window.signIn = signIn;
-  window.signOutUser = signOutUser;
-  window.publishSnippet = publishSnippet;
-  window.buySnippet = buySnippet;
+  if (loading) loading.style.display = show ? 'flex' : 'none';
 }
 
 function setupPremiumToggle() {
   const premiumToggle = document.getElementById('isPremium');
-  if (premiumToggle) {
+  const withdrawAmountInput = document.getElementById('withdrawAmount');
+  if (premiumToggle && withdrawAmountInput) {
     premiumToggle.addEventListener('change', (e) => {
       console.log('Premium toggle:', e.target.checked);
+      withdrawAmountInput.classList.toggle('hidden', !e.target.checked);
     });
   }
 }
-
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    init();
-  } else {
-    updateUIForSignOut();
-  }
-});
