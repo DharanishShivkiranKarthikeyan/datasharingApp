@@ -3,13 +3,14 @@ import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC5gJ5m0l2g0B2gJ5m0l2g0B2gJ5m0l2g0B",
-  authDomain: "dcrypt-edb9c.firebaseapp.com",
-  projectId: "dcrypt-edb9c",
-  storageBucket: "dcrypt-edb9c.appspot.com",
-  messagingSenderId: "1234567890",
-  appId: "1:1234567890:web:abcdef123456"
-};
+    apiKey: "AIzaSyBrdrwvY-lPObZgortEgw7YWycUOGsBlyM",
+    authDomain: "dcrypt-edb9c.firebaseapp.com",
+    projectId: "dcrypt-edb9c",
+    storageBucket: "dcrypt-edb9c.firebasestorage.app",
+    messagingSenderId: "952133736604",
+    appId: "1:952133736604:web:32d799360f200bce84f559",
+    measurementId: "G-7KCDLQ6JNH"
+  };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
