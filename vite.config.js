@@ -16,14 +16,4 @@ export default defineConfig({
       cert: './cert.pem'
     }
   },
-  assetsInclude: ['**/*.wasm'],
-  plugins: [
-    {
-      name: 'copy-pkg',
-      writeBundle() {
-        console.log('Copying pkg/ folder to dist/pkg/');
-        cpSync('web/pkg', 'dist/pkg', { recursive: true });
-      }
-    }
-  ]
 });

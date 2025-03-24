@@ -1,224 +1,129 @@
 // web/utils.js
-import { createHash } from 'crypto'; // For Node.js environment; for browser, use SubtleCrypto below
-import { subtle } from 'crypto'; // Web Crypto API for browser
+import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 
-// Helper to compute SHA-256 hash (browser-compatible)
-async function computeSha256(data) {
-  const buffer = new Uint8Array(data);
-  const hashBuffer = await subtle.digest('SHA-256', buffer);
-  return new Uint8Array(hashBuffer);
+// Use the global crypto.subtle for Web Crypto API in the browser
+const subtle = globalThis.crypto?.subtle;
+if (!subtle) {
+  throw new Error('Web Crypto API is not available in this environment');
 }
 
-// Helper to generate a random nonce
-function generateNonce(length = 12) {
-  return crypto.getRandomValues(new Uint8Array(length));
+// Helper to convert ArrayBuffer to hex string
+function arrayBufferToHex(buffer) {
+  return Array.from(new Uint8Array(buffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
-// Create metadata for a snippet
-function createMetadata(contentType, tags, version, fileSize, fileType) {
+// Helper to convert hex string to ArrayBuffer
+function hexToArrayBuffer(hex) {
+  const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+  return bytes.buffer;
+}
+
+// Helper to generate a static nonce (for simplicity; in production, store this with the chunk)
+function generateNonce() {
+  const nonce = new Uint8Array(12); // 96-bit nonce for AES-GCM
+  for (let i = 0; i < 12; i++) {
+    nonce[i] = Math.floor(Math.random() * 256);
+  }
+  return nonce;
+}
+
+export function createIntellectualProperty(content, contentType, tags, isPremium, priceUsd, creatorId, fileType) {
   return {
-    content_type: contentType || '',
+    content: new Uint8Array(content),
+    content_type: contentType,
     tags: tags || [],
-    version: version || '1.0.0',
-    chunk_count: 0,
-    file_size: fileSize || 0,
-    file_type: fileType || 'text/plain',
-  };
-}
-
-// Create an Intellectual Property (IP) object
-function createIntellectualProperty(content, contentType, tags, isPremium, priceUsd, creatorId, fileType) {
-  // Validate inputs
-  if (!(content instanceof Uint8Array)) {
-    throw new Error('content must be a Uint8Array');
-  }
-  if (typeof contentType !== 'string') {
-    throw new Error('content_type must be a string');
-  }
-  if (!Array.isArray(tags)) {
-    throw new Error('tags must be an array');
-  }
-  if (typeof isPremium !== 'boolean') {
-    throw new Error('is_premium must be a boolean');
-  }
-  if (typeof priceUsd !== 'number' || isNaN(priceUsd)) {
-    throw new Error('price_usd must be a valid number');
-  }
-  if (!(creatorId instanceof Uint8Array)) {
-    throw new Error('creator_id must be a Uint8Array');
-  }
-  if (typeof fileType !== 'string') {
-    throw new Error('file_type must be a string');
-  }
-
-  const metadata = createMetadata(contentType, tags, '1.0.0', content.length, fileType);
-  const priceDct = isPremium ? Math.floor(priceUsd) : 0; // Free unless premium
-
-  return {
-    content,
-    metadata,
     is_premium: isPremium,
-    price_dct: priceDct,
-    creator_id: creatorId,
-  };
-}
-
-// Create a chunk object
-function createChunk(hash, data, index, fileType) {
-  return {
-    hash,
-    data,
-    index,
+    price_usd: priceUsd,
+    creator_id: new Uint8Array(creatorId),
     file_type: fileType,
   };
 }
 
-// Getter functions for Intellectual Property
-function getIpContent(ip) {
+export function getIpContent(ip) {
   return ip.content;
 }
 
-function getIpMetadata(ip) {
-  return ip.metadata;
+export async function computeFullHash(content) {
+  const buffer = await subtle.digest('SHA-256', content);
+  return new Uint8Array(buffer);
 }
 
-function getIpIsPremium(ip) {
-  return ip.is_premium;
-}
-
-function getIpPriceDct(ip) {
-  return ip.price_dct;
-}
-
-function getIpCreatorId(ip) {
-  return ip.creator_id;
-}
-
-function getIpFileSize(ip) {
-  return ip.metadata.file_size;
-}
-
-function getIpFileType(ip) {
-  return ip.metadata.file_type;
-}
-
-// Getter functions for Chunk
-function getChunkHash(chunk) {
-  return chunk.hash;
-}
-
-function getChunkData(chunk) {
-  return chunk.data;
-}
-
-function getChunkIndex(chunk) {
-  return chunk.index;
-}
-
-function getChunkFileType(chunk) {
-  return chunk.file_type;
-}
-
-// Compute chunk size based on file size and minimum chunks
-function computeChunkSize(fileSize, minChunks) {
-  const SMALL_FILE_THRESHOLD = 1024 * 1024; // 1 MB
-  const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024; // 10 MB
-  const SMALL_CHUNK_SIZE = 64 * 1024; // 64 KB
-  const MEDIUM_CHUNK_SIZE = 256 * 1024; // 256 KB
-  const LARGE_CHUNK_SIZE = 1024 * 1024; // 1 MB
-  const MAX_CHUNKS = 100;
-
-  const baseChunkSize = fileSize < SMALL_FILE_THRESHOLD
-    ? SMALL_CHUNK_SIZE
-    : fileSize < LARGE_FILE_THRESHOLD
-    ? MEDIUM_CHUNK_SIZE
-    : LARGE_CHUNK_SIZE;
-
-  let numChunks = Math.ceil(fileSize / baseChunkSize);
-  if (numChunks < minChunks) {
-    numChunks = minChunks;
-  }
-  if (numChunks > MAX_CHUNKS) {
-    numChunks = MAX_CHUNKS;
-  }
-
-  const adjustedChunkSize = Math.ceil(fileSize / numChunks);
-  return Math.max(adjustedChunkSize, 1024); // Ensure at least 1 KB
-}
-
-// Encrypt content into chunks
-async function chunkEncrypt(ip, key, minChunks) {
-  const metadata = getIpMetadata(ip);
-  const chunkSize = computeChunkSize(metadata.file_size, minChunks);
-  const contentBytes = getIpContent(ip);
+export async function chunkEncrypt(ip, key, minChunks) {
+  const content = ip.content;
+  const chunkSize = Math.ceil(content.length / minChunks);
   const chunks = [];
-
-  // Convert key to CryptoKey
-  const cryptoKey = await subtle.importKey(
+  const keyBuffer = await subtle.importKey(
     'raw',
-    new Uint8Array(key),
+    new Uint8Array(key.slice(0, 32)), // Use first 32 bytes for AES-256
     { name: 'AES-GCM' },
     false,
     ['encrypt']
   );
 
-  for (let i = 0; i < contentBytes.length; i += chunkSize) {
-    const chunkData = contentBytes.slice(i, i + chunkSize);
-    const nonce = generateNonce(); // Unique nonce per chunk
-    const encryptedData = await subtle.encrypt(
+  for (let i = 0; i < minChunks; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, content.length);
+    const chunkData = content.slice(start, end);
+
+    const nonce = generateNonce();
+    const encrypted = await subtle.encrypt(
       { name: 'AES-GCM', iv: nonce },
-      cryptoKey,
+      keyBuffer,
       chunkData
     );
-    const encryptedArray = new Uint8Array(encryptedData);
-    const chunkHash = await computeSha256(encryptedArray);
-    const chunk = createChunk(chunkHash, encryptedArray, i / chunkSize, metadata.file_type);
+
+    const chunk = {
+      data: new Uint8Array(encrypted),
+      nonce: nonce,
+      index: i,
+      file_type: ip.file_type,
+    };
     chunks.push(chunk);
   }
 
   return chunks;
 }
 
-// Decrypt a chunk
-async function decryptChunk(chunk, key) {
-  const cryptoKey = await subtle.importKey(
+export function getChunkHash(chunk) {
+  const dataToHash = new Uint8Array([...chunk.data, ...chunk.nonce, chunk.index]);
+  return computeFullHash(dataToHash);
+}
+
+export function getIpMetadata(ip) {
+  return {
+    content_type: ip.content_type,
+    tags: ip.tags,
+    is_premium: ip.is_premium,
+    price_usd: ip.price_usd,
+    creator_id: ip.creator_id,
+    file_type: ip.file_type,
+  };
+}
+
+export function getChunkIndex(chunk) {
+  return chunk.index;
+}
+
+export async function decryptChunk(chunk, key) {
+  const keyBuffer = await subtle.importKey(
     'raw',
-    new Uint8Array(key),
+    new Uint8Array(key.slice(0, 32)), // Use first 32 bytes for AES-256
     { name: 'AES-GCM' },
     false,
     ['decrypt']
   );
-  const nonce = new Uint8Array(12); // Must match the nonce used during encryption
-  const decryptedData = await subtle.decrypt(
-    { name: 'AES-GCM', iv: nonce },
-    cryptoKey,
-    getChunkData(chunk)
+
+  const decrypted = await subtle.decrypt(
+    { name: 'AES-GCM', iv: chunk.nonce },
+    keyBuffer,
+    chunk.data
   );
-  return new Uint8Array(decryptedData);
+
+  return new Uint8Array(decrypted);
 }
 
-// Compute full SHA-256 hash of content
-async function computeFullHash(content) {
-  return await computeSha256(content);
+export function getChunkFileType(chunk) {
+  return chunk.file_type;
 }
-
-export {
-  createMetadata,
-  createIntellectualProperty,
-  createChunk,
-  getIpContent,
-  getIpMetadata,
-  getIpIsPremium,
-  getIpPriceDct,
-  getIpCreatorId,
-  getIpFileSize,
-  getIpFileType,
-  getChunkHash,
-  getChunkData,
-  getChunkIndex,
-  getChunkFileType,
-  computeChunkSize,
-  chunkEncrypt,
-  decryptChunk,
-  computeFullHash,
-};

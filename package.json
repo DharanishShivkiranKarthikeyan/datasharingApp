@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",
-    "build:wasm": "cd rust && wasm-pack build --target web --out-dir ../web/pkg",
-    "build": "npm run build:wasm && vite build",
+    "build": "vite build",
     "serve": "vite preview --port=8080"
   },
   "dependencies": {
     "crypto-js": "^4.2.0",
-    "firebase": "^11.4.0"
+    "firebase": "^11.4.0",
+    "peerjs": "^1.5.4"
   },
   "devDependencies": {
     "dotenv": "^16.4.7",

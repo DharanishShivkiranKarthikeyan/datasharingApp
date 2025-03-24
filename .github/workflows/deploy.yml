@@ -17,20 +17,8 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
       - name: Install dependencies
         run: npm install
-
-      - name: Build Wasm module
-        run: npm run build:wasm
 
       - name: Build Vite app
         run: npm run build
