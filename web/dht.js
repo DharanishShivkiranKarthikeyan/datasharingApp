@@ -1,35 +1,33 @@
 // web/dht.js
 import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
-import { db } from './firebase.js'; // Import from firebase.js
+import { db } from './firebase.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 
 export class DHT {
   constructor(keypair, isNode = false, wasmModule) {
-    this.peers = new Map(); // Map of peerId -> { connected: boolean, conn: PeerJS.DataConnection }
-    this.channels = new Map(); // Map of channelId -> Set of peerIds
-    this.knownObjects = new Map(); // Map of ipHash -> { metadata, chunks: [chunkHash] }
-    this.chunkToPeerMap = new Map(); // Map of chunkHash -> Set of peerIds
-    this.pendingRequests = new Map(); // Map of requestId -> { resolve, reject, hash }
-    this.db = null; // IndexedDB instance
-    this.keypair = keypair; // Uint8Array keypair
-    this.activeNodes = new Set(); // Set of active peerIds (both nodes and regular peers)
-    this.nodes = new Set(); // Set of known node peerIds
-    this.offlineQueue = []; // Array of offline operations
-    this.isNode = isNode; // Is this instance a node?
-    this.peerId = null; // This node's peerId
-    this.peer = null; // PeerJS instance
-    this.connectionAttempts = new Map(); // Map of peerId -> number of connection attempts
-    this.maxConnectionAttempts = 3; // Maximum number of connection attempts per peer
-    this.connectionRetryDelay = 5000; // Delay between connection attempts (ms)
-    this.wasmModule = wasmModule; // Wasm module instance
-    this.averageLatency = 0; // Average latency to peers (ms)
+    this.peers = new Map();
+    this.channels = new Map();
+    this.knownObjects = new Map();
+    this.chunkToPeerMap = new Map();
+    this.pendingRequests = new Map();
+    this.db = null;
+    this.keypair = keypair;
+    this.activeNodes = new Set();
+    this.nodes = new Set();
+    this.offlineQueue = [];
+    this.isNode = isNode;
+    this.peerId = null;
+    this.peer = null;
+    this.connectionAttempts = new Map();
+    this.maxConnectionAttempts = 3;
+    this.connectionRetryDelay = 5000;
+    this.wasmModule = wasmModule;
+    this.averageLatency = 0;
 
-    // Initialize known nodes
     this.initializeKnownNodes();
   }
 
-  // Fetch nodes from Firestore and periodically refresh
   async initializeKnownNodes() {
     const fetchNodes = async () => {
       try {
@@ -51,17 +49,13 @@ export class DHT {
       }
     };
 
-    // Initial fetch
     await fetchNodes();
-
-    // Periodically refresh the node list (every 5 minutes)
     setInterval(fetchNodes, 5 * 60 * 1000);
   }
 
-  // Measure average latency to peers
   async measureLatency() {
     const latencies = [];
-    const peersToTest = Array.from(this.activeNodes).slice(0, 5); // Test up to 5 peers
+    const peersToTest = Array.from(this.activeNodes).slice(0, 5);
     for (const peerId of peersToTest) {
       const peer = this.peers.get(peerId);
       if (peer && peer.connected && peer.conn) {
@@ -85,7 +79,6 @@ export class DHT {
     console.log(`Average latency: ${this.averageLatency} ms`);
   }
 
-  // Initialize IndexedDB
   async initDB() {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('dcrypt_db', 3);
@@ -119,7 +112,6 @@ export class DHT {
     });
   }
 
-  // Sync user data with IndexedDB and peers
   async syncUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
@@ -143,7 +135,6 @@ export class DHT {
     }
   }
 
-  // Save user data to IndexedDB
   async saveUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
@@ -156,10 +147,9 @@ export class DHT {
     }
   }
 
-  // Initialize PeerJS swarm
   async initSwarm() {
     try {
-      const basePeerId = this.uint8ArrayToHex(this.keypair.slice(0, 16));
+      const basePeerId = new TextDecoder().decode(this.keypair);
       this.peerId = this.isNode ? `node-${basePeerId}` : basePeerId;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
 
@@ -196,7 +186,7 @@ export class DHT {
           });
 
           setInterval(() => this.discoverPeers(), 5000);
-          setInterval(() => this.measureLatency(), 60000); // Measure latency every minute
+          setInterval(() => this.measureLatency(), 60000);
           resolve();
         });
 
@@ -211,9 +201,10 @@ export class DHT {
     }
   }
 
-  // Discover and connect to peers
   discoverPeers() {
     console.log('Discovering peers...');
+    console.log('My peer ID:', this.peerId);
+    console.log('Known peer IDs:', Array.from(this.nodes));
     const knownPeerIds = [
       ...Array.from(this.nodes)
     ].filter(id => id !== this.peerId);
@@ -241,7 +232,6 @@ export class DHT {
     });
   }
 
-  // Connect to a peer
   connectToPeer(peerId) {
     if (this.peers.get(peerId)?.connected) return;
     const attempts = this.connectionAttempts.get(peerId) || 0;
@@ -275,7 +265,6 @@ export class DHT {
     this.connectionAttempts.set(peerId, attempts + 1);
   }
 
-  // Handle incoming connections
   handleConnection(conn) {
     const peerId = conn.peer;
     console.log(`Incoming connection from peer: ${peerId}`);
@@ -297,7 +286,6 @@ export class DHT {
     });
   }
 
-  // Handle peer disconnection
   handlePeerDisconnect(peerId) {
     const peer = this.peers.get(peerId);
     if (peer) {
@@ -308,7 +296,6 @@ export class DHT {
     }
   }
 
-  // Handle data received from peers
   handlePeerData(data, peerId) {
     console.log(`Received data from peer ${peerId}:`, data);
     switch (data.type) {
@@ -358,7 +345,6 @@ export class DHT {
     }
   }
 
-  // Store a chunk received from another peer
   async storeChunkFromPeer(chunkHash, chunkData, peerId) {
     try {
       await this.dbPut('chunkCache', { id: chunkHash, value: chunkData });
@@ -371,7 +357,6 @@ export class DHT {
     }
   }
 
-  // Publish a chunk to the DHT
   async publishChunk(chunkHash, chunkData, chunkIndex, totalChunks) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
@@ -421,19 +406,16 @@ export class DHT {
     }
   }
 
-  // Broadcast chunk availability to peers
   broadcastChunk(chunkHash) {
     const message = { type: 'chunk', chunkHash, peerId: this.peerId };
     this.broadcast(message);
     console.log(`Broadcasted chunk ${chunkHash} to ${this.activeNodes.size} peers`);
   }
 
-  // Publish an IP (metadata + content) to the DHT
   async publishIP(metadata, content, fileType) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     if (!this.wasmModule) throw new Error('Wasm module not initialized');
     try {
-      // Create IntellectualProperty object using Wasm
       const tags = new Array();
       metadata.tags.forEach(tag => tags.push(tag));
       const ip = this.wasmModule.create_intellectual_property(
@@ -446,17 +428,14 @@ export class DHT {
         fileType
       );
 
-      // Compute IP hash
       const contentBytes = this.wasmModule.get_ip_content(ip);
       const ipHashBytes = this.wasmModule.compute_full_hash(contentBytes);
       const ipHash = this.uint8ArrayToHex(ipHashBytes);
 
-      // Chunk and encrypt the content
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
       const chunks = this.wasmModule.chunk_encrypt(ip, Array.from(this.keypair), minChunks);
 
-      // Extract chunk hashes
       const chunkHashes = [];
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks.get(i);
@@ -465,18 +444,15 @@ export class DHT {
         chunkHashes.push(chunkHash);
       }
 
-      // Update metadata with chunk count
       const updatedMetadata = {
         ...metadata,
         chunk_count: chunks.length
       };
 
-      // Store IP object
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
       this.knownObjects.set(ipHash, ipObject);
       await this.dbPut('store', { id: ipHash, value: JSON.stringify(ipObject) });
 
-      // Publish each chunk
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks.get(i);
         const chunkHash = chunkHashes[i];
@@ -496,41 +472,34 @@ export class DHT {
     }
   }
 
-  // Broadcast IP to peers
   broadcastIP(ipHash, metadata, chunkHashes) {
     const message = { type: 'ip', ipHash, metadata, chunkHashes, peerId: this.peerId };
     this.broadcast(message);
     console.log(`Broadcasted IP ${ipHash} to ${this.activeNodes.size} peers`);
   }
 
-  // Request data from the DHT (reconstructs the full content)
   async requestData(ipHash) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     if (!this.wasmModule) throw new Error('Wasm module not initialized');
     try {
       if (!ipHash || typeof ipHash !== 'string') throw new Error('Invalid IP hash');
 
-      // Get the IP object
       const ipObject = this.knownObjects.get(ipHash);
       if (!ipObject) throw new Error('IP not found');
 
-      // Fetch all chunks
       const chunks = [];
       for (const chunkHash of ipObject.chunks) {
-        // Check local cache first
         const cachedChunk = await this.dbGet('chunkCache', chunkHash);
         if (cachedChunk && cachedChunk.value) {
           chunks.push({ chunk: cachedChunk.value, hash: chunkHash });
           continue;
         }
 
-        // Find peers that have the chunk
         const peersWithChunk = this.chunkToPeerMap.get(chunkHash);
         if (!peersWithChunk || peersWithChunk.size === 0) {
           throw new Error(`No peers found with chunk ${chunkHash}`);
         }
 
-        // Prioritize nodes
         const nodePeers = Array.from(peersWithChunk).filter(peerId => peerId.startsWith('node-'));
         const regularPeers = Array.from(peersWithChunk).filter(peerId => !peerId.startsWith('node-'));
 
@@ -557,7 +526,6 @@ export class DHT {
         }
       }
 
-      // Sort chunks by index and decrypt
       const sortedChunks = chunks.sort((a, b) => {
         const indexA = this.wasmModule.get_chunk_index(a.chunk);
         const indexB = this.wasmModule.get_chunk_index(b.chunk);
@@ -570,7 +538,6 @@ export class DHT {
         decryptedData.push(decryptedChunk);
       }
 
-      // Concatenate the decrypted data
       const fullData = new Uint8Array(decryptedData.reduce((acc, chunk) => acc + chunk.length, 0));
       let offset = 0;
       for (const chunk of decryptedData) {
@@ -578,7 +545,6 @@ export class DHT {
         offset += chunk.length;
       }
 
-      // Get the file type (same for all chunks)
       const fileType = this.wasmModule.get_chunk_file_type(sortedChunks[0].chunk);
       return { data: fullData, fileType };
     } catch (error) {
@@ -587,7 +553,6 @@ export class DHT {
     }
   }
 
-  // Fetch a chunk from a specific peer
   async fetchChunkFromPeer(peerId, hash) {
     const peer = this.peers.get(peerId);
     if (!peer || !peer.connected || !peer.conn) {
@@ -609,7 +574,6 @@ export class DHT {
     });
   }
 
-  // Handle a chunk request from a peer
   handleChunkRequest(data, peerId) {
     const { requestId, chunkHash } = data;
     this.dbGet('chunkCache', chunkHash).then(chunk => {
@@ -628,7 +592,6 @@ export class DHT {
     });
   }
 
-  // Handle a chunk response from a peer
   handleChunkResponse(data) {
     const { requestId, chunkHash, chunkData } = data;
     const request = this.pendingRequests.get(requestId);
@@ -642,7 +605,6 @@ export class DHT {
     }
   }
 
-  // Distribute commission to nodes
   async distributeCommission(commission) {
     const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
     if (activeNodeList.length === 0) {
@@ -672,14 +634,12 @@ export class DHT {
     }
   }
 
-  // Get balance for a keypair
   async getBalance(keypair) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     const balance = await this.dbGet('store', 'balance_' + this.uint8ArrayToHex(keypair));
     return balance && balance.value ? parseFloat(balance.value) : 0;
   }
 
-  // Set balance for a keypair
   async putBalance(keypair, amount) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     if (typeof amount !== 'number' || amount < 0) {
@@ -697,14 +657,12 @@ export class DHT {
     }
   }
 
-  // Update balance in IndexedDB
   async updateBalance() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     const balance = await this.getBalance(this.keypair);
     await this.putBalance(this.keypair, balance);
   }
 
-  // Queue an operation for offline processing
   async queueOfflineOperation(operation) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     this.offlineQueue.push(operation);
@@ -712,7 +670,6 @@ export class DHT {
     console.log('Queued offline operation:', operation);
   }
 
-  // Process offline queue when online
   async processOfflineQueue() {
     if (this.offlineQueue.length === 0) return;
     console.log('Processing offline queue...');
@@ -745,7 +702,6 @@ export class DHT {
     }
   }
 
-  // Load identity from IndexedDB
   loadIdentity() {
     if (!this.db) return;
     this.dbGet('store', 'dcrypt_identity').then(hex => {
@@ -758,7 +714,6 @@ export class DHT {
     });
   }
 
-  // Load offline queue from IndexedDB
   loadOfflineQueue() {
     if (!this.db) return;
     this.dbGetAll('offlineQueue').then(queue => {
@@ -769,7 +724,6 @@ export class DHT {
     });
   }
 
-  // Load transactions from IndexedDB
   loadTransactions() {
     if (!this.db) return;
     this.dbGetAll('transactions').then(transactions => {
@@ -779,7 +733,6 @@ export class DHT {
     });
   }
 
-  // IndexedDB operations
   async dbPut(storeName, value) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     return new Promise((resolve, reject) => {
@@ -824,19 +777,16 @@ export class DHT {
     });
   }
 
-  // Convert Uint8Array to hex string
   uint8ArrayToHex(arr) {
     return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // Convert hex string to Uint8Array
   hexToUint8Array(hex) {
     if (!hex || typeof hex !== 'string') return new Uint8Array(0);
     const matches = hex.match(/.{1,2}/g);
     return matches ? new Uint8Array(matches.map(byte => parseInt(byte, 16))) : new Uint8Array(0);
   }
 
-  // Broadcast a message to all connected peers
   broadcast(message) {
     this.peers.forEach((peer, peerId) => {
       if (peer.connected && peer.conn) {

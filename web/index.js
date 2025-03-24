@@ -1,13 +1,16 @@
-import { auth, db } from './firebase.js'; // Import initialized Firebase services
+// web/index.js
+import { auth, db } from './firebase.js';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { loadWasmModule } from './wasm.js';
 import { DHT } from './dht.js';
+import { createTestPeers } from './testPeers.js'; // Import the test peers
 
 let wasmModule;
 let dht;
 let isNode = false;
 let userBalance = 0;
+let testPeers = []; // Store the test peers
 
 export async function init() {
   console.log('Initializing app...');
@@ -30,11 +33,19 @@ export async function init() {
       return;
     }
 
-    let keypair = new Uint8Array(32);
-    crypto.getRandomValues(keypair);
+    // Use the user's UID as the keypair (convert to Uint8Array)
+    const encoder = new TextEncoder();
+    const keypair = encoder.encode(user.uid);
 
     isNode = await checkIfUserIsNode();
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
+
+    // Create test peers (only if not already created)
+    if (testPeers.length === 0) {
+      console.log('Creating test peers...');
+      testPeers = await createTestPeers();
+      console.log('Test peers created:', testPeers.map(p => p.peerId));
+    }
 
     console.log('Initializing DHT...');
     dht = new DHT(keypair, isNode, wasmModule);
@@ -82,7 +93,9 @@ async function checkIfUserIsNode() {
 export async function signIn() {
   const provider = new GoogleAuthProvider();
   try {
-    await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+    console.log('Signed in user UID:', user.uid); // Log the UID
     showToast('Signed in successfully!');
     await init(); // Re-initialize after sign-in
   } catch (error) {
@@ -97,6 +110,7 @@ export async function signOutUser() {
     showToast('Signed out successfully!');
     dht = null;
     window.dht = null;
+    testPeers = []; // Reset test peers on sign-out
     updateUIForSignOut();
   } catch (error) {
     console.error('Sign-out failed:', error);
