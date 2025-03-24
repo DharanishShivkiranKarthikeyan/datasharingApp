@@ -1,6 +1,6 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
-import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+import { auth, db } from './firebase.js'; // Import initialized Firebase services
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { loadWasmModule } from './wasm.js';
 import { DHT } from './dht.js';
 
@@ -8,19 +8,6 @@ let wasmModule;
 let dht;
 let isNode = false;
 let userBalance = 0;
-
-const firebaseConfig = {
-  apiKey: "AIzaSyC5gJ5m0l2g0B2gJ5m0l2g0B2gJ5m0l2g0B",
-  authDomain: "dcrypt-edb9c.firebaseapp.com",
-  projectId: "dcrypt-edb9c",
-  storageBucket: "dcrypt-edb9c.appspot.com",
-  messagingSenderId: "1234567890",
-  appId: "1:1234567890:web:abcdef123456"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app); // Initialize Firestore
 
 export async function init() {
   console.log('Initializing app...');

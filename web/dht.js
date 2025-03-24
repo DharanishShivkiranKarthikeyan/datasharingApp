@@ -1,8 +1,8 @@
+// web/dht.js
 import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
-import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-
-const db = getFirestore(); // Initialize Firestore
+import { db } from './firebase.js'; // Import from firebase.js
+import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 
 export class DHT {
   constructor(keypair, isNode = false, wasmModule) {
