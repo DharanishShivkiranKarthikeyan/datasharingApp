@@ -1,11 +1,18 @@
-mod snippet;
-
-use snippet::{get_ip_content, get_ip_metadata, get_chunk_data, create_chunk};
+// dcrypt_wasm/src/lib.rs
 use wasm_bindgen::prelude::*;
 use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
 use sha2::{Digest, Sha256};
 use js_sys::Array;
 use serde_wasm_bindgen;
+
+mod snippet;
+use snippet::{get_ip_content, get_ip_metadata, get_chunk_data, create_chunk, Metadata};
+
+// Set up console_error_panic_hook for better error reporting
+#[wasm_bindgen(start)]
+pub fn init() {
+    console_error_panic_hook::set_once();
+}
 
 #[wasm_bindgen]
 pub fn compute_chunk_size(file_size: u64, min_chunks: usize) -> usize {
@@ -84,14 +91,4 @@ pub fn compute_full_hash(content: Vec<u8>) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(&content);
     hasher.finalize().to_vec()
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct Metadata {
-    file_size: u64,
-    content_type: String,
-    tags: Vec<String>,
-    version: String,
-    chunk_count: usize,
-    file_type: String,
 }

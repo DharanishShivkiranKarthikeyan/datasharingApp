@@ -424,7 +424,18 @@ export class DHT {
     }
   
     try {
-      const tags = metadata.tags || [];
+      // Ensure tags is an array of strings
+      const tags = Array.isArray(metadata.tags)
+        ? metadata.tags.map(tag => {
+            if (typeof tag !== 'string') {
+              console.warn(`Invalid tag: ${tag}, converting to string`);
+              return String(tag);
+            }
+            return tag;
+          }).filter(tag => tag.trim() !== '') // Remove empty strings
+        : [];
+      console.log('Processed tags:', tags);
+  
       console.log('Calling create_intellectual_property with:', {
         content: new Uint8Array(content),
         content_type: metadata.content_type,
@@ -438,7 +449,7 @@ export class DHT {
       const ip = this.wasmModule.create_intellectual_property(
         new Uint8Array(content),
         metadata.content_type,
-        tags, // Pass the tags array
+        tags, // Pass the validated tags array
         metadata.isPremium,
         metadata.isPremium ? 30 : 5, // price_usd as a float
         this.keypair, // creator_id

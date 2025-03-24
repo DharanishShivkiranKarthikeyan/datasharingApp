@@ -1,19 +1,21 @@
+// dcrypt_wasm/src/snippet.rs
 use serde::{Serialize, Deserialize};
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
 use serde_wasm_bindgen;
+use web_sys;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Metadata {
     pub content_type: String,
     pub tags: Vec<String>,
     pub version: String,
-    pub chunk_count: usize,
+    pub chunk_count: u32,
     pub file_size: u64,
-    pub file_type: String, // Added to store the file type (e.g., "text/plain", "image/jpeg")
+    pub file_type: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct IntellectualProperty {
     pub content: Vec<u8>,
     pub metadata: Metadata,
@@ -27,7 +29,7 @@ pub struct Chunk {
     pub hash: Vec<u8>,
     pub data: Vec<u8>,
     pub index: usize,
-    pub file_type: String, // Added to store the file type for this chunk
+    pub file_type: String,
 }
 
 #[wasm_bindgen]
@@ -48,21 +50,40 @@ pub fn create_metadata(content_type: String, tags: Array, version: String, file_
 pub fn create_intellectual_property(
     content: Vec<u8>,
     content_type: String,
-    tags: js_sys::Array, // Use js_sys::Array for clarity
+    tags: Array,
     is_premium: bool,
     price_usd: f64,
     creator_id: Vec<u8>,
     file_type: String,
 ) -> Result<JsValue, JsValue> {
-    // Convert tags to Vec<String>, handling potential errors
+    // Log inputs for debugging
+    web_sys::console::log_1(&JsValue::from_str(&format!(
+        "create_intellectual_property called: content_len={}, content_type={}, tags_len={}, is_premium={}, price_usd={}, creator_id_len={}, file_type={}",
+        content.len(),
+        content_type,
+        tags.length(),
+        is_premium,
+        price_usd,
+        creator_id.len(),
+        file_type
+    )));
+
+    // Convert tags to Vec<String> with safer error handling
     let tags: Result<Vec<String>, JsValue> = tags
         .iter()
-        .map(|s| {
+        .enumerate()
+        .map(|(i, s)| {
             s.as_string()
-                .ok_or_else(|| JsValue::from_str("Tag must be a string"))
+                .ok_or_else(|| JsValue::from_str(&format!("Tag at index {} must be a string", i)))
         })
         .collect();
-    let tags = tags.map_err(|e| e)?;
+    let tags = tags.map_err(|e| {
+        web_sys::console::log_1(&JsValue::from_str(&format!("Error converting tags: {:?}", e)));
+        e
+    })?;
+
+    // Log the converted tags
+    web_sys::console::log_1(&JsValue::from_str(&format!("Converted tags: {:?}", tags)));
 
     let metadata = Metadata {
         content_type,
@@ -82,7 +103,10 @@ pub fn create_intellectual_property(
         creator_id,
     };
 
-    serde_wasm_bindgen::to_value(&ip).map_err(|e| JsValue::from_str(&e.to_string()))
+    serde_wasm_bindgen::to_value(&ip).map_err(|e| {
+        web_sys::console::log_1(&JsValue::from_str(&format!("Serialization error: {:?}", e)));
+        JsValue::from_str(&e.to_string())
+    })
 }
 
 #[wasm_bindgen]
