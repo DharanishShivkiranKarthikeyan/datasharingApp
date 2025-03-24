@@ -45,8 +45,25 @@ pub fn create_metadata(content_type: String, tags: Array, version: String, file_
 }
 
 #[wasm_bindgen]
-pub fn create_intellectual_property(content: Vec<u8>, content_type: String, tags: Array, is_premium: bool, price_usd: f64, creator_id: Vec<u8>, file_type: String) -> JsValue {
-    let tags: Vec<String> = tags.iter().map(|s| s.as_string().unwrap()).collect();
+pub fn create_intellectual_property(
+    content: Vec<u8>,
+    content_type: String,
+    tags: js_sys::Array, // Use js_sys::Array for clarity
+    is_premium: bool,
+    price_usd: f64,
+    creator_id: Vec<u8>,
+    file_type: String,
+) -> Result<JsValue, JsValue> {
+    // Convert tags to Vec<String>, handling potential errors
+    let tags: Result<Vec<String>, JsValue> = tags
+        .iter()
+        .map(|s| {
+            s.as_string()
+                .ok_or_else(|| JsValue::from_str("Tag must be a string"))
+        })
+        .collect();
+    let tags = tags.map_err(|e| e)?;
+
     let metadata = Metadata {
         content_type,
         tags,
@@ -55,6 +72,7 @@ pub fn create_intellectual_property(content: Vec<u8>, content_type: String, tags
         file_size: content.len() as u64,
         file_type,
     };
+
     let price_dct = price_usd as u64;
     let ip = IntellectualProperty {
         content,
@@ -63,7 +81,8 @@ pub fn create_intellectual_property(content: Vec<u8>, content_type: String, tags
         price_dct,
         creator_id,
     };
-    serde_wasm_bindgen::to_value(&ip).unwrap()
+
+    serde_wasm_bindgen::to_value(&ip).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[wasm_bindgen]

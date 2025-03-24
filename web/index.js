@@ -87,7 +87,8 @@ export async function init() {
   try {
     console.log('Loading WASM module...');
     wasmModule = await loadWasmModule();
-    console.log('WASM module loaded successfully.');
+    console.log('WASM module loaded successfully:', wasmModule);
+    console.log('WASM module exports in init:', Object.keys(wasmModule));
 
     const user = await new Promise((resolve) => {
       onAuthStateChanged(auth, (user) => {
@@ -140,7 +141,6 @@ export async function init() {
     setupPremiumToggle();
   }
 }
-
 async function checkIfUserIsNode() {
   const user = auth.currentUser;
   if (!user) {

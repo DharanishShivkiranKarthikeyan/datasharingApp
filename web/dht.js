@@ -415,56 +415,73 @@ export class DHT {
   async publishIP(metadata, content, fileType) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     if (!this.wasmModule) throw new Error('Wasm module not initialized');
+  
+    console.log('WASM module in DHT:', this.wasmModule);
+    console.log('WASM module exports in DHT:', Object.keys(this.wasmModule));
+  
+    if (typeof this.wasmModule.create_intellectual_property !== 'function') {
+      throw new Error('create_intellectual_property is not a function in WASM module');
+    }
+  
     try {
-      const tags = new Array();
-      metadata.tags.forEach(tag => tags.push(tag));
+      const tags = metadata.tags || [];
+      console.log('Calling create_intellectual_property with:', {
+        content: new Uint8Array(content),
+        content_type: metadata.content_type,
+        tags,
+        isPremium: metadata.isPremium,
+        priceUsd: metadata.isPremium ? 30 : 5,
+        creatorId: this.keypair,
+        fileType
+      });
+  
       const ip = this.wasmModule.create_intellectual_property(
         new Uint8Array(content),
         metadata.content_type,
-        tags,
+        tags, // Pass the tags array
         metadata.isPremium,
-        metadata.isPremium ? 30 : 5,
-        this.keypair,
+        metadata.isPremium ? 30 : 5, // price_usd as a float
+        this.keypair, // creator_id
         fileType
       );
-
+  
       const contentBytes = this.wasmModule.get_ip_content(ip);
       const ipHashBytes = this.wasmModule.compute_full_hash(contentBytes);
       const ipHash = this.uint8ArrayToHex(ipHashBytes);
-
+  
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
       const chunks = this.wasmModule.chunk_encrypt(ip, Array.from(this.keypair), minChunks);
-
+  
       const chunkHashes = [];
       for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks.get(i);
+        const chunk = chunks[i];
         const chunkHashBytes = this.wasmModule.get_chunk_hash(chunk);
         const chunkHash = this.uint8ArrayToHex(chunkHashBytes);
         chunkHashes.push(chunkHash);
       }
-
+  
       const updatedMetadata = {
         ...metadata,
         chunk_count: chunks.length
       };
-
+  
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
       this.knownObjects.set(ipHash, ipObject);
       await this.dbPut('store', { id: ipHash, value: JSON.stringify(ipObject) });
-
+  
       for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks.get(i);
+        const chunk = chunks[i];
         const chunkHash = chunkHashes[i];
         await this.publishChunk(chunkHash, chunk, i, chunks.length);
       }
-
+  
       if (this.activeNodes.size > 0) {
         this.broadcastIP(ipHash, updatedMetadata, chunkHashes);
       } else {
         await this.queueOfflineOperation({ type: 'publishIP', ipHash, metadata: updatedMetadata, chunkHashes });
       }
-
+  
       return ipHash;
     } catch (error) {
       console.error('publishIP failed:', error);
