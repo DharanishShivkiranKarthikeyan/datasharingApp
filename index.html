@@ -61,7 +61,7 @@
       display: none;
     }
   </style>
-  <script type="module" crossorigin src="/datasharingApp/assets/index-DFXeV0xp.js"></script>
+  <script type="module" crossorigin src="/datasharingApp/assets/index-B25xZCys.js"></script>
 </head>
 <body>
   <div class="loading" id="loading">
@@ -103,6 +103,11 @@
       <h2 class="text-xl font-semibold mb-2">Get Snippet</h2>
       <input id="buyHash" type="text" placeholder="Snippet Hash" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
       <button id="buyButton" onclick="buySnippet(document.getElementById('buyHash').value)" class="w-full p-2 bg-purple-500 text-white rounded hover:bg-purple-600" disabled>Get</button>
+    </div>
+    <div class="mb-4">
+      <h2 class="text-xl font-semibold mb-2">Deposit Funds</h2>
+      <input id="depositAmount" type="number" placeholder="Amount (DCT)" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" min="0" step="0.01" />
+      <button id="depositButton" onclick="deposit(parseFloat(document.getElementById('depositAmount').value))" class="w-full p-2 bg-teal-500 text-white rounded hover:bg-teal-600" disabled>Deposit</button>
     </div>
     <div class="mb-4">
       <h2 class="text-xl font-semibold mb-2">Withdraw Funds</h2>
