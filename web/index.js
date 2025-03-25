@@ -1,7 +1,7 @@
 // web/index.js
 import { auth, db } from './firebase.js';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
 
@@ -11,7 +11,7 @@ import './node-instructions.js';
 import './sw.js'; // Service worker (if used)
 import './utils.js'; // Utility functions (if used)
 
-let dht;
+let dht = null;
 let isNode = false;
 let userBalance = 0;
 let testPeers = [];
@@ -84,6 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.logout = signOutUser;
   window.publishSnippet = publishSnippet;
   window.buySnippet = buySnippet;
+  window.buySnippetByHash = buySnippetByHash; // New function for buying by hash
   window.searchSnippets = searchSnippets;
   window.deposit = deposit;
   window.withdraw = withdraw;
@@ -140,7 +141,11 @@ export async function init() {
   } catch (error) {
     console.error('Error initializing application:', error);
     showToast(`Initialization failed: ${error.message}`);
-    throw error;
+    // Reset state on error
+    dht = null;
+    window.dht = null;
+    userBalance = 0;
+    updateUIForSignOut();
   } finally {
     showLoading(false);
     setupPremiumToggle();
@@ -185,6 +190,7 @@ export async function signOutUser() {
     dht = null;
     window.dht = null;
     testPeers = [];
+    userBalance = 0;
     updateUIForSignOut();
   } catch (error) {
     console.error('Sign-out failed:', error);
@@ -309,6 +315,8 @@ export async function buySnippet(hash) {
       }
     }
 
+    // Display the snippet content
+    displaySnippetContent(data, fileType, ipObject.metadata.content_type);
     return { data, fileType };
   } catch (error) {
     console.error('buySnippet failed:', error);
@@ -316,6 +324,19 @@ export async function buySnippet(hash) {
     return null;
   } finally {
     showLoading(false);
+  }
+}
+
+// New function to buy a snippet by hash
+export async function buySnippetByHash(hashInput) {
+  const hash = hashInput || document.getElementById('buyHashInput').value.trim();
+  if (!hash) {
+    showToast('Please enter a valid hash.');
+    return;
+  }
+  const result = await buySnippet(hash);
+  if (result) {
+    showToast('Snippet purchased and displayed below!');
   }
 }
 
@@ -416,13 +437,13 @@ export async function searchSnippets(query) {
         const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td>${content_type}</td>
-          <td>${description || 'No description'}</td>
-          <td>${tags.join(', ') || 'No tags'}</td>
-          <td>${snippetInfo.averageRating} / 5</td>
-          <td>
-            <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 mr-2">Get (${costDisplay})</button>
-            <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600">Flag</button>
+          <td class="py-2 px-4">${content_type}</td>
+          <td class="py-2 px-4">${description || 'No description'}</td>
+          <td class="py-2 px-4">${tags.join(', ') || 'No tags'}</td>
+          <td class="py-2 px-4">${snippetInfo.averageRating} / 5</td>
+          <td class="py-2 px-4">
+            <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+            <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
           </td>
         `;
         publishedItemsTableBody.appendChild(row);
@@ -510,8 +531,9 @@ async function uploadUserDataToFirebase() {
 
   try {
     const userRef = doc(db, 'users', user.uid);
+    const balance = dht ? await dht.getBalance(dht.keypair) : 0;
     await setDoc(userRef, {
-      balance: await dht.getBalance(dht.keypair),
+      balance,
       lastUpdated: Date.now()
     }, { merge: true });
     console.log('User data uploaded to Firebase');
@@ -531,32 +553,42 @@ function updateLiveFeed() {
       snippetsData[doc.id] = doc.data();
     });
 
-    dht.knownObjects.forEach((value, key) => {
-      const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
-      if (snippetInfo.reviewStatus !== 'active') return; // Skip snippets under review
+    if (dht) {
+      dht.knownObjects.forEach((value, key) => {
+        const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
+        if (snippetInfo.reviewStatus !== 'active') return; // Skip snippets under review
 
-      const isPremium = value.metadata.isPremium || false;
-      const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
-      const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${value.metadata.content_type}</td>
-        <td>${value.metadata.description || 'No description'}</td>
-        <td>${value.metadata.tags.join(', ') || 'No tags'}</td>
-        <td>${snippetInfo.averageRating} / 5</td>
-        <td>
-          <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 mr-2">Get (${costDisplay})</button>
-          <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600">Flag</button>
-        </td>
-      `;
-      publishedItemsTableBody.appendChild(row);
-    });
+        const isPremium = value.metadata.isPremium || false;
+        const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
+        const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="py-2 px-4">${value.metadata.content_type}</td>
+          <td class="py-2 px-4">${value.metadata.description || 'No description'}</td>
+          <td class="py-2 px-4">${value.metadata.tags.join(', ') || 'No tags'}</td>
+          <td class="py-2 px-4">${snippetInfo.averageRating} / 5</td>
+          <td class="py-2 px-4">
+            <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+            <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
+          </td>
+        `;
+        publishedItemsTableBody.appendChild(row);
+      });
+    }
+  }).catch(error => {
+    console.error('Failed to update live feed:', error);
+    showToast('Failed to load live feed.');
   });
 }
 
 function updateTransactionHistory() {
   const transactionList = document.getElementById('transactionList');
   if (!transactionList) return;
+
+  if (!dht) {
+    transactionList.innerHTML = 'Not initialized.';
+    return;
+  }
 
   dht.dbGetAll('transactions').then(transactions => {
     if (transactions.length === 0) {
@@ -565,8 +597,11 @@ function updateTransactionHistory() {
     }
 
     transactionList.innerHTML = transactions.map(tx => {
-      return `<p>${tx.type} - ${tx.amount} DCT - ${new Date(tx.timestamp).toLocaleString()}</p>`;
+      return `<p class="py-1">${tx.type} - ${tx.amount} DCT - ${new Date(tx.timestamp).toLocaleString()}</p>`;
     }).join('');
+  }).catch(error => {
+    console.error('Failed to update transaction history:', error);
+    transactionList.innerHTML = 'Failed to load transactions.';
   });
 }
 
@@ -574,9 +609,19 @@ function updateBalanceDisplay() {
   const userBalanceElement = document.getElementById('userBalance');
   if (!userBalanceElement) return;
 
+  if (!dht) {
+    userBalanceElement.textContent = 'Balance: 0 DCT';
+    userBalance = 0;
+    return;
+  }
+
   dht.getBalance(dht.keypair).then(balance => {
-    userBalance = balance;
-    userBalanceElement.textContent = `Balance: ${balance} DCT`;
+    userBalance = balance || 0;
+    userBalanceElement.textContent = `Balance: ${userBalance} DCT`;
+  }).catch(error => {
+    console.error('Failed to update balance:', error);
+    userBalanceElement.textContent = 'Balance: 0 DCT';
+    userBalance = 0;
   });
 }
 
@@ -588,6 +633,7 @@ function updateUIForSignOut() {
   if (publishedItemsTableBody) publishedItemsTableBody.innerHTML = '';
   if (transactionList) transactionList.innerHTML = 'No transactions yet.';
   if (userBalanceElement) userBalanceElement.textContent = 'Balance: 0 DCT';
+  userBalance = 0;
 }
 
 function showToast(message) {
@@ -618,4 +664,48 @@ function setupPremiumToggle() {
       }
     });
   }
+}
+
+// New function to display snippet content after purchase
+function displaySnippetContent(data, fileType, title) {
+  const snippetDisplay = document.getElementById('snippetDisplay');
+  if (!snippetDisplay) return;
+
+  snippetDisplay.innerHTML = ''; // Clear previous content
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'p-4 bg-gray-800 rounded-lg mt-4';
+
+  const titleElement = document.createElement('h3');
+  titleElement.className = 'text-lg font-semibold mb-2';
+  titleElement.textContent = title || 'Snippet Content';
+  contentDiv.appendChild(titleElement);
+
+  if (fileType.startsWith('text')) {
+    const text = new TextDecoder().decode(data);
+    const pre = document.createElement('pre');
+    pre.className = 'text-sm text-gray-300 whitespace-pre-wrap';
+    pre.textContent = text;
+    contentDiv.appendChild(pre);
+  } else if (fileType.startsWith('image')) {
+    const blob = new Blob([data], { type: fileType });
+    const url = URL.createObjectURL(blob);
+    const img = document.createElement('img');
+    img.src = url;
+    img.className = 'max-w-full h-auto rounded';
+    img.onload = () => URL.revokeObjectURL(url);
+    contentDiv.appendChild(img);
+  } else {
+    const blob = new Blob([data], { type: fileType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = title || 'downloaded_file';
+    a.className = 'text-blue-400 hover:underline';
+    a.textContent = 'Download File';
+    a.onclick = () => setTimeout(() => URL.revokeObjectURL(url), 1000);
+    contentDiv.appendChild(a);
+  }
+
+  snippetDisplay.appendChild(contentDiv);
 }
