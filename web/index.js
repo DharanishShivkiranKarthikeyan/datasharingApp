@@ -4,12 +4,16 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from
 import { doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
+
+// Import all other JavaScript files to ensure they're included in the bundle
 import './signup.js';
 import './node-instructions.js';
 import './sw.js'; // Service worker (if used)
 import './utils.js'; // Utility functions (if used)
+
 let dht;
 let isNode = false;
+let userBalance = 0;
 let testPeers = [];
 
 // Wait for the DOM to load before accessing elements
