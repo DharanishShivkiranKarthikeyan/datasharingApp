@@ -30,9 +30,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleHistoryButton = document.getElementById('toggleHistoryButton');
   const transactionHistory = document.getElementById('transactionHistory');
   const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
+  const buyHashButton = document.getElementById('buyHashButton');
 
   // Verify that all required elements are found
-  if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody) {
+  if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody || !buyHashButton) {
     console.error('Required DOM elements not found:', {
       signupButton: !!signupButton,
       loginButton: !!loginButton,
@@ -44,47 +45,67 @@ document.addEventListener('DOMContentLoaded', () => {
       withdrawButton: !!withdrawButton,
       toggleHistoryButton: !!toggleHistoryButton,
       transactionHistory: !!transactionHistory,
-      publishedItemsTableBody: !!publishedItemsTableBody
+      publishedItemsTableBody: !!publishedItemsTableBody,
+      buyHashButton: !!buyHashButton
     });
     return;
+  }
+
+  // Check if the user is a node based on localStorage
+  const role = localStorage.getItem('role');
+  const nodeId = localStorage.getItem('nodeId');
+  if (role === 'node' && nodeId) {
+    isNode = true;
+    signupButton.classList.add('hidden');
+    loginButton.classList.add('hidden');
+    logoutButton.classList.remove('hidden');
+    publishButton.disabled = false;
+    searchButton.disabled = false;
+    depositButton.disabled = false;
+    withdrawButton.disabled = false;
+    toggleHistoryButton.disabled = false;
+    buyHashButton.disabled = false;
+    init(nodeId);
+  } else {
+    // Update UI based on Firebase authentication state
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log('User is signed in:', user.uid);
+        signupButton.classList.add('hidden');
+        loginButton.classList.add('hidden');
+        logoutButton.classList.remove('hidden');
+        publishButton.disabled = false;
+        searchButton.disabled = false;
+        depositButton.disabled = false;
+        withdrawButton.disabled = false;
+        toggleHistoryButton.disabled = false;
+        buyHashButton.disabled = false;
+        init(user.uid);
+      } else {
+        console.log('No user is signed in.');
+        signupButton.classList.remove('hidden');
+        loginButton.classList.remove('hidden');
+        logoutButton.classList.add('hidden');
+        publishButton.disabled = true;
+        searchButton.disabled = true;
+        depositButton.disabled = true;
+        withdrawButton.disabled = true;
+        toggleHistoryButton.disabled = true;
+        buyHashButton.disabled = true;
+        updateUIForSignOut();
+      }
+    });
   }
 
   // Set up event listeners
   loginButton.addEventListener('click', signIn);
   logoutButton.addEventListener('click', signOutUser);
 
-  // Update UI based on authentication state
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      console.log('User is signed in:', user.uid);
-      signupButton.classList.add('hidden');
-      loginButton.classList.add('hidden');
-      logoutButton.classList.remove('hidden');
-      publishButton.disabled = false;
-      searchButton.disabled = false;
-      depositButton.disabled = false;
-      withdrawButton.disabled = false;
-      toggleHistoryButton.disabled = false;
-      init();
-    } else {
-      console.log('No user is signed in.');
-      signupButton.classList.remove('hidden');
-      loginButton.classList.remove('hidden');
-      logoutButton.classList.add('hidden');
-      publishButton.disabled = true;
-      searchButton.disabled = true;
-      depositButton.disabled = true;
-      withdrawButton.disabled = true;
-      toggleHistoryButton.disabled = true;
-      updateUIForSignOut();
-    }
-  });
-
   // Expose additional functions to the global scope for HTML onclick handlers
   window.logout = signOutUser;
   window.publishSnippet = publishSnippet;
   window.buySnippet = buySnippet;
-  window.buySnippetByHash = buySnippetByHash; // New function for buying by hash
+  window.buySnippetByHash = buySnippetByHash;
   window.searchSnippets = searchSnippets;
   window.deposit = deposit;
   window.withdraw = withdraw;
@@ -92,26 +113,16 @@ document.addEventListener('DOMContentLoaded', () => {
   window.flagSnippet = flagSnippet;
 });
 
-export async function init() {
+export async function init(userId) {
   console.log('Initializing app...');
   showLoading(true);
   try {
-    const user = await new Promise((resolve) => {
-      onAuthStateChanged(auth, (user) => {
-        resolve(user);
-      });
-    });
-
-    if (!user) {
-      console.log('User is not authenticated. Please sign in.');
-      showToast('Please sign in to continue.');
-      return;
-    }
-
     const encoder = new TextEncoder();
-    const keypair = encoder.encode(user.uid);
+    const keypair = encoder.encode(userId);
 
-    isNode = await checkIfUserIsNode();
+    if (!isNode) {
+      isNode = await checkIfUserIsNode(userId);
+    }
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
     if (testPeers.length === 0) {
@@ -140,7 +151,7 @@ export async function init() {
     updateTransactionHistory();
   } catch (error) {
     console.error('Error initializing application:', error);
-    showToast(`Initialization failed: ${error.message}`);
+    showToast(`Initialization failed: ${error.message}`, true);
     // Reset state on error
     dht = null;
     window.dht = null;
@@ -152,15 +163,9 @@ export async function init() {
   }
 }
 
-async function checkIfUserIsNode() {
-  const user = auth.currentUser;
-  if (!user) {
-    console.log('No authenticated user found.');
-    return false;
-  }
-
+async function checkIfUserIsNode(userId) {
   try {
-    const nodeRef = doc(db, 'nodes', user.uid);
+    const nodeRef = doc(db, 'nodes', userId);
     const nodeSnap = await getDoc(nodeRef);
     return nodeSnap.exists();
   } catch (error) {
@@ -176,17 +181,24 @@ export async function signIn() {
     const user = result.user;
     console.log('Signed in user UID:', user.uid);
     showToast('Signed in successfully!');
-    await init();
+    await init(user.uid);
   } catch (error) {
     console.error('Sign-in failed:', error);
-    showToast(`Sign-in failed: ${error.message}`);
+    showToast(`Sign-in failed: ${error.message}`, true);
   }
 }
 
 export async function signOutUser() {
   try {
-    await signOut(auth);
-    showToast('Signed out successfully!');
+    if (localStorage.getItem('role') === 'node') {
+      // Clear node data from localStorage
+      localStorage.removeItem('nodeId');
+      localStorage.removeItem('role');
+      showToast('Node signed out successfully!');
+    } else {
+      await signOut(auth);
+      showToast('Signed out successfully!');
+    }
     dht = null;
     window.dht = null;
     testPeers = [];
@@ -194,12 +206,12 @@ export async function signOutUser() {
     updateUIForSignOut();
   } catch (error) {
     console.error('Sign-out failed:', error);
-    showToast(`Sign-out failed: ${error.message}`);
+    showToast(`Sign-out failed: ${error.message}`, true);
   }
 }
 
 export function isAuthenticated() {
-  return !!auth.currentUser;
+  return !!auth.currentUser || localStorage.getItem('role') === 'node';
 }
 
 export async function publishSnippet(title, description, tags, content, fileInput) {
@@ -242,13 +254,15 @@ export async function publishSnippet(title, description, tags, content, fileInpu
     const ipHash = await dht.publishIP(metadata, finalContent, fileType);
 
     // Initialize snippet metadata in Firestore for ratings and moderation
+    const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
     const snippetRef = doc(db, 'snippets', ipHash);
     await setDoc(snippetRef, {
       ipHash,
       flagCount: 0,
       averageRating: 0,
       reviewStatus: 'active',
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      creatorId: userId
     }, { merge: true });
 
     showToast('Snippet published successfully!');
@@ -258,7 +272,7 @@ export async function publishSnippet(title, description, tags, content, fileInpu
     await uploadUserDataToFirebase();
   } catch (error) {
     console.error('publishSnippet failed:', error);
-    showToast(`Publish failed: ${error.message}`);
+    showToast(`Publish failed: ${error.message}`, true);
   } finally {
     showLoading(false);
   }
@@ -311,7 +325,7 @@ export async function buySnippet(hash) {
         showToast(`Rated ${ratingValue} stars!`);
         updateLiveFeed(); // Refresh live feed to show updated rating
       } else {
-        showToast('Invalid rating. Please enter a number between 1 and 5.');
+        showToast('Invalid rating. Please enter a number between 1 and 5.', true);
       }
     }
 
@@ -320,18 +334,17 @@ export async function buySnippet(hash) {
     return { data, fileType };
   } catch (error) {
     console.error('buySnippet failed:', error);
-    showToast(`Purchase failed: ${error.message}`);
+    showToast(`Purchase failed: ${error.message}`, true);
     return null;
   } finally {
     showLoading(false);
   }
 }
 
-// New function to buy a snippet by hash
 export async function buySnippetByHash(hashInput) {
   const hash = hashInput || document.getElementById('buyHashInput').value.trim();
   if (!hash) {
-    showToast('Please enter a valid hash.');
+    showToast('Please enter a valid hash.', true);
     return;
   }
   const result = await buySnippet(hash);
@@ -341,12 +354,12 @@ export async function buySnippetByHash(hashInput) {
 }
 
 async function submitRating(ipHash, rating) {
-  const user = auth.currentUser;
-  if (!user) return;
+  const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
+  if (!userId) return;
 
   try {
     // Store the user's rating
-    const ratingRef = doc(db, 'snippets', ipHash, 'ratings', user.uid);
+    const ratingRef = doc(db, 'snippets', ipHash, 'ratings', userId);
     await setDoc(ratingRef, {
       rating,
       timestamp: Date.now()
@@ -364,13 +377,13 @@ async function submitRating(ipHash, rating) {
     });
   } catch (error) {
     console.error('Failed to submit rating:', error);
-    showToast(`Failed to submit rating: ${error.message}`);
+    showToast(`Failed to submit rating: ${error.message}`, true);
   }
 }
 
 export async function flagSnippet(ipHash) {
-  const user = auth.currentUser;
-  if (!user) {
+  const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
+  if (!userId) {
     showToast('Please sign in to flag content.');
     return;
   }
@@ -395,7 +408,7 @@ export async function flagSnippet(ipHash) {
     }
   } catch (error) {
     console.error('Failed to flag snippet:', error);
-    showToast(`Failed to flag snippet: ${error.message}`);
+    showToast(`Failed to flag snippet: ${error.message}`, true);
   }
 }
 
@@ -419,6 +432,7 @@ export async function searchSnippets(query) {
       snippetsData[doc.id] = doc.data();
     });
 
+    let foundResults = false;
     dht.knownObjects.forEach((value, key) => {
       const { content_type, description, tags } = value.metadata;
       const queryLower = query.toLowerCase();
@@ -432,6 +446,7 @@ export async function searchSnippets(query) {
           (tags && tags.some(tag => tag.toLowerCase().includes(queryLower)))
         )
       ) {
+        foundResults = true;
         const isPremium = value.metadata.isPremium || false;
         const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
         const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
@@ -450,10 +465,14 @@ export async function searchSnippets(query) {
       }
     });
 
-    showToast('Search completed!');
+    if (!foundResults) {
+      showToast('No snippets found matching your search.');
+    } else {
+      showToast('Search completed!');
+    }
   } catch (error) {
     console.error('searchSnippets failed:', error);
-    showToast(`Search failed: ${error.message}`);
+    showToast(`Search failed: ${error.message}`, true);
   } finally {
     showLoading(false);
   }
@@ -481,7 +500,7 @@ export async function deposit(amount) {
     await uploadUserDataToFirebase();
   } catch (error) {
     console.error('deposit failed:', error);
-    showToast(`Deposit failed: ${error.message}`);
+    showToast(`Deposit failed: ${error.message}`, true);
   } finally {
     showLoading(false);
   }
@@ -510,7 +529,7 @@ export async function withdraw(amount) {
     await uploadUserDataToFirebase();
   } catch (error) {
     console.error('withdraw failed:', error);
-    showToast(`Withdrawal failed: ${error.message}`);
+    showToast(`Withdrawal failed: ${error.message}`, true);
   } finally {
     showLoading(false);
   }
@@ -526,11 +545,11 @@ export function toggleTransactionHistory() {
 }
 
 async function uploadUserDataToFirebase() {
-  const user = auth.currentUser;
-  if (!user) return;
+  const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
+  if (!userId) return;
 
   try {
-    const userRef = doc(db, 'users', user.uid);
+    const userRef = doc(db, 'users', userId);
     const balance = dht ? await dht.getBalance(dht.keypair) : 0;
     await setDoc(userRef, {
       balance,
@@ -577,7 +596,7 @@ function updateLiveFeed() {
     }
   }).catch(error => {
     console.error('Failed to update live feed:', error);
-    showToast('Failed to load live feed.');
+    showToast('Failed to load live feed.', true);
   });
 }
 
@@ -636,11 +655,13 @@ function updateUIForSignOut() {
   userBalance = 0;
 }
 
-function showToast(message) {
+function showToast(message, isError = false) {
   const toast = document.getElementById('toast');
   if (!toast) return;
 
   toast.textContent = message;
+  toast.className = 'toast';
+  if (isError) toast.classList.add('error-toast');
   toast.style.display = 'block';
   setTimeout(() => {
     toast.style.display = 'none';
@@ -666,7 +687,6 @@ function setupPremiumToggle() {
   }
 }
 
-// New function to display snippet content after purchase
 function displaySnippetContent(data, fileType, title) {
   const snippetDisplay = document.getElementById('snippetDisplay');
   if (!snippetDisplay) return;
