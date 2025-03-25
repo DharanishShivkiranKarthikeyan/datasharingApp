@@ -1,5 +1,5 @@
 // web/signup.js
-import { auth, db } from './firebase.js';
+import { auth, db } from '../firebase.js';
 import { signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 

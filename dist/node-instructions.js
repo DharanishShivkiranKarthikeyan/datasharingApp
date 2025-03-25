@@ -1,7 +1,7 @@
 // web/node-instructions.js
-import { auth } from './firebase.js';
+import { auth } from '../firebase.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { DHT } from './dht.js';
+import { DHT } from '../dht.js';
 
 // Only run this code if we're on node-instructions.html
 if (window.location.pathname === '/node-instructions.html') {

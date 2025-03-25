@@ -5,13 +5,8 @@ import { doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, increment 
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
 
-// Import signup.js and node-instructions.js to include them in the bundle
-import './signup.js';
-import './node-instructions.js';
-
 let dht;
 let isNode = false;
-let userBalance = 0;
 let testPeers = [];
 
 // Wait for the DOM to load before accessing elements
