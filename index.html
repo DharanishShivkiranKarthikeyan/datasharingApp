@@ -27,6 +27,9 @@
       border-radius: 0.25rem;
       display: none;
     }
+    .error-toast {
+      background-color: #ef4444;
+    }
     .loading {
       position: fixed;
       top: 0;
@@ -39,10 +42,77 @@
       align-items: center;
       display: none;
     }
-    button {
+    .input-field {
+      padding: 0.5rem;
+      background-color: #2d3748;
+      color: #e2e8f0;
+      border: 1px solid #4a5568;
+      border-radius: 0.25rem;
+      width: 100%;
+      max-width: 300px;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: #63b3ed;
+      box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.3);
+    }
+    .btn {
       padding: 0.5rem 1rem;
       border-radius: 0.25rem;
       cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .btn-primary {
+      background-color: #3b82f6;
+      color: white;
+    }
+    .btn-primary:hover {
+      background-color: #2563eb;
+    }
+    .btn-secondary {
+      background-color: #6b7280;
+      color: white;
+    }
+    .btn-secondary:hover {
+      background-color: #4b5563;
+    }
+    .btn-success {
+      background-color: #10b981;
+      color: white;
+    }
+    .btn-success:hover {
+      background-color: #059669;
+    }
+    .btn-danger {
+      background-color: #ef4444;
+      color: white;
+    }
+    .btn-danger:hover {
+      background-color: #dc2626;
+    }
+    .card {
+      background-color: #2d3748;
+      padding: 1.5rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+    }
+    th {
+      background-color: #374151;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background-color: #2d3748;
+    }
+    tr:hover {
+      background-color: #4b5563;
     }
   </style>
   <script type="module" crossorigin src="/datasharingApp/assets/app.js"></script>
@@ -53,38 +123,57 @@
   </div>
   <div class="toast" id="toast"></div>
   <div class="container">
-    <div class="flex justify-between items-center mb-4">
-      <h1 class="text-2xl font-bold">Dcrypt - Decentralized Data Sharing</h1>
-      <div>
-        <button id="signupButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600 mr-2"><a href="/datasharingApp/signup.html">Sign Up</a></button>
-        <button id="loginButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600 mr-2">Login</button>
-        <button id="logoutButton" class="p-2 bg-red-500 text-white rounded hover:bg-red-600 hidden" onclick="window.logout()">Logout</button>
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-3xl font-bold">Dcrypt - Decentralized Data Sharing</h1>
+      <div class="space-x-2">
+        <button id="signupButton" class="btn btn-primary"><a href="/datasharingApp/signup.html" class="text-white no-underline">Sign Up</a></button>
+        <button id="loginButton" class="btn btn-primary">Login</button>
+        <button id="logoutButton" class="btn btn-danger hidden" onclick="window.logout()">Logout</button>
       </div>
     </div>
-    <div class="mb-4">
-      <p id="userBalance" class="text-lg">Balance: 0 DCT</p>
+
+    <div class="mb-6">
+      <p id="userBalance" class="text-lg font-medium">Balance: 0 DCT</p>
     </div>
-    <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Publish a Snippet</h2>
-      <input id="titleInput" type="text" placeholder="Title" class="p-2 bg-gray-800 text-white rounded mr-2">
-      <input id="descriptionInput" type="text" placeholder="Description" class="p-2 bg-gray-800 text-white rounded mr-2">
-      <input id="tagsInput" type="text" placeholder="Tags (comma-separated)" class="p-2 bg-gray-800 text-white rounded mr-2">
-      <textarea id="contentInput" placeholder="Content" class="p-2 bg-gray-800 text-white rounded mr-2"></textarea>
-      <input id="fileInput" type="file" class="p-2 bg-gray-800 text-white rounded mr-2">
-      <label class="mr-2">
-        <input type="checkbox" id="isPremium" class="mr-1"> Premium
-      </label>
-      <input id="priceInput" type="number" placeholder="Price (DCT)" class="p-2 bg-gray-800 text-white rounded mr-2 hidden">
-      <button id="publishButton" class="p-2 bg-green-500 text-white rounded hover:bg-green-600" onclick="window.publishSnippet(document.getElementById('titleInput').value, document.getElementById('descriptionInput').value, document.getElementById('tagsInput').value, document.getElementById('contentInput').value, document.getElementById('fileInput'))" disabled>Publish</button>
+
+    <div class="card mb-6">
+      <h2 class="text-xl font-semibold mb-4">Publish a Snippet</h2>
+      <div class="space-y-4">
+        <input id="titleInput" type="text" placeholder="Title" class="input-field">
+        <input id="descriptionInput" type="text" placeholder="Description" class="input-field">
+        <input id="tagsInput" type="text" placeholder="Tags (comma-separated)" class="input-field">
+        <textarea id="contentInput" placeholder="Content" class="input-field h-32 resize-none"></textarea>
+        <input id="fileInput" type="file" class="input-field">
+        <div class="flex items-center space-x-4">
+          <label class="flex items-center">
+            <input type="checkbox" id="isPremium" class="mr-2">
+            <span>Premium</span>
+          </label>
+          <input id="priceInput" type="number" placeholder="Price (DCT)" class="input-field hidden">
+        </div>
+        <button id="publishButton" class="btn btn-success" onclick="window.publishSnippet(document.getElementById('titleInput').value, document.getElementById('descriptionInput').value, document.getElementById('tagsInput').value, document.getElementById('contentInput').value, document.getElementById('fileInput'))" disabled>Publish</button>
+      </div>
     </div>
-    <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Search Snippets</h2>
-      <input id="searchInput" type="text" placeholder="Search..." class="p-2 bg-gray-800 text-white rounded mr-2">
-      <button id="searchButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="window.searchSnippets(document.getElementById('searchInput').value)" disabled>Search</button>
+
+    <div class="card mb-6">
+      <h2 class="text-xl font-semibold mb-4">Search Snippets</h2>
+      <div class="flex space-x-2">
+        <input id="searchInput" type="text" placeholder="Search..." class="input-field flex-1">
+        <button id="searchButton" class="btn btn-primary" onclick="window.searchSnippets(document.getElementById('searchInput').value)" disabled>Search</button>
+      </div>
     </div>
-    <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Live Feed</h2>
-      <table id="publishedItems" class="w-full text-left">
+
+    <div class="card mb-6">
+      <h2 class="text-xl font-semibold mb-4">Buy Snippet by Hash</h2>
+      <div class="flex space-x-2">
+        <input id="buyHashInput" type="text" placeholder="Enter snippet hash..." class="input-field flex-1">
+        <button id="buyHashButton" class="btn btn-primary" onclick="window.buySnippetByHash()" disabled>Buy</button>
+      </div>
+    </div>
+
+    <div class="card mb-6">
+      <h2 class="text-xl font-semibold mb-4">Live Feed</h2>
+      <table id="publishedItems">
         <thead>
           <tr>
             <th>Title</th>
@@ -97,15 +186,29 @@
         <tbody></tbody>
       </table>
     </div>
-    <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Manage Balance</h2>
-      <input id="depositInput" type="number" placeholder="Deposit Amount (DCT)" class="p-2 bg-gray-800 text-white rounded mr-2">
-      <button id="depositButton" class="p-2 bg-green-500 text-white rounded hover:bg-green-600 mr-2" onclick="window.deposit(parseFloat(document.getElementById('depositInput').value))" disabled>Deposit</button>
-      <input id="withdrawInput" type="number" placeholder="Withdraw Amount (DCT)" class="p-2 bg-gray-800 text-white rounded mr-2">
-      <button id="withdrawButton" class="p-2 bg-red-500 text-white rounded hover:bg-red-600" onclick="window.withdraw(parseFloat(document.getElementById('withdrawInput').value))" disabled>Withdraw</button>
+
+    <div class="card mb-6" id="snippetDisplay">
+      <!-- Purchased snippet content will be displayed here -->
     </div>
-    <div class="mb-4">
-      <button id="toggleHistoryButton" class="p-2 bg-gray-500 text-white rounded hover:bg-gray-600" onclick="window.toggleTransactionHistory()" disabled>Toggle Transaction History</button>
+
+    <div class="card mb-6">
+      <h2 class="text-xl font-semibold mb-4">Manage Balance</h2>
+      <div class="flex space-x-4 mb-4">
+        <div class="flex-1">
+          <input id="depositInput" type="number" placeholder="Deposit Amount (DCT)" class="input-field w-full">
+        </div>
+        <button id="depositButton" class="btn btn-success" onclick="window.deposit(parseFloat(document.getElementById('depositInput').value))" disabled>Deposit</button>
+      </div>
+      <div class="flex space-x-4">
+        <div class="flex-1">
+          <input id="withdrawInput" type="number" placeholder="Withdraw Amount (DCT)" class="input-field w-full">
+        </div>
+        <button id="withdrawButton" class="btn btn-danger" onclick="window.withdraw(parseFloat(document.getElementById('withdrawInput').value))" disabled>Withdraw</button>
+      </div>
+    </div>
+
+    <div class="card mb-6">
+      <button id="toggleHistoryButton" class="btn btn-secondary mb-4" onclick="window.toggleTransactionHistory()" disabled>Toggle Transaction History</button>
       <div id="transactionHistory" class="mt-2" style="display: none;">
         <h2 class="text-xl font-semibold mb-2">Transaction History</h2>
         <div id="transactionList">No transactions yet.</div>
