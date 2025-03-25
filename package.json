@@ -1,9 +1,10 @@
 {
   "name": "dcrypt-web",
   "version": "1.0.0",
+  "type": "commonjs",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node fix-script-paths.js",
+    "build": "vite build",
     "serve": "vite preview --port=8080"
   },
   "dependencies": {
@@ -13,7 +14,6 @@
   },
   "devDependencies": {
     "dotenv": "^16.4.7",
-    "glob": "^11.0.1",
     "vite": "^5.4.14"
   }
 }
