@@ -21,7 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const userBalanceElement = document.getElementById('userBalance');
   const publishButton = document.getElementById('publishButton');
   const searchButton = document.getElementById('searchButton');
-  const buyButton = document.getElementById('buyButton');
   const depositButton = document.getElementById('depositButton');
   const withdrawButton = document.getElementById('withdrawButton');
   const toggleHistoryButton = document.getElementById('toggleHistoryButton');
@@ -29,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
 
   // Verify that all required elements are found
-  if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !buyButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody) {
+  if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody) {
     console.error('Required DOM elements not found:', {
       signupButton: !!signupButton,
       loginButton: !!loginButton,
@@ -37,7 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
       userBalanceElement: !!userBalanceElement,
       publishButton: !!publishButton,
       searchButton: !!searchButton,
-      buyButton: !!buyButton,
       depositButton: !!depositButton,
       withdrawButton: !!withdrawButton,
       toggleHistoryButton: !!toggleHistoryButton,
@@ -60,7 +58,6 @@ document.addEventListener('DOMContentLoaded', () => {
       logoutButton.classList.remove('hidden');
       publishButton.disabled = false;
       searchButton.disabled = false;
-      buyButton.disabled = false;
       depositButton.disabled = false;
       withdrawButton.disabled = false;
       toggleHistoryButton.disabled = false;
@@ -72,7 +69,6 @@ document.addEventListener('DOMContentLoaded', () => {
       logoutButton.classList.add('hidden');
       publishButton.disabled = true;
       searchButton.disabled = true;
-      buyButton.disabled = true;
       depositButton.disabled = true;
       withdrawButton.disabled = true;
       toggleHistoryButton.disabled = true;
