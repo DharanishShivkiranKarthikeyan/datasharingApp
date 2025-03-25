@@ -4,7 +4,10 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from
 import { doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
-
+import './signup.js';
+import './node-instructions.js';
+import './sw.js'; // Service worker (if used)
+import './utils.js'; // Utility functions (if used)
 let dht;
 let isNode = false;
 let testPeers = [];

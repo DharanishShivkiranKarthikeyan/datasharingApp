@@ -1,10 +1,10 @@
 // web/signup.js
-import { auth, db } from '../firebase.js';
+import { auth, db } from './firebase.js';
 import { signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 
 // Only run this code if we're on signup.html
-if (window.location.pathname === '/signup.html') {
+if (window.location.pathname === '/datasharingApp/signup.html' || window.location.pathname === '/signup.html') {
   document.addEventListener('DOMContentLoaded', () => {
     const signupButton = document.getElementById('signupButton');
     if (!signupButton) {
@@ -39,7 +39,7 @@ async function signUp() {
       console.log('User registered as a node');
       showToast('Signed up as a node successfully!');
       // Redirect to node instructions page
-      window.location.href = '/node-instructions.html';
+      window.location.href = '/datasharingApp/node-instructions.html';
     } else {
       // Register the user as a regular user (optional: store user metadata)
       const userRef = doc(db, 'users', user.uid);
@@ -51,7 +51,7 @@ async function signUp() {
       console.log('User registered as a regular user');
       showToast('Signed up successfully!');
       // Redirect back to the dashboard
-      window.location.href = '/index.html';
+      window.location.href = '/datasharingApp/index.html';
     }
   } catch (error) {
     console.error('Sign-up failed:', error);

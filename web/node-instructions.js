@@ -1,10 +1,10 @@
 // web/node-instructions.js
-import { auth } from '../firebase.js';
+import { auth } from './firebase.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { DHT } from '../dht.js';
+import { DHT } from './dht.js';
 
 // Only run this code if we're on node-instructions.html
-if (window.location.pathname === '/node-instructions.html') {
+if (window.location.pathname === '/datasharingApp/node-instructions.html' || window.location.pathname === '/node-instructions.html') {
   let dht;
 
   document.addEventListener('DOMContentLoaded', async () => {
@@ -18,7 +18,7 @@ if (window.location.pathname === '/node-instructions.html') {
 
       if (!user) {
         showToast('Please sign in to view node instructions.');
-        window.location.href = '/index.html';
+        window.location.href = '/datasharingApp/index.html';
         return;
       }
 

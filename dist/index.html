@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin-allow-popups">
-  <title>Dcrypt Dashboard</title>
+  <title>Dcrypt - Decentralized Data Sharing</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -13,7 +13,7 @@
       font-family: 'Inter', sans-serif;
     }
     .container {
-      max-width: 800px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 2rem;
     }
@@ -39,29 +39,13 @@
       align-items: center;
       display: none;
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-    }
-    th, td {
-      padding: 0.5rem;
-      border: 1px solid #4a5568;
-      text-align: left;
-    }
-    th {
-      background-color: #2d3748;
-    }
     button {
       padding: 0.5rem 1rem;
       border-radius: 0.25rem;
       cursor: pointer;
     }
-    .hidden {
-      display: none;
-    }
   </style>
-  <script type="module" crossorigin src="/datasharingApp/assets/index-m8OlJziC.js"></script>
+  <script type="module" crossorigin src="/datasharingApp/assets/app.js"></script>
 </head>
 <body>
   <div class="loading" id="loading">
@@ -70,72 +54,62 @@
   <div class="toast" id="toast"></div>
   <div class="container">
     <div class="flex justify-between items-center mb-4">
-      <h1 class="text-2xl font-bold">Dcrypt Dashboard</h1>
+      <h1 class="text-2xl font-bold">Dcrypt - Decentralized Data Sharing</h1>
       <div>
-        <a id="signupButton" href="./signup.html" class="p-2 bg-green-500 text-white rounded hover:bg-green-600 mr-2">Sign Up</a>
-        <button id="loginButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600 mr-2">Sign in with Google</button>
-        <button id="logoutButton" onclick="logout()" class="p-2 bg-red-500 text-white rounded hover:bg-red-600 hidden">Logout</button>
+        <button id="signupButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600 mr-2"><a href="/datasharingApp/signup.html">Sign Up</a></button>
+        <button id="loginButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600 mr-2">Login</button>
+        <button id="logoutButton" class="p-2 bg-red-500 text-white rounded hover:bg-red-600 hidden" onclick="window.logout()">Logout</button>
       </div>
     </div>
     <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">User Info</h2>
-      <p id="userBalance">Balance: Loading...</p>
+      <p id="userBalance" class="text-lg">Balance: 0 DCT</p>
     </div>
     <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Publish Snippet</h2>
-      <input id="snippetTitle" type="text" placeholder="Title" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
-      <input id="snippetDescription" type="text" placeholder="Description" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
-      <input id="snippetTags" type="text" placeholder="Tags (comma-separated)" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
-      <textarea id="snippetContent" placeholder="Content or leave blank to upload a file" class="w-full p-2 mb-2 bg-gray-700 text-white rounded"></textarea>
-      <input id="fileUpload" type="file" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
-      <label class="block mb-2">
-        <input type="checkbox" id="isPremium" class="mr-2"> Premium Content
+      <h2 class="text-xl font-semibold mb-2">Publish a Snippet</h2>
+      <input id="titleInput" type="text" placeholder="Title" class="p-2 bg-gray-800 text-white rounded mr-2">
+      <input id="descriptionInput" type="text" placeholder="Description" class="p-2 bg-gray-800 text-white rounded mr-2">
+      <input id="tagsInput" type="text" placeholder="Tags (comma-separated)" class="p-2 bg-gray-800 text-white rounded mr-2">
+      <textarea id="contentInput" placeholder="Content" class="p-2 bg-gray-800 text-white rounded mr-2"></textarea>
+      <input id="fileInput" type="file" class="p-2 bg-gray-800 text-white rounded mr-2">
+      <label class="mr-2">
+        <input type="checkbox" id="isPremium" class="mr-1"> Premium
       </label>
-      <label for="priceInput" class="block mb-2 hidden">Price (DCT):</label>
-      <input id="priceInput" type="number" placeholder="Enter price in DCT" class="w-full p-2 mb-2 bg-gray-700 text-white rounded hidden" min="0" step="0.01" />
-      <button id="publishButton" onclick="publishSnippet(document.getElementById('snippetTitle').value, document.getElementById('snippetDescription').value, document.getElementById('snippetTags').value, document.getElementById('snippetContent').value, document.getElementById('fileUpload'))" class="w-full p-2 bg-green-500 text-white rounded hover:bg-green-600" disabled>Publish</button>
+      <input id="priceInput" type="number" placeholder="Price (DCT)" class="p-2 bg-gray-800 text-white rounded mr-2 hidden">
+      <button id="publishButton" class="p-2 bg-green-500 text-white rounded hover:bg-green-600" onclick="window.publishSnippet(document.getElementById('titleInput').value, document.getElementById('descriptionInput').value, document.getElementById('tagsInput').value, document.getElementById('contentInput').value, document.getElementById('fileInput'))" disabled>Publish</button>
     </div>
     <div class="mb-4">
       <h2 class="text-xl font-semibold mb-2">Search Snippets</h2>
-      <input id="searchQuery" type="text" placeholder="Search..." class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
-      <button id="searchButton" onclick="searchSnippets(document.getElementById('searchQuery').value)" class="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600" disabled>Search</button>
+      <input id="searchInput" type="text" placeholder="Search..." class="p-2 bg-gray-800 text-white rounded mr-2">
+      <button id="searchButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="window.searchSnippets(document.getElementById('searchInput').value)" disabled>Search</button>
     </div>
     <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Get Snippet</h2>
-      <input id="buyHash" type="text" placeholder="Snippet Hash" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
-      <button id="buyButton" onclick="buySnippet(document.getElementById('buyHash').value)" class="w-full p-2 bg-purple-500 text-white rounded hover:bg-purple-600" disabled>Get</button>
-    </div>
-    <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Deposit Funds</h2>
-      <input id="depositAmount" type="number" placeholder="Amount (DCT)" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" min="0" step="0.01" />
-      <button id="depositButton" onclick="deposit(parseFloat(document.getElementById('depositAmount').value))" class="w-full p-2 bg-teal-500 text-white rounded hover:bg-teal-600" disabled>Deposit</button>
-    </div>
-    <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Withdraw Funds</h2>
-      <input id="withdrawAmount" type="number" placeholder="Amount (DCT)" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" min="0" step="0.01" />
-      <button id="withdrawButton" onclick="withdraw(parseFloat(document.getElementById('withdrawAmount').value))" class="w-full p-2 bg-yellow-500 text-white rounded hover:bg-yellow-600" disabled>Withdraw</button>
-    </div>
-    <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Transaction History</h2>
-      <button id="toggleHistoryButton" onclick="toggleTransactionHistory()" class="p-2 bg-gray-500 text-white rounded hover:bg-gray-600" disabled>Toggle History</button>
-      <div id="transactionHistory" style="display: none;">
-        <p id="transactionList">Transaction history will be displayed here.</p>
-      </div>
-    </div>
-    <div>
       <h2 class="text-xl font-semibold mb-2">Live Feed</h2>
-      <table id="publishedItems">
+      <table id="publishedItems" class="w-full text-left">
         <thead>
           <tr>
             <th>Title</th>
             <th>Description</th>
-            <th>Tag</th>
+            <th>Tags</th>
             <th>Rating</th>
-            <th>Action</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
+    </div>
+    <div class="mb-4">
+      <h2 class="text-xl font-semibold mb-2">Manage Balance</h2>
+      <input id="depositInput" type="number" placeholder="Deposit Amount (DCT)" class="p-2 bg-gray-800 text-white rounded mr-2">
+      <button id="depositButton" class="p-2 bg-green-500 text-white rounded hover:bg-green-600 mr-2" onclick="window.deposit(parseFloat(document.getElementById('depositInput').value))" disabled>Deposit</button>
+      <input id="withdrawInput" type="number" placeholder="Withdraw Amount (DCT)" class="p-2 bg-gray-800 text-white rounded mr-2">
+      <button id="withdrawButton" class="p-2 bg-red-500 text-white rounded hover:bg-red-600" onclick="window.withdraw(parseFloat(document.getElementById('withdrawInput').value))" disabled>Withdraw</button>
+    </div>
+    <div class="mb-4">
+      <button id="toggleHistoryButton" class="p-2 bg-gray-500 text-white rounded hover:bg-gray-600" onclick="window.toggleTransactionHistory()" disabled>Toggle Transaction History</button>
+      <div id="transactionHistory" class="mt-2" style="display: none;">
+        <h2 class="text-xl font-semibold mb-2">Transaction History</h2>
+        <div id="transactionList">No transactions yet.</div>
+      </div>
     </div>
   </div>
 </body>
