@@ -140,6 +140,7 @@ export async function handleSignup() {
   showLoading(true);
   try {
     if (role === 'user') {
+      console.log("HEYYY USER")
       // User signup with OAuth
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
