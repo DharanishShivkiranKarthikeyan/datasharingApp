@@ -3,7 +3,6 @@ import { auth, db } from './firebase.js';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
-import { createTestPeers } from './testPeers.js';
 
 // Import all other JavaScript files to ensure they're included in the bundle
 import './signup.js';
@@ -14,14 +13,14 @@ import './utils.js'; // Utility functions (if used)
 let dht = null;
 let isNode = false;
 let userBalance = 0;
-let testPeers = [];
-
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
   // Check if the user is a node and redirect if on index.html
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
-  if (window.location.pathname.includes('index.html') && role === 'node' && nodeId) {
+  const path = window.location.pathname;
+  const isIndexPage = path.includes('index.html') || path === '/datasharingApp/' || path === '/datasharingApp';
+  if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
     window.location.href = '/datasharingApp/node-instructions.html';
     return;
@@ -40,9 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const transactionHistory = document.getElementById('transactionHistory');
   const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   const buyHashButton = document.getElementById('buyHashButton');
-
   // Verify that all required elements are found (only for index.html)
-  if (window.location.pathname.includes('index.html')) {
+  if (window.location.pathname.includes('datasharingApp')) {
+
     if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody || !buyHashButton) {
       console.error('Required DOM elements not found:', {
         signupButton: !!signupButton,
@@ -101,7 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loginButton.addEventListener('click', signIn);
     logoutButton.addEventListener('click', signOutUser);
   }
-
   // Expose additional functions to the global scope for HTML onclick handlers
   window.logout = signOutUser;
   window.publishSnippet = publishSnippet;
@@ -115,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.handleSignup = handleSignup; // Expose handleSignup globally
 });
 
-// Rest of the code remains unchanged (omitted for brevity)
+// Generate a UUID for nodes
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -195,12 +193,6 @@ export async function init(userId) {
     }
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
-    if (testPeers.length === 0) {
-      console.log('Creating test peers...');
-      testPeers = await createTestPeers();
-      console.log('Test peers created:', testPeers.map(p => p.peerId));
-    }
-
     console.log('Initializing DHT...');
     dht = new DHT(keypair, isNode);
     window.dht = dht;
@@ -233,6 +225,7 @@ export async function init(userId) {
   }
 }
 
+// Rest of the code remains unchanged (omitted for brevity)
 async function checkIfUserIsNode(userId) {
   try {
     const nodeRef = doc(db, 'nodes', userId);
@@ -271,7 +264,6 @@ export async function signOutUser() {
     }
     dht = null;
     window.dht = null;
-    testPeers = [];
     userBalance = 0;
     updateUIForSignOut();
   } catch (error) {
