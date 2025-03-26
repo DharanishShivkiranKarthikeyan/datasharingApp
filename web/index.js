@@ -18,6 +18,15 @@ let testPeers = [];
 
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
+  // Check if the user is a node and redirect if on index.html
+  const role = localStorage.getItem('role');
+  const nodeId = localStorage.getItem('nodeId');
+  if (window.location.pathname.includes('index.html') && role === 'node' && nodeId) {
+    console.log('Node detected on index.html, redirecting to node-instructions.html');
+    window.location.href = '/datasharingApp/node-instructions.html';
+    return;
+  }
+
   // Get DOM elements
   const signupButton = document.getElementById('signupButton');
   const loginButton = document.getElementById('loginButton');
@@ -53,20 +62,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Check if the user is a node based on localStorage
-    const role = localStorage.getItem('role');
-    const nodeId = localStorage.getItem('nodeId');
     if (role === 'node' && nodeId) {
       isNode = true;
-      signupButton.classList.add('hidden');
-      loginButton.classList.add('hidden');
-      logoutButton.classList.remove('hidden');
-      publishButton.disabled = false;
-      searchButton.disabled = false;
-      depositButton.disabled = false;
-      withdrawButton.disabled = false;
-      toggleHistoryButton.disabled = false;
-      buyHashButton.disabled = false;
-      init(nodeId);
+      // This block should not be reached due to the redirect above, but keeping it for safety
+      console.log('Node detected, but should have been redirected already.');
     } else {
       // Update UI based on Firebase authentication state
       onAuthStateChanged(auth, (user) => {
@@ -140,7 +139,7 @@ export async function handleSignup() {
   showLoading(true);
   try {
     if (role === 'user') {
-      console.log("HEYYY USER")
+      console.log("Handling user signup with OAuth...");
       // User signup with OAuth
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
@@ -157,6 +156,7 @@ export async function handleSignup() {
 
       window.location.href = '/datasharingApp/index.html';
     } else {
+      console.log("Handling node signup without OAuth...");
       // Node signup without OAuth
       const nodeId = generateUUID();
       console.log('Generated node ID:', nodeId);
@@ -233,6 +233,7 @@ export async function init(userId) {
   }
 }
 
+// Rest of the code remains unchanged (omitted for brevity)
 async function checkIfUserIsNode(userId) {
   try {
     const nodeRef = doc(db, 'nodes', userId);
