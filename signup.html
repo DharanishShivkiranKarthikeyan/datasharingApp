@@ -65,85 +65,8 @@
         <input type="radio" name="role" value="node" class="mr-2"> Sign up as a Node
       </label>
     </div>
-    <button id="signupButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600">Sign Up</button>
+    <button id="signupButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="window.handleSignup()">Sign Up</button>
   </div>
-  <script type="module">
-    import { auth, db } from '/datasharingApp/assets/app.js';
-    import { signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-    import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-
-    // Generate a UUID for nodes
-    function generateUUID() {
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-    }
-
-    function showToast(message, isError = false) {
-      const toast = document.getElementById('toast');
-      if (!toast) return;
-      toast.textContent = message;
-      toast.className = 'toast';
-      if (isError) toast.classList.add('error-toast');
-      toast.style.display = 'block';
-      setTimeout(() => {
-        toast.style.display = 'none';
-      }, 3000);
-    }
-
-    function showLoading(show) {
-      const loading = document.getElementById('loading');
-      if (loading) loading.style.display = show ? 'flex' : 'none';
-    }
-
-    document.getElementById('signupButton').addEventListener('click', async () => {
-      const role = document.querySelector('input[name="role"]:checked').value;
-      showLoading(true);
-
-      try {
-        if (role === 'user') {
-          // User signup still uses OAuth
-          const provider = new GoogleAuthProvider();
-          const result = await signInWithPopup(auth, provider);
-          const user = result.user;
-          console.log('Signed in user UID:', user.uid);
-          showToast('Signed in successfully!');
-
-          // Store user data in Firestore
-          const userRef = doc(db, 'users', user.uid);
-          await setDoc(userRef, {
-            role: 'user',
-            createdAt: Date.now()
-          }, { merge: true });
-
-          window.location.href = '/datasharingApp/index.html';
-        } else {
-          // Node signup without OAuth
-          const nodeId = generateUUID();
-          console.log('Generated node ID:', nodeId);
-
-          // Store node ID in localStorage
-          localStorage.setItem('nodeId', nodeId);
-          localStorage.setItem('role', 'node');
-
-          // Store node data in Firestore
-          const nodeRef = doc(db, 'nodes', nodeId);
-          await setDoc(nodeRef, {
-            role: 'node',
-            createdAt: Date.now()
-          }, { merge: true });
-
-          showToast('Node created successfully!');
-          window.location.href = '/datasharingApp/node-instructions.html';
-        }
-      } catch (error) {
-        console.error('Signup failed:', error);
-        showToast(`Signup failed: ${error.message}`, true);
-      } finally {
-        showLoading(false);
-      }
-    });
-  </script>
+  <script type="module" src="/datasharingApp/assets/app.js"></script>
 </body>
 </html>
