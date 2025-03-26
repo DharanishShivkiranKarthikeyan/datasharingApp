@@ -10,12 +10,12 @@ import './signup.js';
 import './node-instructions.js';
 import './sw.js'; // Service worker (if used)
 import './utils.js'; // Utility functions (if used)
-import './firebase.js'
+
 let dht = null;
 let isNode = false;
 let userBalance = 0;
 let testPeers = [];
-export {auth,db}
+
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
   // Get DOM elements
@@ -29,77 +29,79 @@ document.addEventListener('DOMContentLoaded', () => {
   const withdrawButton = document.getElementById('withdrawButton');
   const toggleHistoryButton = document.getElementById('toggleHistoryButton');
   const transactionHistory = document.getElementById('transactionHistory');
-  const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
+  const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   const buyHashButton = document.getElementById('buyHashButton');
 
-  // Verify that all required elements are found
-  if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody || !buyHashButton) {
-    console.error('Required DOM elements not found:', {
-      signupButton: !!signupButton,
-      loginButton: !!loginButton,
-      logoutButton: !!logoutButton,
-      userBalanceElement: !!userBalanceElement,
-      publishButton: !!publishButton,
-      searchButton: !!searchButton,
-      depositButton: !!depositButton,
-      withdrawButton: !!withdrawButton,
-      toggleHistoryButton: !!toggleHistoryButton,
-      transactionHistory: !!transactionHistory,
-      publishedItemsTableBody: !!publishedItemsTableBody,
-      buyHashButton: !!buyHashButton
-    });
-    return;
-  }
+  // Verify that all required elements are found (only for index.html)
+  if (window.location.pathname.includes('index.html')) {
+    if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody || !buyHashButton) {
+      console.error('Required DOM elements not found:', {
+        signupButton: !!signupButton,
+        loginButton: !!loginButton,
+        logoutButton: !!logoutButton,
+        userBalanceElement: !!userBalanceElement,
+        publishButton: !!publishButton,
+        searchButton: !!searchButton,
+        depositButton: !!depositButton,
+        withdrawButton: !!withdrawButton,
+        toggleHistoryButton: !!toggleHistoryButton,
+        transactionHistory: !!transactionHistory,
+        publishedItemsTableBody: !!publishedItemsTableBody,
+        buyHashButton: !!buyHashButton
+      });
+      return;
+    }
 
-  // Check if the user is a node based on localStorage
-  const role = localStorage.getItem('role');
-  const nodeId = localStorage.getItem('nodeId');
-  if (role === 'node' && nodeId) {
-    isNode = true;
-    signupButton.classList.add('hidden');
-    loginButton.classList.add('hidden');
-    logoutButton.classList.remove('hidden');
-    publishButton.disabled = false;
-    searchButton.disabled = false;
-    depositButton.disabled = false;
-    withdrawButton.disabled = false;
-    toggleHistoryButton.disabled = false;
-    buyHashButton.disabled = false;
-    init(nodeId);
-  } else {
-    // Update UI based on Firebase authentication state
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log('User is signed in:', user.uid);
-        signupButton.classList.add('hidden');
-        loginButton.classList.add('hidden');
-        logoutButton.classList.remove('hidden');
-        publishButton.disabled = false;
-        searchButton.disabled = false;
-        depositButton.disabled = false;
-        withdrawButton.disabled = false;
-        toggleHistoryButton.disabled = false;
-        buyHashButton.disabled = false;
-        init(user.uid);
-      } else {
-        console.log('No user is signed in.');
-        signupButton.classList.remove('hidden');
-        loginButton.classList.remove('hidden');
-        logoutButton.classList.add('hidden');
-        publishButton.disabled = true;
-        searchButton.disabled = true;
-        depositButton.disabled = true;
-        withdrawButton.disabled = true;
-        toggleHistoryButton.disabled = true;
-        buyHashButton.disabled = true;
-        updateUIForSignOut();
-      }
-    });
-  }
+    // Check if the user is a node based on localStorage
+    const role = localStorage.getItem('role');
+    const nodeId = localStorage.getItem('nodeId');
+    if (role === 'node' && nodeId) {
+      isNode = true;
+      signupButton.classList.add('hidden');
+      loginButton.classList.add('hidden');
+      logoutButton.classList.remove('hidden');
+      publishButton.disabled = false;
+      searchButton.disabled = false;
+      depositButton.disabled = false;
+      withdrawButton.disabled = false;
+      toggleHistoryButton.disabled = false;
+      buyHashButton.disabled = false;
+      init(nodeId);
+    } else {
+      // Update UI based on Firebase authentication state
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          console.log('User is signed in:', user.uid);
+          signupButton.classList.add('hidden');
+          loginButton.classList.add('hidden');
+          logoutButton.classList.remove('hidden');
+          publishButton.disabled = false;
+          searchButton.disabled = false;
+          depositButton.disabled = false;
+          withdrawButton.disabled = false;
+          toggleHistoryButton.disabled = false;
+          buyHashButton.disabled = false;
+          init(user.uid);
+        } else {
+          console.log('No user is signed in.');
+          signupButton.classList.remove('hidden');
+          loginButton.classList.remove('hidden');
+          logoutButton.classList.add('hidden');
+          publishButton.disabled = true;
+          searchButton.disabled = true;
+          depositButton.disabled = true;
+          withdrawButton.disabled = true;
+          toggleHistoryButton.disabled = true;
+          buyHashButton.disabled = true;
+          updateUIForSignOut();
+        }
+      });
+    }
 
-  // Set up event listeners
-  loginButton.addEventListener('click', signIn);
-  logoutButton.addEventListener('click', signOutUser);
+    // Set up event listeners
+    loginButton.addEventListener('click', signIn);
+    logoutButton.addEventListener('click', signOutUser);
+  }
 
   // Expose additional functions to the global scope for HTML onclick handlers
   window.logout = signOutUser;
@@ -111,7 +113,74 @@ document.addEventListener('DOMContentLoaded', () => {
   window.withdraw = withdraw;
   window.toggleTransactionHistory = toggleTransactionHistory;
   window.flagSnippet = flagSnippet;
+  window.handleSignup = handleSignup; // Expose handleSignup globally
 });
+
+// Generate a UUID for nodes
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+export async function handleSignup() {
+  const roleInputs = document.querySelectorAll('input[name="role"]');
+  if (!roleInputs) {
+    showToast('Role selection not found.', true);
+    return;
+  }
+
+  const role = Array.from(roleInputs).find(input => input.checked)?.value;
+  if (!role) {
+    showToast('Please select a role.', true);
+    return;
+  }
+
+  showLoading(true);
+  try {
+    if (role === 'user') {
+      // User signup with OAuth
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      console.log('Signed in user UID:', user.uid);
+      showToast('Signed in successfully!');
+
+      // Store user data in Firestore
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, {
+        role: 'user',
+        createdAt: Date.now()
+      }, { merge: true });
+
+      window.location.href = '/datasharingApp/index.html';
+    } else {
+      // Node signup without OAuth
+      const nodeId = generateUUID();
+      console.log('Generated node ID:', nodeId);
+
+      // Store node ID in localStorage
+      localStorage.setItem('nodeId', nodeId);
+      localStorage.setItem('role', 'node');
+
+      // Store node data in Firestore
+      const nodeRef = doc(db, 'nodes', nodeId);
+      await setDoc(nodeRef, {
+        role: 'node',
+        createdAt: Date.now()
+      }, { merge: true });
+
+      showToast('Node created successfully!');
+      window.location.href = '/datasharingApp/node-instructions.html';
+    }
+  } catch (error) {
+    console.error('Signup failed:', error);
+    showToast(`Signup failed: ${error.message}`, true);
+  } finally {
+    showLoading(false);
+  }
+}
 
 export async function init(userId) {
   console.log('Initializing app...');
@@ -423,6 +492,10 @@ export async function searchSnippets(query) {
     if (!dht) throw new Error('DHT not initialized');
     if (!query) throw new Error('Search query is required');
 
+    console.log('Starting search with query:', query);
+    console.log('dht.knownObjects size:', dht.knownObjects.size);
+    console.log('dht.knownObjects:', Array.from(dht.knownObjects.entries()));
+
     const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
     publishedItemsTableBody.innerHTML = '';
 
@@ -431,12 +504,15 @@ export async function searchSnippets(query) {
     snippetsSnapshot.forEach(doc => {
       snippetsData[doc.id] = doc.data();
     });
+    console.log('Snippets from Firestore:', snippetsData);
 
     let foundResults = false;
     dht.knownObjects.forEach((value, key) => {
       const { content_type, description, tags } = value.metadata;
       const queryLower = query.toLowerCase();
       const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
+
+      console.log(`Checking snippet ${key}:`, { content_type, description, tags, reviewStatus: snippetInfo.reviewStatus });
 
       if (
         snippetInfo.reviewStatus === 'active' &&
@@ -462,6 +538,7 @@ export async function searchSnippets(query) {
           </td>
         `;
         publishedItemsTableBody.appendChild(row);
+        console.log(`Found matching snippet ${key}`);
       }
     });
 
@@ -562,7 +639,7 @@ async function uploadUserDataToFirebase() {
 }
 
 function updateLiveFeed() {
-  const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
+  const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   if (!publishedItemsTableBody) return;
 
   publishedItemsTableBody.innerHTML = '';
@@ -645,7 +722,7 @@ function updateBalanceDisplay() {
 }
 
 function updateUIForSignOut() {
-  const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
+  const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   const transactionList = document.getElementById('transactionList');
   const userBalanceElement = document.getElementById('userBalance');
 
