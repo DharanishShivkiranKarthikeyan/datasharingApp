@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.handleSignup = handleSignup; // Expose handleSignup globally
 });
 
-// Generate a UUID for nodes
+// Rest of the code remains unchanged (omitted for brevity)
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -233,7 +233,6 @@ export async function init(userId) {
   }
 }
 
-// Rest of the code remains unchanged (omitted for brevity)
 async function checkIfUserIsNode(userId) {
   try {
     const nodeRef = doc(db, 'nodes', userId);

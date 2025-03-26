@@ -1,6 +1,4 @@
 // web/node-instructions.js
-import { auth } from './firebase.js';
-import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { DHT } from './dht.js';
 
 // Only run this code if we're on node-instructions.html
@@ -10,20 +8,18 @@ if (window.location.pathname === '/datasharingApp/node-instructions.html' || win
   document.addEventListener('DOMContentLoaded', async () => {
     showLoading(true);
     try {
-      const user = await new Promise((resolve) => {
-        onAuthStateChanged(auth, (user) => {
-          resolve(user);
-        });
-      });
+      // Check if the user is a node using localStorage
+      const nodeId = localStorage.getItem('nodeId');
+      const role = localStorage.getItem('role');
 
-      if (!user) {
-        showToast('Please sign in to view node instructions.');
-        window.location.href = '/datasharingApp/index.html';
+      if (role !== 'node' || !nodeId) {
+        showToast('You must be signed in as a node to view this page.');
+        window.location.href = '/datasharingApp/signup.html';
         return;
       }
 
       const encoder = new TextEncoder();
-      const keypair = encoder.encode(user.uid);
+      const keypair = encoder.encode(nodeId);
 
       // Initialize DHT
       dht = new DHT(keypair, true); // isNode = true since this is a node
