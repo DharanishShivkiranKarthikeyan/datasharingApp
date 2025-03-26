@@ -10,12 +10,12 @@ import './signup.js';
 import './node-instructions.js';
 import './sw.js'; // Service worker (if used)
 import './utils.js'; // Utility functions (if used)
-
+import './firebase.js'
 let dht = null;
 let isNode = false;
 let userBalance = 0;
 let testPeers = [];
-
+export {auth,db}
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
   // Get DOM elements
