@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin-allow-popups">
   <title>Sign Up - Dcrypt</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -43,10 +42,18 @@
       align-items: center;
       display: none;
     }
-    button {
+    .btn {
       padding: 0.5rem 1rem;
       border-radius: 0.25rem;
       cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .btn-primary {
+      background-color: #3b82f6;
+      color: white;
+    }
+    .btn-primary:hover {
+      background-color: #2563eb;
     }
   </style>
 </head>
@@ -65,8 +72,9 @@
         <input type="radio" name="role" value="node" class="mr-2"> Sign up as a Node
       </label>
     </div>
-    <button id="signupButton" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="window.handleSignup()">Sign Up</button>
+    <button class="btn btn-primary" onclick="event.preventDefault(); window.handleSignup()">Sign Up with Google</button>
+    <button class="btn btn-primary mt-4" onclick="window.location.href='/datasharingApp/index.html'">Back to Dashboard</button>
   </div>
-  <script type="module" src="/datasharingApp/assets/app.js"></script>
+  <script type="module" src="/datasharingApp/index.js"></script>
 </body>
 </html>

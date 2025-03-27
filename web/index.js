@@ -1,4 +1,17 @@
-import { auth, db } from './firebase.js';
+// Import Firebase services dynamically to catch initialization errors
+let auth, db;
+
+try {
+  const firebaseModule = await import('./firebase.js');
+  auth = firebaseModule.auth;
+  db = firebaseModule.db;
+  console.log('Firebase services imported successfully');
+} catch (error) {
+  console.error('Failed to import Firebase services:', error);
+  showToast('Failed to initialize Firebase. Please try again later.', true);
+}
+
+// Import Firebase Auth and Firestore methods
 import { GoogleAuthProvider, onAuthStateChanged, signInWithRedirect, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
@@ -7,9 +20,10 @@ import { createTestPeers } from './testPeers.js';
 // Import other JavaScript files to ensure they're included in the bundle
 import './signup.js';
 import './node-instructions.js';
-import './sw.js'; // Service worker (if used)
-import './utils.js'; // Utility functions (if used)
+import './sw.js';
+import './utils.js';
 
+// Global state variables
 let dht = null;
 let isNode = false;
 let userBalance = 0;
@@ -19,16 +33,19 @@ let isSigningUp = false;
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOMContentLoaded event fired');
+  console.log('Current pathname:', window.location.pathname);
+
   // Check if the user is a node and redirect if on index.html
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
-  if (window.location.pathname.includes('index.html') && role === 'node' && nodeId) {
+  const isIndexPage = window.location.pathname.includes('index.html') || window.location.pathname === '/' || window.location.pathname === '/datasharingApp/';
+  if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
     window.location.href = '/datasharingApp/node-instructions.html';
     return;
   }
 
-  // Get DOM elements
+  // Get DOM elements for index.html
   const signupButton = document.getElementById('signupButton');
   const loginButton = document.getElementById('loginButton');
   const logoutButton = document.getElementById('logoutButton');
@@ -42,26 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   const buyHashButton = document.getElementById('buyHashButton');
 
-  // Verify that all required elements are found (only for index.html)
-  if (window.location.pathname.includes('index.html')) {
-    console.log('Checking DOM elements on index.html');
-    if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody || !buyHashButton) {
-      console.error('Required DOM elements not found:', {
-        signupButton: !!signupButton,
-        loginButton: !!loginButton,
-        logoutButton: !!logoutButton,
-        userBalanceElement: !!userBalanceElement,
-        publishButton: !!publishButton,
-        searchButton: !!searchButton,
-        depositButton: !!depositButton,
-        withdrawButton: !!withdrawButton,
-        toggleHistoryButton: !!toggleHistoryButton,
-        transactionHistory: !!transactionHistory,
-        publishedItemsTableBody: !!publishedItemsTableBody,
-        buyHashButton: !!buyHashButton
-      });
-      return;
-    }
+  // Check if we're on index.html by verifying the presence of required elements
+  const isOnIndexPage = signupButton && loginButton && logoutButton && userBalanceElement && publishButton && searchButton && depositButton && withdrawButton && toggleHistoryButton && transactionHistory && publishedItemsTableBody && buyHashButton;
+
+  if (isOnIndexPage) {
+    console.log('On index.html, setting up UI and event listeners');
 
     // Check if the user is a node based on localStorage
     if (role === 'node' && nodeId) {
@@ -181,19 +183,25 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Failed to monitor authentication state.', true);
     });
 
-    // Set up event listeners
+    // Set up event listeners for index.html buttons
     console.log('Attaching event listener to loginButton');
-    loginButton.addEventListener('click', () => {
+    loginButton.addEventListener('click', (event) => {
+      event.preventDefault();
       console.log('Login button clicked');
       signIn();
     });
-    logoutButton.addEventListener('click', () => {
+
+    console.log('Attaching event listener to logoutButton');
+    logoutButton.addEventListener('click', (event) => {
+      event.preventDefault();
       console.log('Logout button clicked');
       signOutUser();
     });
+  } else {
+    console.log('Not on index.html, skipping index.html-specific setup');
   }
 
-  // Expose additional functions to the global scope for HTML onclick handlers
+  // Expose functions to the global scope for HTML onclick handlers
   window.logout = signOutUser;
   window.publishSnippet = publishSnippet;
   window.buySnippet = buySnippet;
@@ -223,14 +231,18 @@ export async function handleSignup() {
   }
 
   isSigningUp = true;
-  const signupButton = document.querySelector('button[onclick="window.handleSignup()"]');
+  const signupButton = document.querySelector('button[onclick="event.preventDefault(); window.handleSignup()"]');
   if (signupButton) {
     signupButton.disabled = true;
     signupButton.textContent = 'Signing Up...';
+    console.log('Signup button disabled and text updated');
+  } else {
+    console.warn('Signup button not found');
   }
 
   const roleInputs = document.querySelectorAll('input[name="role"]');
-  if (!roleInputs) {
+  if (!roleInputs || roleInputs.length === 0) {
+    console.error('Role inputs not found');
     showToast('Role selection not found.', true);
     isSigningUp = false;
     if (signupButton) {
@@ -242,6 +254,7 @@ export async function handleSignup() {
 
   const role = Array.from(roleInputs).find(input => input.checked)?.value;
   if (!role) {
+    console.error('No role selected');
     showToast('Please select a role.', true);
     isSigningUp = false;
     if (signupButton) {
@@ -251,13 +264,15 @@ export async function handleSignup() {
     return;
   }
 
+  console.log('Selected role:', role);
   localStorage.setItem('pendingRole', role);
 
   try {
     const provider = new GoogleAuthProvider();
+    console.log('GoogleAuthProvider created');
     console.log('Initiating signInWithRedirect for signup');
     await signInWithRedirect(auth, provider);
-    console.log('signInWithRedirect completed for signup');
+    console.log('signInWithRedirect completed for signup'); // This won't log due to redirect
   } catch (error) {
     console.error('Handling user signup with OAuth...');
     console.error('Signup failed:', error);
@@ -275,12 +290,14 @@ export async function signIn() {
   console.log('signIn function called');
   try {
     if (!auth) {
+      console.error('Firebase Auth is not initialized');
       throw new Error('Firebase Auth is not initialized');
     }
     const provider = new GoogleAuthProvider();
+    console.log('GoogleAuthProvider created for signIn');
     console.log('Initiating signInWithRedirect');
     await signInWithRedirect(auth, provider);
-    console.log('signInWithRedirect completed');
+    console.log('signInWithRedirect completed'); // This won't log due to redirect
   } catch (error) {
     console.error('Handling user login with OAuth...');
     console.error('Login failed:', error);
@@ -662,10 +679,8 @@ export async function withdraw(amount) {
 // Toggle transaction history visibility
 export function toggleTransactionHistory() {
   const transactionHistory = document.getElementById('transactionHistory');
-  if (transactionHistory.style.display === 'none') {
-    transactionHistory.style.display = 'block';
-  } else {
-    transactionHistory.style.display = 'none';
+  if (transactionHistory) {
+    transactionHistory.style.display = transactionHistory.style.display === 'none' ? 'block' : 'none';
   }
 }
 
