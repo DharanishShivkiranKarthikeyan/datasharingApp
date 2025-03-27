@@ -1,11 +1,10 @@
-// web/index.js
 import { auth, db } from './firebase.js';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+import { onAuthStateChanged, signInWithCredential, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
 
-// Import all other JavaScript files to ensure they're included in the bundle
+// Import other JavaScript files to ensure they're included in the bundle
 import './signup.js';
 import './node-instructions.js';
 import './sw.js'; // Service worker (if used)
@@ -16,9 +15,55 @@ let isNode = false;
 let userBalance = 0;
 let testPeers = [];
 
+// Google Sign-In callback
+window.handleCredentialResponse = async (response) => {
+  showLoading(true);
+  try {
+    const credential = response.credential;
+    const result = await signInWithCredential(auth, GoogleAuthProvider.credential(credential));
+    const user = result.user;
+    console.log('Google Sign-In successful, user UID:', user.uid);
+    showToast('Signed in successfully!');
+
+    // Get the pending role from localStorage (set during handleSignup)
+    const role = localStorage.getItem('pendingRole') || 'user';
+    localStorage.removeItem('pendingRole'); // Clear the pending role
+
+    if (role === 'user') {
+      // Store user data in Firestore
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, {
+        role: 'user',
+        createdAt: Date.now(),
+        balance: 0
+      }, { merge: true });
+      window.location.href = '/datasharingApp/index.html';
+    } else {
+      // Store node data in Firestore
+      const nodeId = generateUUID();
+      localStorage.setItem('nodeId', nodeId);
+      localStorage.setItem('role', 'node');
+      const nodeRef = doc(db, 'nodes', nodeId);
+      await setDoc(nodeRef, {
+        role: 'node',
+        createdAt: Date.now(),
+        status: 'active'
+      }, { merge: true });
+      window.location.href = '/datasharingApp/node-instructions.html';
+    }
+
+    // Initialize the app with the user's UID
+    await init(user.uid);
+  } catch (error) {
+    console.error('Google Sign-In failed:', error);
+    showToast(`Sign-in failed: ${error.message}`, true);
+  } finally {
+    showLoading(false);
+  }
+};
+
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
-  console.log("hey")
   // Check if the user is a node and redirect if on index.html
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
@@ -65,25 +110,75 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check if the user is a node based on localStorage
     if (role === 'node' && nodeId) {
       isNode = true;
-      // This block should not be reached due to the redirect above, but keeping it for safety
       console.log('Node detected, but should have been redirected already.');
-    } else {
-      // Update UI based on Firebase authentication state
-      onAuthStateChanged(auth, (user) => {
-        if (user) {
-          console.log('User is signed in:', user.uid);
-          signupButton.classList.add('hidden');
-          loginButton.classList.add('hidden');
-          logoutButton.classList.remove('hidden');
-          publishButton.disabled = false;
-          searchButton.disabled = false;
-          depositButton.disabled = false;
-          withdrawButton.disabled = false;
-          toggleHistoryButton.disabled = false;
-          buyHashButton.disabled = false;
-          init(user.uid);
-        } else {
-          console.log('No user is signed in.');
+    }
+
+    // Update UI based on Firebase authentication state
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        console.log('User is signed in:', user.uid);
+        signupButton.classList.add('hidden');
+        loginButton.classList.add('hidden');
+        logoutButton.classList.remove('hidden');
+        publishButton.disabled = false;
+        searchButton.disabled = false;
+        depositButton.disabled = false;
+        withdrawButton.disabled = false;
+        toggleHistoryButton.disabled = false;
+        buyHashButton.disabled = false;
+        await init(user.uid);
+      } else {
+        console.log('No user is signed in. Checking IndexedDB for keypair...');
+        const dbRequest = indexedDB.open('dcrypt_db', 3);
+        dbRequest.onsuccess = async () => {
+          const db = dbRequest.result;
+          const tx = db.transaction('store', 'readonly');
+          const store = tx.objectStore('store');
+          const request = store.get('dcrypt_identity');
+          request.onsuccess = async () => {
+            if (request.result && request.result.value) {
+              const keypair = new TextEncoder().encode(request.result.value);
+              console.log('Found keypair in IndexedDB, initializing app...');
+              signupButton.classList.add('hidden');
+              loginButton.classList.add('hidden');
+              logoutButton.classList.remove('hidden');
+              publishButton.disabled = false;
+              searchButton.disabled = false;
+              depositButton.disabled = false;
+              withdrawButton.disabled = false;
+              toggleHistoryButton.disabled = false;
+              buyHashButton.disabled = false;
+              await init(request.result.value);
+            } else {
+              console.log('No keypair found in IndexedDB.');
+              signupButton.classList.remove('hidden');
+              loginButton.classList.remove('hidden');
+              logoutButton.classList.add('hidden');
+              publishButton.disabled = true;
+              searchButton.disabled = true;
+              depositButton.disabled = true;
+              withdrawButton.disabled = true;
+              toggleHistoryButton.disabled = true;
+              buyHashButton.disabled = true;
+              updateUIForSignOut();
+            }
+          };
+          request.onerror = () => {
+            console.error('Failed to load keypair from IndexedDB');
+            signupButton.classList.remove('hidden');
+            loginButton.classList.remove('hidden');
+            logoutButton.classList.add('hidden');
+            publishButton.disabled = true;
+            searchButton.disabled = true;
+            depositButton.disabled = true;
+            withdrawButton.disabled = true;
+            toggleHistoryButton.disabled = true;
+            buyHashButton.disabled = true;
+            updateUIForSignOut();
+          };
+        };
+        dbRequest.onerror = () => {
+          console.error('Failed to open IndexedDB');
           signupButton.classList.remove('hidden');
           loginButton.classList.remove('hidden');
           logoutButton.classList.add('hidden');
@@ -94,9 +189,9 @@ document.addEventListener('DOMContentLoaded', () => {
           toggleHistoryButton.disabled = true;
           buyHashButton.disabled = true;
           updateUIForSignOut();
-        }
-      });
-    }
+        };
+      }
+    });
 
     // Set up event listeners
     loginButton.addEventListener('click', signIn);
@@ -113,10 +208,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.withdraw = withdraw;
   window.toggleTransactionHistory = toggleTransactionHistory;
   window.flagSnippet = flagSnippet;
-  window.handleSignup = handleSignup; // Expose handleSignup globally
+  window.handleSignup = handleSignup;
 });
 
-// Rest of the code remains unchanged (omitted for brevity)
+// Utility function to generate a UUID
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -124,6 +219,7 @@ function generateUUID() {
   });
 }
 
+// Handle signup process (sets the role and triggers Google Sign-In)
 export async function handleSignup() {
   const roleInputs = document.querySelectorAll('input[name="role"]');
   if (!roleInputs) {
@@ -137,59 +233,44 @@ export async function handleSignup() {
     return;
   }
 
-  showLoading(true);
-  try {
-    if (role === 'user') {
-      console.log("Handling user signup with OAuth...");
-      // User signup with OAuth
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      console.log('Signed in user UID:', user.uid);
-      showToast('Signed in successfully!');
-
-      // Store user data in Firestore
-      const userRef = doc(db, 'users', user.uid);
-      await setDoc(userRef, {
-        role: 'user',
-        createdAt: Date.now()
-      }, { merge: true });
-
-      window.location.href = '/datasharingApp/index.html';
-    } else {
-      console.log("Handling node signup without OAuth...");
-      // Node signup without OAuth
-      const nodeId = generateUUID();
-      console.log('Generated node ID:', nodeId);
-
-      // Store node ID in localStorage
-      localStorage.setItem('nodeId', nodeId);
-      localStorage.setItem('role', 'node');
-
-      // Store node data in Firestore
-      const nodeRef = doc(db, 'nodes', nodeId);
-      await setDoc(nodeRef, {
-        role: 'node',
-        createdAt: Date.now()
-      }, { merge: true });
-
-      showToast('Node created successfully!');
-      window.location.href = '/datasharingApp/node-instructions.html';
-    }
-  } catch (error) {
-    console.error('Signup failed:', error);
-    showToast(`Signup failed: ${error.message}`, true);
-  } finally {
-    showLoading(false);
-  }
+  localStorage.setItem('pendingRole', role);
+  // Trigger Google Sign-In programmatically
+  google.accounts.id.prompt();
 }
 
+// Initialize the app
 export async function init(userId) {
   console.log('Initializing app...');
   showLoading(true);
   try {
-    const encoder = new TextEncoder();
-    const keypair = encoder.encode(userId);
+    let keypair;
+    const dbRequest = indexedDB.open('dcrypt_db', 3);
+    await new Promise((resolve, reject) => {
+      dbRequest.onsuccess = () => {
+        const db = dbRequest.result;
+        const tx = db.transaction('store', 'readonly');
+        const store = tx.objectStore('store');
+        const request = store.get('dcrypt_identity');
+        request.onsuccess = () => {
+          if (request.result && request.result.value) {
+            keypair = new TextEncoder().encode(request.result.value);
+            console.log('Loaded keypair from IndexedDB:', request.result.value);
+          } else if (userId) {
+            keypair = new TextEncoder().encode(userId);
+            // Store the keypair in IndexedDB for future auto sign-in
+            const txWrite = db.transaction('store', 'readwrite');
+            const storeWrite = txWrite.objectStore('store');
+            storeWrite.put({ id: 'dcrypt_identity', value: userId });
+          } else {
+            reject(new Error('No user ID or stored keypair found'));
+            return;
+          }
+          resolve();
+        };
+        request.onerror = () => reject(new Error('Failed to load keypair from IndexedDB'));
+      };
+      dbRequest.onerror = () => reject(new Error('Failed to open IndexedDB'));
+    });
 
     if (!isNode) {
       isNode = await checkIfUserIsNode(userId);
@@ -223,7 +304,6 @@ export async function init(userId) {
   } catch (error) {
     console.error('Error initializing application:', error);
     showToast(`Initialization failed: ${error.message}`, true);
-    // Reset state on error
     dht = null;
     window.dht = null;
     userBalance = 0;
@@ -234,6 +314,7 @@ export async function init(userId) {
   }
 }
 
+// Check if the user is a node
 async function checkIfUserIsNode(userId) {
   try {
     const nodeRef = doc(db, 'nodes', userId);
@@ -245,20 +326,12 @@ async function checkIfUserIsNode(userId) {
   }
 }
 
+// Trigger Google Sign-In
 export async function signIn() {
-  const provider = new GoogleAuthProvider();
-  try {
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-    console.log('Signed in user UID:', user.uid);
-    showToast('Signed in successfully!');
-    await init(user.uid);
-  } catch (error) {
-    console.error('Sign-in failed:', error);
-    showToast(`Sign-in failed: ${error.message}`, true);
-  }
+  google.accounts.id.prompt();
 }
 
+// Sign out the user
 export async function signOutUser() {
   try {
     if (localStorage.getItem('role') === 'node') {
@@ -270,6 +343,14 @@ export async function signOutUser() {
       await signOut(auth);
       showToast('Signed out successfully!');
     }
+    // Clear IndexedDB keypair
+    const dbRequest = indexedDB.open('dcrypt_db', 3);
+    dbRequest.onsuccess = () => {
+      const db = dbRequest.result;
+      const tx = db.transaction('store', 'readwrite');
+      const store = tx.objectStore('store');
+      store.delete('dcrypt_identity');
+    };
     dht = null;
     window.dht = null;
     testPeers = [];
@@ -281,10 +362,12 @@ export async function signOutUser() {
   }
 }
 
+// Check if the user is authenticated
 export function isAuthenticated() {
   return !!auth.currentUser || localStorage.getItem('role') === 'node';
 }
 
+// Publish a snippet
 export async function publishSnippet(title, description, tags, content, fileInput) {
   if (!isAuthenticated()) {
     showToast('Please sign in to publish.');
@@ -349,6 +432,7 @@ export async function publishSnippet(title, description, tags, content, fileInpu
   }
 }
 
+// Buy a snippet by hash
 export async function buySnippet(hash) {
   if (!isAuthenticated()) {
     showToast('Please sign in to buy.');
@@ -365,7 +449,7 @@ export async function buySnippet(hash) {
 
     const isPremium = ipObject.metadata.isPremium || false;
     const priceUsd = isPremium ? (ipObject.metadata.priceUsd || 0) : 0;
-    const buyCost = priceUsd; // Free if priceUsd is 0
+    const buyCost = priceUsd;
 
     if (buyCost > 0) {
       const balance = await dht.getBalance(dht.keypair);
@@ -394,7 +478,7 @@ export async function buySnippet(hash) {
       if (ratingValue >= 1 && ratingValue <= 5) {
         await submitRating(hash, ratingValue);
         showToast(`Rated ${ratingValue} stars!`);
-        updateLiveFeed(); // Refresh live feed to show updated rating
+        updateLiveFeed();
       } else {
         showToast('Invalid rating. Please enter a number between 1 and 5.', true);
       }
@@ -412,6 +496,7 @@ export async function buySnippet(hash) {
   }
 }
 
+// Buy a snippet by hash input
 export async function buySnippetByHash(hashInput) {
   const hash = hashInput || document.getElementById('buyHashInput').value.trim();
   if (!hash) {
@@ -424,24 +509,22 @@ export async function buySnippetByHash(hashInput) {
   }
 }
 
+// Submit a rating for a snippet
 async function submitRating(ipHash, rating) {
   const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
   if (!userId) return;
 
   try {
-    // Store the user's rating
     const ratingRef = doc(db, 'snippets', ipHash, 'ratings', userId);
     await setDoc(ratingRef, {
       rating,
       timestamp: Date.now()
     });
 
-    // Calculate new average rating
     const ratingsSnapshot = await getDocs(collection(db, 'snippets', ipHash, 'ratings'));
     const ratings = ratingsSnapshot.docs.map(doc => doc.data().rating);
     const averageRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
 
-    // Update the snippet's average rating
     const snippetRef = doc(db, 'snippets', ipHash);
     await updateDoc(snippetRef, {
       averageRating: averageRating.toFixed(1)
@@ -452,6 +535,7 @@ async function submitRating(ipHash, rating) {
   }
 }
 
+// Flag a snippet for moderation
 export async function flagSnippet(ipHash) {
   const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
   if (!userId) {
@@ -483,6 +567,7 @@ export async function flagSnippet(ipHash) {
   }
 }
 
+// Search for snippets
 export async function searchSnippets(query) {
   if (!isAuthenticated()) {
     showToast('Please sign in to search.');
@@ -557,6 +642,7 @@ export async function searchSnippets(query) {
   }
 }
 
+// Deposit funds
 export async function deposit(amount) {
   if (!isAuthenticated()) {
     showToast('Please sign in to deposit.');
@@ -585,6 +671,7 @@ export async function deposit(amount) {
   }
 }
 
+// Withdraw funds
 export async function withdraw(amount) {
   if (!isAuthenticated()) {
     showToast('Please sign in to withdraw.');
@@ -614,6 +701,7 @@ export async function withdraw(amount) {
   }
 }
 
+// Toggle transaction history visibility
 export function toggleTransactionHistory() {
   const transactionHistory = document.getElementById('transactionHistory');
   if (transactionHistory.style.display === 'none') {
@@ -623,6 +711,7 @@ export function toggleTransactionHistory() {
   }
 }
 
+// Upload user data to Firebase
 async function uploadUserDataToFirebase() {
   const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
   if (!userId) return;
@@ -640,6 +729,7 @@ async function uploadUserDataToFirebase() {
   }
 }
 
+// Update the live feed of snippets
 function updateLiveFeed() {
   const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   if (!publishedItemsTableBody) return;
@@ -654,7 +744,7 @@ function updateLiveFeed() {
     if (dht) {
       dht.knownObjects.forEach((value, key) => {
         const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
-        if (snippetInfo.reviewStatus !== 'active') return; // Skip snippets under review
+        if (snippetInfo.reviewStatus !== 'active') return;
 
         const isPremium = value.metadata.isPremium || false;
         const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
@@ -679,6 +769,7 @@ function updateLiveFeed() {
   });
 }
 
+// Update transaction history display
 function updateTransactionHistory() {
   const transactionList = document.getElementById('transactionList');
   if (!transactionList) return;
@@ -703,6 +794,7 @@ function updateTransactionHistory() {
   });
 }
 
+// Update balance display
 function updateBalanceDisplay() {
   const userBalanceElement = document.getElementById('userBalance');
   if (!userBalanceElement) return;
@@ -723,6 +815,7 @@ function updateBalanceDisplay() {
   });
 }
 
+// Update UI when user signs out
 function updateUIForSignOut() {
   const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   const transactionList = document.getElementById('transactionList');
@@ -734,6 +827,7 @@ function updateUIForSignOut() {
   userBalance = 0;
 }
 
+// Show toast notification
 function showToast(message, isError = false) {
   const toast = document.getElementById('toast');
   if (!toast) return;
@@ -747,11 +841,13 @@ function showToast(message, isError = false) {
   }, 3000);
 }
 
+// Show or hide loading spinner
 function showLoading(show) {
   const loading = document.getElementById('loading');
   if (loading) loading.style.display = show ? 'flex' : 'none';
 }
 
+// Set up premium toggle functionality
 function setupPremiumToggle() {
   const premiumToggle = document.getElementById('isPremium');
   const priceInput = document.getElementById('priceInput');
@@ -766,11 +862,12 @@ function setupPremiumToggle() {
   }
 }
 
+// Display snippet content after purchase
 function displaySnippetContent(data, fileType, title) {
   const snippetDisplay = document.getElementById('snippetDisplay');
   if (!snippetDisplay) return;
 
-  snippetDisplay.innerHTML = ''; // Clear previous content
+  snippetDisplay.innerHTML = '';
 
   const contentDiv = document.createElement('div');
   contentDiv.className = 'p-4 bg-gray-800 rounded-lg mt-4';

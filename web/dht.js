@@ -1,5 +1,3 @@
-// web/dht.js
-import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
@@ -427,7 +425,6 @@ export class DHT {
     if (!this.keypair) throw new Error('Keypair not initialized');
 
     try {
-      // Ensure tags is an array of strings
       const tags = Array.isArray(metadata.tags)
         ? metadata.tags.map(tag => {
             if (typeof tag !== 'string') {
@@ -435,20 +432,18 @@ export class DHT {
               return String(tag);
             }
             return tag;
-          }).filter(tag => tag.trim() !== '') // Remove empty strings
+          }).filter(tag => tag.trim() !== '')
         : [];
       console.log('Processed tags:', tags);
 
-      // Set pricing: free unless marked as premium with a price
       const isPremium = !!metadata.isPremium;
-      const priceUsd = isPremium ? (metadata.priceUsd || 30) : 0; // Free unless premium
+      const priceUsd = isPremium ? (metadata.priceUsd || 30) : 0;
 
       const contentArray = new Uint8Array(content);
       const contentType = metadata.content_type || '';
       const creatorId = this.keypair instanceof Uint8Array ? this.keypair : new Uint8Array(this.keypair);
       const fileTypeSafe = fileType || 'text/plain';
 
-      // Create the Intellectual Property object
       const ip = createIntellectualProperty(
         contentArray,
         contentType,
@@ -478,8 +473,8 @@ export class DHT {
       const updatedMetadata = {
         ...metadata,
         chunk_count: chunks.length,
-        isPremium, // Ensure metadata reflects the pricing
-        priceUsd: isPremium ? priceUsd : 0, // Free unless premium
+        isPremium,
+        priceUsd: isPremium ? priceUsd : 0,
       };
 
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
