@@ -18,6 +18,7 @@ let testPeers = [];
 
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
+  console.log("hey")
   // Check if the user is a node and redirect if on index.html
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
