@@ -15,7 +15,6 @@ let dht = null;
 let isNode = false;
 let userBalance = 0;
 let testPeers = [];
-conaolw.log("hwy")
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
   console.log("hey")
