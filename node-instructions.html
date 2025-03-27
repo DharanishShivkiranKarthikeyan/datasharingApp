@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Node Instructions - Dcrypt</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body {
       background-color: #1a202c;
@@ -27,9 +26,6 @@
       border-radius: 0.25rem;
       display: none;
     }
-    .error-toast {
-      background-color: #ef4444;
-    }
     .loading {
       position: fixed;
       top: 0;
@@ -42,31 +38,10 @@
       align-items: center;
       display: none;
     }
-    .btn {
+    button {
       padding: 0.5rem 1rem;
       border-radius: 0.25rem;
       cursor: pointer;
-      transition: background-color 0.2s;
-    }
-    .btn-primary {
-      background-color: #3b82f6;
-      color: white;
-    }
-    .btn-primary:hover {
-      background-color: #2563eb;
-    }
-    .btn-danger {
-      background-color: #ef4444;
-      color: white;
-    }
-    .btn-danger:hover {
-      background-color: #dc2626;
-    }
-    .card {
-      background-color: #2d3748;
-      padding: 1.5rem;
-      border-radius: 0.5rem;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
   </style>
 </head>
@@ -76,26 +51,25 @@
   </div>
   <div class="toast" id="toast"></div>
   <div class="container">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-3xl font-bold">Node Instructions - Dcrypt</h1>
-      <div class="space-x-2">
-        <button class="btn btn-primary"><a href="/datasharingApp/" class="text-white no-underline">Back to Dashboard</a></button>
-        <button class="btn btn-danger" onclick="window.logout()">Logout</button>
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-2xl font-bold">Node Instructions</h1>
+      <div>
+        <a href="/datasharingApp/index.html" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600">Back to Dashboard</a>
       </div>
     </div>
-
-    <div class="card mb-6">
-      <h2 class="text-xl font-semibold mb-4">Node Status</h2>
-      <p id="nodeEarnings" class="text-lg font-medium">Total Earnings: 0 DCT</p>
-      <p class="mt-2">Keep this window open to continue earning commissions as a node.</p>
-      <ul class="list-disc list-inside mt-4">
+    <div class="mb-4">
+      <h2 class="text-xl font-semibold mb-2">Welcome, Node Operator!</h2>
+      <p class="mb-2">As a node, your role is to store and distribute chunks of data to ensure the network remains decentralized and reliable. Here are your responsibilities:</p>
+      <ul class="list-disc list-inside mb-4">
         <li>Stay online as much as possible to serve chunks to other users.</li>
         <li>Monitor your earnings from commissions (5% of each premium snippet purchase).</li>
         <li>Ensure your browser remains open and connected to the PeerJS network.</li>
         <li>Check for updates or changes in node requirements from the Dcrypt team.</li>
       </ul>
+      <h2 class="text-xl font-semibold mb-2">Your Earnings</h2>
+      <p id="nodeEarnings">Total Earnings: Loading...</p>
     </div>
   </div>
-  <script type="module" src="/datasharingApp/app.js"></script>
+  <script type="module" src="/datasharingApp/assets/app.js"></script>
 </body>
 </html>
