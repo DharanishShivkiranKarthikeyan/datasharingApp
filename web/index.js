@@ -2,7 +2,7 @@
 let auth, db;
 
 try {
-  const firebaseModule = await import('./firebase.js');
+  const firebaseModule = import('./firebase.js');
   auth = firebaseModule.auth;
   db = firebaseModule.db;
   console.log('Firebase services imported successfully');
