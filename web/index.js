@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loginButton.classList.remove('hidden');
           logoutButton.classList.add('hidden');
           publishButton.disabled = true;
-          searchButton.disabled = true;
+          searchButton.disabled = true;
           depositButton.disabled = true;
           withdrawButton.disabled = true;
           toggleHistoryButton.disabled = true;
@@ -176,6 +176,9 @@ document.addEventListener('DOMContentLoaded', () => {
           updateUIForSignOut();
         };
       }
+    }, (error) => {
+      console.error('onAuthStateChanged error:', error);
+      showToast('Failed to monitor authentication state.', true);
     });
 
     // Set up event listeners
@@ -184,7 +187,10 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log('Login button clicked');
       signIn();
     });
-    logoutButton.addEventListener('click', signOutUser);
+    logoutButton.addEventListener('click', () => {
+      console.log('Logout button clicked');
+      signOutUser();
+    });
   }
 
   // Expose additional functions to the global scope for HTML onclick handlers
@@ -264,98 +270,13 @@ export async function handleSignup() {
   }
 }
 
-// Initialize the app
-export async function init(userId) {
-  console.log('Initializing app...');
-  showLoading(true);
-  try {
-    let keypair;
-    const dbRequest = indexedDB.open('dcrypt_db', 3);
-    await new Promise((resolve, reject) => {
-      dbRequest.onsuccess = () => {
-        const db = dbRequest.result;
-        const tx = db.transaction('store', 'readonly');
-        const store = tx.objectStore('store');
-        const request = store.get('dcrypt_identity');
-        request.onsuccess = () => {
-          if (request.result && request.result.value) {
-            keypair = new TextEncoder().encode(request.result.value);
-            console.log('Loaded keypair from IndexedDB:', request.result.value);
-          } else if (userId) {
-            keypair = new TextEncoder().encode(userId);
-            // Store the keypair in IndexedDB for future auto sign-in
-            const txWrite = db.transaction('store', 'readwrite');
-            const storeWrite = txWrite.objectStore('store');
-            storeWrite.put({ id: 'dcrypt_identity', value: userId });
-          } else {
-            reject(new Error('No user ID or stored keypair found'));
-            return;
-          }
-          resolve();
-        };
-        request.onerror = () => reject(new Error('Failed to load keypair from IndexedDB'));
-      };
-      dbRequest.onerror = () => reject(new Error('Failed to open IndexedDB'));
-    });
-
-    if (!isNode) {
-      isNode = await checkIfUserIsNode(userId);
-    }
-    console.log(`User is ${isNode ? '' : 'not '}a node.`);
-
-    if (testPeers.length === 0) {
-      console.log('Creating test peers...');
-      testPeers = await createTestPeers();
-      console.log('Test peers created:', testPeers.map(p => p.peerId));
-    }
-
-    console.log('Initializing DHT...');
-    dht = new DHT(keypair, isNode);
-    window.dht = dht;
-
-    await dht.initDB();
-    console.log('IndexedDB initialized.');
-
-    await dht.initSwarm();
-    console.log('DHT initialized.');
-
-    await dht.syncUserData();
-    console.log('User data synced.');
-
-    updateLiveFeed();
-    console.log('Live feed updated.');
-
-    updateBalanceDisplay();
-    updateTransactionHistory();
-  } catch (error) {
-    console.error('Error initializing application:', error);
-    showToast(`Initialization failed: ${error.message}`, true);
-    dht = null;
-    window.dht = null;
-    userBalance = 0;
-    updateUIForSignOut();
-  } finally {
-    showLoading(false);
-    setupPremiumToggle();
-  }
-}
-
-// Check if the user is a node
-async function checkIfUserIsNode(userId) {
-  try {
-    const nodeRef = doc(db, 'nodes', userId);
-    const nodeSnap = await getDoc(nodeRef);
-    return nodeSnap.exists();
-  } catch (error) {
-    console.error('Failed to check node status:', error);
-    return false;
-  }
-}
-
 // Trigger Google Sign-In
 export async function signIn() {
   console.log('signIn function called');
   try {
+    if (!auth) {
+      throw new Error('Firebase Auth is not initialized');
+    }
     const provider = new GoogleAuthProvider();
     console.log('Initiating signInWithRedirect');
     await signInWithRedirect(auth, provider);
@@ -369,6 +290,7 @@ export async function signIn() {
 
 // Sign out the user
 export async function signOutUser() {
+  console.log('signOutUser function called');
   try {
     if (localStorage.getItem('role') === 'node') {
       // Clear node data from localStorage
@@ -940,4 +862,92 @@ function displaySnippetContent(data, fileType, title) {
   }
 
   snippetDisplay.appendChild(contentDiv);
+}
+
+// Initialize the app
+export async function init(userId) {
+  console.log('Initializing app...');
+  showLoading(true);
+  try {
+    let keypair;
+    const dbRequest = indexedDB.open('dcrypt_db', 3);
+    await new Promise((resolve, reject) => {
+      dbRequest.onsuccess = () => {
+        const db = dbRequest.result;
+        const tx = db.transaction('store', 'readonly');
+        const store = tx.objectStore('store');
+        const request = store.get('dcrypt_identity');
+        request.onsuccess = () => {
+          if (request.result && request.result.value) {
+            keypair = new TextEncoder().encode(request.result.value);
+            console.log('Loaded keypair from IndexedDB:', request.result.value);
+          } else if (userId) {
+            keypair = new TextEncoder().encode(userId);
+            // Store the keypair in IndexedDB for future auto sign-in
+            const txWrite = db.transaction('store', 'readwrite');
+            const storeWrite = txWrite.objectStore('store');
+            storeWrite.put({ id: 'dcrypt_identity', value: userId });
+          } else {
+            reject(new Error('No user ID or stored keypair found'));
+            return;
+          }
+          resolve();
+        };
+        request.onerror = () => reject(new Error('Failed to load keypair from IndexedDB'));
+      };
+      dbRequest.onerror = () => reject(new Error('Failed to open IndexedDB'));
+    });
+
+    if (!isNode) {
+      isNode = await checkIfUserIsNode(userId);
+    }
+    console.log(`User is ${isNode ? '' : 'not '}a node.`);
+
+    if (testPeers.length === 0) {
+      console.log('Creating test peers...');
+      testPeers = await createTestPeers();
+      console.log('Test peers created:', testPeers.map(p => p.peerId));
+    }
+
+    console.log('Initializing DHT...');
+    dht = new DHT(keypair, isNode);
+    window.dht = dht;
+
+    await dht.initDB();
+    console.log('IndexedDB initialized.');
+
+    await dht.initSwarm();
+    console.log('DHT initialized.');
+
+    await dht.syncUserData();
+    console.log('User data synced.');
+
+    updateLiveFeed();
+    console.log('Live feed updated.');
+
+    updateBalanceDisplay();
+    updateTransactionHistory();
+  } catch (error) {
+    console.error('Error initializing application:', error);
+    showToast(`Initialization failed: ${error.message}`, true);
+    dht = null;
+    window.dht = null;
+    userBalance = 0;
+    updateUIForSignOut();
+  } finally {
+    showLoading(false);
+    setupPremiumToggle();
+  }
+}
+
+// Check if the user is a node
+async function checkIfUserIsNode(userId) {
+  try {
+    const nodeRef = doc(db, 'nodes', userId);
+    const nodeSnap = await getDoc(nodeRef);
+    return nodeSnap.exists();
+  } catch (error) {
+    console.error('Failed to check node status:', error);
+    return false;
+  }
 }
