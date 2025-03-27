@@ -5,7 +5,6 @@ import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
 
 // Import other JavaScript files to ensure they're included in the bundle
-import './signup.js';
 import './node-instructions.js';
 import './sw.js'; // Service worker (if used)
 import './utils.js'; // Utility functions (if used)
