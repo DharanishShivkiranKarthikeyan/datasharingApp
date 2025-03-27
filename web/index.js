@@ -18,6 +18,7 @@ let isSigningUp = false;
 
 // Wait for the DOM to load before accessing elements
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOMContentLoaded event fired');
   // Check if the user is a node and redirect if on index.html
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
@@ -43,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Verify that all required elements are found (only for index.html)
   if (window.location.pathname.includes('index.html')) {
+    console.log('Checking DOM elements on index.html');
     if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody || !buyHashButton) {
       console.error('Required DOM elements not found:', {
         signupButton: !!signupButton,
@@ -68,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Update UI based on Firebase authentication state
+    console.log('Setting up onAuthStateChanged listener');
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         console.log('User is signed in:', user.uid);
@@ -165,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loginButton.classList.remove('hidden');
           logoutButton.classList.add('hidden');
           publishButton.disabled = true;
-          searchButton.disabled = true;
+          searchButton.disabled = true;
           depositButton.disabled = true;
           withdrawButton.disabled = true;
           toggleHistoryButton.disabled = true;
@@ -207,6 +210,7 @@ function generateUUID() {
 
 // Handle signup process (sets the role and triggers Google Sign-In)
 export async function handleSignup() {
+  console.log('handleSignup function called');
   if (isSigningUp) {
     console.log('Signup already in progress, ignoring additional clicks');
     return;
@@ -245,7 +249,9 @@ export async function handleSignup() {
 
   try {
     const provider = new GoogleAuthProvider();
+    console.log('Initiating signInWithRedirect for signup');
     await signInWithRedirect(auth, provider);
+    console.log('signInWithRedirect completed for signup');
   } catch (error) {
     console.error('Handling user signup with OAuth...');
     console.error('Signup failed:', error);
