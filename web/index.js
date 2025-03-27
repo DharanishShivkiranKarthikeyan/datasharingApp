@@ -1,32 +1,34 @@
-// web/index.js
 import { auth, db } from './firebase.js';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 
-// Import all other JavaScript files to ensure they're included in the bundle
 import './signup.js';
 import './node-instructions.js';
-import './sw.js'; // Service worker (if used)
-import './utils.js'; // Utility functions (if used)
+import './sw.js';
+import './utils.js';
 
 let dht = null;
 let isNode = false;
 let userBalance = 0;
-// Wait for the DOM to load before accessing elements
+let currentChatPeerId = null;
+let currentChatUsername = null;
+let currentChatType = 'direct';
+let currentGroupId = null;
+let currentGroupParticipants = [];
+let currentGroupUsernames = {};
+
 document.addEventListener('DOMContentLoaded', () => {
-  // Check if the user is a node and redirect if on index.html
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
   const path = window.location.pathname;
   const isIndexPage = path.includes('index.html') || path === '/datasharingApp/' || path === '/datasharingApp';
   if (isIndexPage && role === 'node' && nodeId) {
-    console.log('Node detected on index.html, redirecting to node-instructions.html');
+    console.log('Node detected on index page, redirecting to node-instructions.html');
     window.location.href = '/datasharingApp/node-instructions.html';
     return;
   }
 
-  // Get DOM elements
   const signupButton = document.getElementById('signupButton');
   const loginButton = document.getElementById('loginButton');
   const logoutButton = document.getElementById('logoutButton');
@@ -39,10 +41,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const transactionHistory = document.getElementById('transactionHistory');
   const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   const buyHashButton = document.getElementById('buyHashButton');
-  // Verify that all required elements are found (only for index.html)
-  if (window.location.pathname.includes('datasharingApp')) {
+  const chatContacts = document.getElementById('chatContacts');
+  const chatWindow = document.getElementById('chatWindow');
+  const chatInput = document.getElementById('chatInput');
+  const sendChatButton = document.getElementById('sendChatButton');
+  const createGroupButton = document.getElementById('createGroupButton');
+  const chatList = document.getElementById('chatList');
+  const inviteButton = document.getElementById('inviteButton');
+  const leaveGroupButton = document.getElementById('leaveGroupButton');
 
-    if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody || !buyHashButton) {
+  if (isIndexPage) {
+    if (!signupButton || !loginButton || !logoutButton || !userBalanceElement || !publishButton || !searchButton || !depositButton || !withdrawButton || !toggleHistoryButton || !transactionHistory || !publishedItemsTableBody || !buyHashButton || !chatContacts || !chatWindow || !chatInput || !sendChatButton || !createGroupButton || !chatList) {
       console.error('Required DOM elements not found:', {
         signupButton: !!signupButton,
         loginButton: !!loginButton,
@@ -55,18 +64,21 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleHistoryButton: !!toggleHistoryButton,
         transactionHistory: !!transactionHistory,
         publishedItemsTableBody: !!publishedItemsTableBody,
-        buyHashButton: !!buyHashButton
+        buyHashButton: !!buyHashButton,
+        chatContacts: !!chatContacts,
+        chatWindow: !!chatWindow,
+        chatInput: !!chatInput,
+        sendChatButton: !!sendChatButton,
+        createGroupButton: !!createGroupButton,
+        chatList: !!chatList
       });
       return;
     }
 
-    // Check if the user is a node based on localStorage
     if (role === 'node' && nodeId) {
       isNode = true;
-      // This block should not be reached due to the redirect above, but keeping it for safety
       console.log('Node detected, but should have been redirected already.');
     } else {
-      // Update UI based on Firebase authentication state
       onAuthStateChanged(auth, (user) => {
         if (user) {
           console.log('User is signed in:', user.uid);
@@ -79,6 +91,8 @@ document.addEventListener('DOMContentLoaded', () => {
           withdrawButton.disabled = false;
           toggleHistoryButton.disabled = false;
           buyHashButton.disabled = false;
+          sendChatButton.disabled = false;
+          createGroupButton.disabled = false;
           init(user.uid);
         } else {
           console.log('No user is signed in.');
@@ -91,16 +105,38 @@ document.addEventListener('DOMContentLoaded', () => {
           withdrawButton.disabled = true;
           toggleHistoryButton.disabled = true;
           buyHashButton.disabled = true;
+          sendChatButton.disabled = true;
+          createGroupButton.disabled = true;
           updateUIForSignOut();
         }
       });
     }
 
-    // Set up event listeners
     loginButton.addEventListener('click', signIn);
+    console.log('Login button event listener attached');
     logoutButton.addEventListener('click', signOutUser);
+    sendChatButton.addEventListener('click', sendDirectMessage);
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendDirectMessage();
+    });
+    createGroupButton.addEventListener('click', createGroupChat);
+    if (inviteButton) inviteButton.addEventListener('click', inviteToGroup);
+    if (leaveGroupButton) leaveGroupButton.addEventListener('click', leaveGroup);
+    loadGroupChats();
+
+    if (window.userDirectory) {
+      window.userDirectory.forEach(contact => {
+        if (contact.peerId !== dht?.peer?.id) {
+          const li = document.createElement('li');
+          li.className = 'p-2 bg-gray-600 rounded cursor-pointer hover:bg-gray-500';
+          li.textContent = `${contact.username} (${contact.type})`;
+          li.onclick = () => startDirectChat(contact.peerId, contact.username);
+          chatContacts.appendChild(li);
+        }
+      });
+    }
   }
-  // Expose additional functions to the global scope for HTML onclick handlers
+
   window.logout = signOutUser;
   window.publishSnippet = publishSnippet;
   window.buySnippet = buySnippet;
@@ -110,10 +146,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.withdraw = withdraw;
   window.toggleTransactionHistory = toggleTransactionHistory;
   window.flagSnippet = flagSnippet;
-  window.handleSignup = handleSignup; // Expose handleSignup globally
+  window.handleSignup = handleSignup;
+  window.showDirectChats = showDirectChats;
 });
 
-// Generate a UUID for nodes
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -134,40 +170,43 @@ export async function handleSignup() {
     return;
   }
 
+  const username = prompt('Please enter your username:');
+  if (!username || username.trim() === '') {
+    showToast('Username is required.', true);
+    return;
+  }
+
   showLoading(true);
   try {
     if (role === 'user') {
       console.log("Handling user signup with OAuth...");
-      // User signup with OAuth
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       console.log('Signed in user UID:', user.uid);
       showToast('Signed in successfully!');
 
-      // Store user data in Firestore
       const userRef = doc(db, 'users', user.uid);
       await setDoc(userRef, {
         role: 'user',
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        username: username.trim()
       }, { merge: true });
 
       window.location.href = '/datasharingApp/index.html';
     } else {
       console.log("Handling node signup without OAuth...");
-      // Node signup without OAuth
       const nodeId = generateUUID();
       console.log('Generated node ID:', nodeId);
 
-      // Store node ID in localStorage
       localStorage.setItem('nodeId', nodeId);
       localStorage.setItem('role', 'node');
 
-      // Store node data in Firestore
       const nodeRef = doc(db, 'nodes', nodeId);
       await setDoc(nodeRef, {
         role: 'node',
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        username: username.trim()
       }, { merge: true });
 
       showToast('Node created successfully!');
@@ -211,10 +250,25 @@ export async function init(userId) {
 
     updateBalanceDisplay();
     updateTransactionHistory();
+
+    const userDirectory = await fetchUserDirectory();
+    console.log('User directory:', userDirectory);
+    window.userDirectory = userDirectory;
+
+    const chatContacts = document.getElementById('chatContacts');
+    chatContacts.innerHTML = '';
+    userDirectory.forEach(contact => {
+      if (contact.peerId !== dht.peer.id) {
+        const li = document.createElement('li');
+        li.className = 'p-2 bg-gray-600 rounded cursor-pointer hover:bg-gray-500';
+        li.textContent = `${contact.username} (${contact.type})`;
+        li.onclick = () => startDirectChat(contact.peerId, contact.username);
+        chatContacts.appendChild(li);
+      }
+    });
   } catch (error) {
     console.error('Error initializing application:', error);
     showToast(`Initialization failed: ${error.message}`, true);
-    // Reset state on error
     dht = null;
     window.dht = null;
     userBalance = 0;
@@ -225,7 +279,6 @@ export async function init(userId) {
   }
 }
 
-// Rest of the code remains unchanged (omitted for brevity)
 async function checkIfUserIsNode(userId) {
   try {
     const nodeRef = doc(db, 'nodes', userId);
@@ -238,8 +291,10 @@ async function checkIfUserIsNode(userId) {
 }
 
 export async function signIn() {
+  console.log('signIn function called');
   const provider = new GoogleAuthProvider();
   try {
+    console.log('Attempting signInWithPopup');
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
     console.log('Signed in user UID:', user.uid);
@@ -254,7 +309,6 @@ export async function signIn() {
 export async function signOutUser() {
   try {
     if (localStorage.getItem('role') === 'node') {
-      // Clear node data from localStorage
       localStorage.removeItem('nodeId');
       localStorage.removeItem('role');
       showToast('Node signed out successfully!');
@@ -315,7 +369,6 @@ export async function publishSnippet(title, description, tags, content, fileInpu
     };
     const ipHash = await dht.publishIP(metadata, finalContent, fileType);
 
-    // Initialize snippet metadata in Firestore for ratings and moderation
     const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
     const snippetRef = doc(db, 'snippets', ipHash);
     await setDoc(snippetRef, {
@@ -356,7 +409,7 @@ export async function buySnippet(hash) {
 
     const isPremium = ipObject.metadata.isPremium || false;
     const priceUsd = isPremium ? (ipObject.metadata.priceUsd || 0) : 0;
-    const buyCost = priceUsd; // Free if priceUsd is 0
+    const buyCost = priceUsd;
 
     if (buyCost > 0) {
       const balance = await dht.getBalance(dht.keypair);
@@ -378,20 +431,18 @@ export async function buySnippet(hash) {
     updateBalanceDisplay();
     await uploadUserDataToFirebase();
 
-    // Prompt for rating
     const rating = prompt('Please rate this snippet (1-5 stars):', '5');
     if (rating !== null) {
       const ratingValue = parseInt(rating);
       if (ratingValue >= 1 && ratingValue <= 5) {
         await submitRating(hash, ratingValue);
         showToast(`Rated ${ratingValue} stars!`);
-        updateLiveFeed(); // Refresh live feed to show updated rating
+        updateLiveFeed();
       } else {
         showToast('Invalid rating. Please enter a number between 1 and 5.', true);
       }
     }
 
-    // Display the snippet content
     displaySnippetContent(data, fileType, ipObject.metadata.content_type);
     return { data, fileType };
   } catch (error) {
@@ -420,19 +471,16 @@ async function submitRating(ipHash, rating) {
   if (!userId) return;
 
   try {
-    // Store the user's rating
     const ratingRef = doc(db, 'snippets', ipHash, 'ratings', userId);
     await setDoc(ratingRef, {
       rating,
       timestamp: Date.now()
     });
 
-    // Calculate new average rating
     const ratingsSnapshot = await getDocs(collection(db, 'snippets', ipHash, 'ratings'));
     const ratings = ratingsSnapshot.docs.map(doc => doc.data().rating);
     const averageRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
 
-    // Update the snippet's average rating
     const snippetRef = doc(db, 'snippets', ipHash);
     await updateDoc(snippetRef, {
       averageRating: averageRating.toFixed(1)
@@ -645,7 +693,7 @@ function updateLiveFeed() {
     if (dht) {
       dht.knownObjects.forEach((value, key) => {
         const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
-        if (snippetInfo.reviewStatus !== 'active') return; // Skip snippets under review
+        if (snippetInfo.reviewStatus !== 'active') return;
 
         const isPremium = value.metadata.isPremium || false;
         const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
@@ -718,10 +766,14 @@ function updateUIForSignOut() {
   const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   const transactionList = document.getElementById('transactionList');
   const userBalanceElement = document.getElementById('userBalance');
+  const chatWindow = document.getElementById('chatWindow');
+  const chatContacts = document.getElementById('chatContacts');
 
   if (publishedItemsTableBody) publishedItemsTableBody.innerHTML = '';
   if (transactionList) transactionList.innerHTML = 'No transactions yet.';
   if (userBalanceElement) userBalanceElement.textContent = 'Balance: 0 DCT';
+  if (chatWindow) chatWindow.innerHTML = '';
+  if (chatContacts) chatContacts.innerHTML = '';
   userBalance = 0;
 }
 
@@ -761,7 +813,7 @@ function displaySnippetContent(data, fileType, title) {
   const snippetDisplay = document.getElementById('snippetDisplay');
   if (!snippetDisplay) return;
 
-  snippetDisplay.innerHTML = ''; // Clear previous content
+  snippetDisplay.innerHTML = '';
 
   const contentDiv = document.createElement('div');
   contentDiv.className = 'p-4 bg-gray-800 rounded-lg mt-4';
@@ -798,4 +850,224 @@ function displaySnippetContent(data, fileType, title) {
   }
 
   snippetDisplay.appendChild(contentDiv);
+}
+
+async function fetchUserDirectory() {
+  const usersSnapshot = await getDocs(collection(db, 'users'));
+  const nodesSnapshot = await getDocs(collection(db, 'nodes'));
+  const users = usersSnapshot.docs.map(doc => ({
+    id: doc.id,
+    type: 'user',
+    peerId: `user-${doc.id}`,
+    username: doc.data().username || 'Anonymous',
+    ...doc.data()
+  }));
+  const nodes = nodesSnapshot.docs.map(doc => ({
+    id: doc.id,
+    type: 'node',
+    peerId: `node-${doc.id}`,
+    username: doc.data().username || 'Anonymous',
+    ...doc.data()
+  }));
+  return [...users, ...nodes];
+}
+
+async function createGroupChat() {
+  const groupName = prompt('Enter group name:');
+  if (!groupName) return;
+
+  const groupId = generateUUID();
+  const peerId = dht.peer.id;
+  const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
+  const userDoc = await getDoc(doc(db, peerId.startsWith('user-') ? 'users' : 'nodes', userId));
+  const username = userDoc.exists() ? userDoc.data().username : 'Anonymous';
+
+  await setDoc(doc(db, 'chat_groups', groupId), {
+    name: groupName,
+    participants: [peerId],
+    participantIds: [userId],
+    participantUsernames: [username],
+    createdAt: Date.now()
+  });
+  showToast('Group created successfully!');
+  loadGroupChats();
+}
+
+async function loadGroupChats() {
+  const chatList = document.getElementById('chatList');
+  while (chatList.children.length > 1) {
+    chatList.removeChild(chatList.lastChild);
+  }
+
+  const groupChatsSnapshot = await getDocs(collection(db, 'chat_groups'));
+  groupChatsSnapshot.forEach(doc => {
+    const group = doc.data();
+    const li = document.createElement('li');
+    li.className = 'p-2 bg-gray-600 rounded cursor-pointer hover:bg-gray-500';
+    li.textContent = `Group: ${group.name} (${group.participants.length} members)`;
+    li.onclick = () => startGroupChat(doc.id, group.name, group.participants, group.participantUsernames);
+    chatList.appendChild(li);
+  });
+}
+
+async function startGroupChat(groupId, groupName, participants, participantUsernames) {
+  currentChatType = 'group';
+  currentChatPeerId = null;
+  currentGroupId = groupId;
+  currentGroupParticipants = participants;
+  currentGroupUsernames = participantUsernames.reduce((acc, username, index) => {
+    acc[participants[index]] = username;
+    return acc;
+  }, {});
+  const chatId = `group-${groupId}`;
+  const chatWindow = document.getElementById('chatWindow');
+  const inviteButton = document.getElementById('inviteButton');
+  const leaveGroupButton = document.getElementById('leaveGroupButton');
+  chatWindow.innerHTML = `<h3>${groupName}</h3><p>Members: ${participantUsernames.join(', ')}</p>`;
+  if (inviteButton) inviteButton.classList.remove('hidden');
+  if (leaveGroupButton) leaveGroupButton.classList.remove('hidden');
+
+  const messages = await dht.getChatMessages(chatId);
+  messages.forEach(displayChatMessage);
+
+  dht.onChatMessage(chatId, (message) => {
+    displayChatMessage(message);
+  });
+
+  if (!participants.includes(dht.peer.id)) {
+    const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
+    const userDoc = await getDoc(doc(db, dht.peer.id.startsWith('user-') ? 'users' : 'nodes', userId));
+    const username = userDoc.exists() ? userDoc.data().username : 'Anonymous';
+    await updateDoc(doc(db, 'chat_groups', groupId), {
+      participants: arrayUnion(dht.peer.id),
+      participantIds: arrayUnion(userId),
+      participantUsernames: arrayUnion(username)
+    });
+    currentGroupParticipants.push(dht.peer.id);
+    currentGroupUsernames[dht.peer.id] = username;
+  }
+}
+
+async function startDirectChat(peerId, username) {
+  currentChatType = 'direct';
+  currentChatPeerId = peerId;
+  currentChatUsername = username;
+  currentGroupId = null;
+  currentGroupParticipants = [];
+  currentGroupUsernames = {};
+  const chatId = `direct-${peerId}`;
+  const chatWindow = document.getElementById('chatWindow');
+  const inviteButton = document.getElementById('inviteButton');
+  const leaveGroupButton = document.getElementById('leaveGroupButton');
+  chatWindow.innerHTML = `<h3>Chat with ${username}</h3>`;
+  if (inviteButton) inviteButton.classList.add('hidden');
+  if (leaveGroupButton) leaveGroupButton.classList.add('hidden');
+
+  const messages = await dht.getChatMessages(chatId);
+  messages.forEach(displayChatMessage);
+
+  dht.onChatMessage(chatId, (message) => {
+    displayChatMessage(message);
+  });
+}
+
+async function sendDirectMessage() {
+  const chatInput = document.getElementById('chatInput');
+  const message = chatInput.value.trim();
+  if (!message) return;
+
+  const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
+  const userDoc = await getDoc(doc(db, dht.peer.id.startsWith('user-') ? 'users' : 'nodes', userId));
+  const username = userDoc.exists() ? userDoc.data().username : 'Anonymous';
+
+  if (currentChatType === 'direct' && currentChatPeerId) {
+    await dht.sendChatMessage(currentChatPeerId, message, 'direct', null, username);
+  } else if (currentChatType === 'group' && currentGroupId) {
+    for (const peerId of currentGroupParticipants) {
+      if (peerId !== dht.peer.id) {
+        await dht.sendChatMessage(peerId, message, 'group', currentGroupId, username);
+      }
+    }
+  }
+  chatInput.value = '';
+}
+
+function displayChatMessage(message) {
+  const chatWindow = document.getElementById('chatWindow');
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'mb-2';
+  const fromSelf = message.from === dht.peer.id;
+  messageDiv.className += fromSelf ? ' text-right' : ' text-left';
+  const senderUsername = message.username || (fromSelf ? 'You' : currentChatUsername || currentGroupUsernames[message.from]) || 'Anonymous';
+  messageDiv.innerHTML = `<span class="${fromSelf ? 'text-blue-300' : 'text-green-300'}">${senderUsername}</span>: ${message.message}`;
+  chatWindow.appendChild(messageDiv);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+function showDirectChats() {
+  currentChatType = 'direct';
+  currentGroupId = null;
+  currentGroupParticipants = [];
+  currentGroupUsernames = {};
+  const chatContacts = document.getElementById('chatContacts');
+  const chatWindow = document.getElementById('chatWindow');
+  const inviteButton = document.getElementById('inviteButton');
+  const leaveGroupButton = document.getElementById('leaveGroupButton');
+  chatContacts.classList.remove('hidden');
+  chatWindow.innerHTML = '';
+  if (inviteButton) inviteButton.classList.add('hidden');
+  if (leaveGroupButton) leaveGroupButton.classList.add('hidden');
+}
+
+async function inviteToGroup() {
+  if (currentChatType !== 'group' || !currentGroupId) return;
+
+  const usernameToInvite = prompt('Enter the username to invite:');
+  if (!usernameToInvite) return;
+
+  const userDirectory = await fetchUserDirectory();
+  const userToInvite = userDirectory.find(user => user.username === usernameToInvite);
+  if (!userToInvite) {
+    showToast('User not found.', true);
+    return;
+  }
+
+  const groupDoc = await getDoc(doc(db, 'chat_groups', currentGroupId));
+  if (!groupDoc.exists()) return;
+
+  const groupData = groupDoc.data();
+  if (groupData.participants.includes(userToInvite.peerId)) {
+    showToast('User is already in the group.', true);
+    return;
+  }
+
+  await updateDoc(doc(db, 'chat_groups', currentGroupId), {
+    participants: arrayUnion(userToInvite.peerId),
+    participantIds: arrayUnion(userToInvite.id),
+    participantUsernames: arrayUnion(userToInvite.username)
+  });
+
+  currentGroupParticipants.push(userToInvite.peerId);
+  currentGroupUsernames[userToInvite.peerId] = userToInvite.username;
+  showToast(`Invited ${usernameToInvite} to the group!`);
+  startGroupChat(currentGroupId, groupData.name, [...groupData.participants, userToInvite.peerId], [...groupData.participantUsernames, userToInvite.username]);
+}
+
+async function leaveGroup() {
+  if (currentChatType !== 'group' || !currentGroupId) return;
+
+  const peerId = dht.peer.id;
+  const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
+  const userDoc = await getDoc(doc(db, peerId.startsWith('user-') ? 'users' : 'nodes', userId));
+  const username = userDoc.exists() ? userDoc.data().username : 'Anonymous';
+
+  await updateDoc(doc(db, 'chat_groups', currentGroupId), {
+    participants: arrayRemove(peerId),
+    participantIds: arrayRemove(userId),
+    participantUsernames: arrayRemove(username)
+  });
+
+  showToast('You have left the group.');
+  showDirectChats();
+  loadGroupChats();
 }

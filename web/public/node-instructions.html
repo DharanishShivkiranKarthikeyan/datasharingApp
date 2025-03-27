@@ -12,7 +12,7 @@
       font-family: 'Inter', sans-serif;
     }
     .container {
-      max-width: 800px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 2rem;
     }
@@ -26,6 +26,9 @@
       border-radius: 0.25rem;
       display: none;
     }
+    .error-toast {
+      background-color: #ef4444;
+    }
     .loading {
       position: fixed;
       top: 0;
@@ -38,10 +41,52 @@
       align-items: center;
       display: none;
     }
-    button {
+    .input-field {
+      padding: 0.5rem;
+      background-color: #2d3748;
+      color: #e2e8f0;
+      border: 1px solid #4a5568;
+      border-radius: 0.25rem;
+      width: 100%;
+      max-width: 300px;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: #63b3ed;
+      box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.3);
+    }
+    .btn {
       padding: 0.5rem 1rem;
       border-radius: 0.25rem;
       cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .btn-primary {
+      background-color: #3b82f6;
+      color: white;
+    }
+    .btn-primary:hover {
+      background-color: #2563eb;
+    }
+    .btn-secondary {
+      background-color: #6b7280;
+      color: white;
+    }
+    .btn-secondary:hover {
+      background-color: #4b5563;
+    }
+    .btn-danger {
+      background-color: #ef4444;
+      color: white;
+    }
+    .btn-danger:hover {
+      background-color: #dc2626;
+    }
+    .card {
+      background-color: #2d3748;
+      padding: 1.5rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
   </style>
 </head>
@@ -51,25 +96,42 @@
   </div>
   <div class="toast" id="toast"></div>
   <div class="container">
-    <div class="flex justify-between items-center mb-4">
-      <h1 class="text-2xl font-bold">Node Instructions</h1>
-      <div>
-        <a href="/datasharingApp/index.html" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600">Back to Dashboard</a>
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-3xl font-bold">Node Instructions - Dcrypt</h1>
+      <div class="space-x-2">
+        <button class="btn btn-danger" onclick="window.logout()">Logout</button>
       </div>
     </div>
-    <div class="mb-4">
-      <h2 class="text-xl font-semibold mb-2">Welcome, Node Operator!</h2>
-      <p class="mb-2">As a node, your role is to store and distribute chunks of data to ensure the network remains decentralized and reliable. Here are your responsibilities:</p>
-      <ul class="list-disc list-inside mb-4">
-        <li>Stay online as much as possible to serve chunks to other users.</li>
-        <li>Monitor your earnings from commissions (5% of each premium snippet purchase).</li>
-        <li>Ensure your browser remains open and connected to the PeerJS network.</li>
-        <li>Check for updates or changes in node requirements from the Dcrypt team.</li>
-      </ul>
-      <h2 class="text-xl font-semibold mb-2">Your Earnings</h2>
-      <p id="nodeEarnings">Total Earnings: Loading...</p>
+
+    <div class="card mb-6">
+      <h2 class="text-xl font-semibold mb-4">Node Status</h2>
+      <p id="nodeEarnings" class="text-lg font-medium">Total Earnings: 0 DCT</p>
+      <p class="mt-2">Keep this window open to continue earning commissions as a node.</p>
+    </div>
+
+    <div class="card mb-6">
+      <h2 class="text-xl font-semibold mb-4">Chat</h2>
+      <div class="flex space-x-4">
+        <div class="w-1/4">
+          <h3 class="text-lg font-medium mb-2">Chats</h3>
+          <button id="createGroupButton" class="btn btn-primary mb-2" disabled>Create Group</button>
+          <ul id="chatList" class="space-y-2">
+            <li class="p-2 bg-gray-600 rounded cursor-pointer hover:bg-gray-500" onclick="window.showDirectChats()">Direct Messages</li>
+          </ul>
+          <ul id="chatContacts" class="space-y-2 hidden"></ul>
+        </div>
+        <div class="w-3/4">
+          <div id="chatWindow" class="bg-gray-700 p-4 rounded-lg h-64 overflow-y-auto mb-4"></div>
+          <div class="flex space-x-2">
+            <input id="chatInput" type="text" placeholder="Type a message..." class="input-field flex-1">
+            <button id="sendChatButton" class="btn btn-primary" disabled>Send</button>
+            <button id="inviteButton" class="btn btn-secondary hidden">Invite</button>
+            <button id="leaveGroupButton" class="btn btn-danger hidden">Leave Group</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-  <script type="module" src="/datasharingApp/assets/app.js"></script>
+  <script type="module" src="/datasharingApp/node-instructions.js"></script>
 </body>
 </html>

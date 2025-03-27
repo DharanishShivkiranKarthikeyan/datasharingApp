@@ -187,7 +187,29 @@
     </div>
 
     <div class="card mb-6" id="snippetDisplay">
-      <!-- Purchased snippet content will be displayed here -->
+    </div>
+
+    <div class="card mb-6">
+      <h2 class="text-xl font-semibold mb-4">Chat</h2>
+      <div class="flex space-x-4">
+        <div class="w-1/4">
+          <h3 class="text-lg font-medium mb-2">Chats</h3>
+          <button id="createGroupButton" class="btn btn-primary mb-2" disabled>Create Group</button>
+          <ul id="chatList" class="space-y-2">
+            <li class="p-2 bg-gray-600 rounded cursor-pointer hover:bg-gray-500" onclick="window.showDirectChats()">Direct Messages</li>
+          </ul>
+          <ul id="chatContacts" class="space-y-2 hidden"></ul>
+        </div>
+        <div class="w-3/4">
+          <div id="chatWindow" class="bg-gray-700 p-4 rounded-lg h-64 overflow-y-auto mb-4"></div>
+          <div class="flex space-x-2">
+            <input id="chatInput" type="text" placeholder="Type a message..." class="input-field flex-1">
+            <button id="sendChatButton" class="btn btn-primary" disabled>Send</button>
+            <button id="inviteButton" class="btn btn-secondary hidden">Invite</button>
+            <button id="leaveGroupButton" class="btn btn-danger hidden">Leave Group</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="card mb-6">
@@ -215,8 +237,5 @@
     </div>
   </div>
   <script type="module" src="/index.js"></script>
-  <script>
-    
-  </script>
 </body>
 </html>
