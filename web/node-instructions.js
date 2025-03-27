@@ -8,9 +8,9 @@ if (window.location.pathname === '/datasharingApp/node-instructions.html' || win
   document.addEventListener('DOMContentLoaded', async () => {
     showLoading(true);
     try {
-      // Check if the user is a node using localStorage
-      const nodeId = localStorage.getItem('nodeId');
-      const role = localStorage.getItem('role');
+      // Check if the user is a node using sessionStorage
+      const nodeId = sessionStorage.getItem('nodeId'); // Use sessionStorage
+      const role = sessionStorage.getItem('role'); // Use sessionStorage
 
       if (role !== 'node' || !nodeId) {
         showToast('You must be signed in as a node to view this page.');
