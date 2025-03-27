@@ -14,6 +14,31 @@ let isNode = false;
 let userBalance = 0;
 let testPeers = [];
 
+// Function to wait for the Google Identity Services library to load
+function waitForGoogleLibrary() {
+  return new Promise((resolve, reject) => {
+    const maxWaitTime = 10000; // 10 seconds max wait
+    const interval = 100; // Check every 100ms
+    let elapsed = 0;
+
+    const checkGoogle = () => {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        console.log('Google Identity Services library loaded successfully');
+        resolve();
+      } else {
+        elapsed += interval;
+        if (elapsed >= maxWaitTime) {
+          reject(new Error('Google Identity Services library failed to load within 10 seconds'));
+        } else {
+          setTimeout(checkGoogle, interval);
+        }
+      }
+    };
+
+    checkGoogle();
+  });
+}
+
 // Google Sign-In callback
 window.handleCredentialResponse = async (response) => {
   showLoading(true);
@@ -233,8 +258,15 @@ export async function handleSignup() {
   }
 
   localStorage.setItem('pendingRole', role);
-  // Trigger Google Sign-In programmatically
-  google.accounts.id.prompt();
+
+  try {
+    // Wait for the Google library to load before prompting
+    await waitForGoogleLibrary();
+    google.accounts.id.prompt();
+  } catch (error) {
+    console.error('Failed to load Google Identity Services:', error);
+    showToast('Failed to load Google Sign-In. Please try again later.', true);
+  }
 }
 
 // Initialize the app
@@ -327,7 +359,14 @@ async function checkIfUserIsNode(userId) {
 
 // Trigger Google Sign-In
 export async function signIn() {
-  google.accounts.id.prompt();
+  try {
+    // Wait for the Google library to load before prompting
+    await waitForGoogleLibrary();
+    google.accounts.id.prompt();
+  } catch (error) {
+    console.error('Failed to load Google Identity Services:', error);
+    showToast('Failed to load Google Sign-In. Please try again later.', true);
+  }
 }
 
 // Sign out the user
