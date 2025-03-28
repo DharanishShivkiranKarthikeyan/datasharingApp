@@ -1,5 +1,5 @@
 // Import Firebase Auth and Firestore methods
-import { GoogleAuthProvider, onAuthStateChanged, signInWithRedirect, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+import { GoogleAuthProvider, onAuthStateChanged, signInWithRedirect, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
@@ -26,7 +26,9 @@ async function initializeFirebase() {
     const firebaseModule = await import('./firebase.js');
     auth = firebaseModule.auth;
     db = firebaseModule.db;
-    console.log('Firebase services initialized successfully');
+    // Set persistence to local to ensure auth state persists across redirects
+    await setPersistence(auth, browserLocalPersistence);
+    console.log('Firebase services initialized successfully with local persistence');
   } catch (error) {
     console.error('Failed to initialize Firebase services:', error);
     showToast('Failed to initialize Firebase. Please try again later.', true);
@@ -247,74 +249,46 @@ function setupPremiumToggle() {
   }
 }
 
-// Initialize IndexedDB with schema setup and version check
+// Initialize IndexedDB with schema setup
 async function initializeIndexedDB() {
+  const TARGET_VERSION = 5; // Match with dht.js
   return new Promise((resolve, reject) => {
-    // Start with version 1 to check the current state
-    const initialRequest = indexedDB.open('dcrypt_db', 1);
+    // Open the database without specifying a version to get the current version
+    const checkRequest = indexedDB.open('dcrypt_db');
 
-    initialRequest.onsuccess = () => {
-      const db = initialRequest.result;
+    checkRequest.onsuccess = () => {
+      const db = checkRequest.result;
       const currentVersion = db.version;
       console.log('Current IndexedDB version:', currentVersion);
+      db.close();
 
-      // If 'store' doesn't exist, we need to upgrade the database
-      if (!db.objectStoreNames.contains('store')) {
-        console.log('Object store "store" not found, upgrading database...');
-        db.close();
+      // Open the database at the target version (or higher if needed)
+      const openRequest = indexedDB.open('dcrypt_db', Math.max(currentVersion, TARGET_VERSION));
 
-        // Open with a higher version to trigger onupgradeneeded
-        const upgradeRequest = indexedDB.open('dcrypt_db', 5); // Increment version to force upgrade
-
-        upgradeRequest.onupgradeneeded = (event) => {
-          const upgradeDb = upgradeRequest.result;
-          console.log('onupgradeneeded triggered for dcrypt_db version', upgradeDb.version);
-          if (!upgradeDb.objectStoreNames.contains('store')) {
-            upgradeDb.createObjectStore('store', { keyPath: 'id' });
-            console.log('Created object store: store in index.js');
-          }
-        };
-
-        upgradeRequest.onsuccess = () => {
-          console.log('IndexedDB upgraded and opened successfully');
-          resolve(upgradeRequest.result);
-        };
-
-        upgradeRequest.onerror = () => {
-          console.error('Failed to upgrade IndexedDB:', upgradeRequest.error);
-          reject(new Error(`Failed to upgrade IndexedDB: ${upgradeRequest.error.message}`));
-        };
-      } else {
-        // If 'store' exists, but we need to ensure version 5 for dht.js compatibility
-        if (currentVersion < 5) {
-          db.close();
-          const upgradeRequest = indexedDB.open('dcrypt_db', 5);
-
-          upgradeRequest.onupgradeneeded = (event) => {
-            const upgradeDb = upgradeRequest.result;
-            console.log('onupgradeneeded triggered for version alignment to 5');
-            // Let dht.js handle additional object stores
-          };
-
-          upgradeRequest.onsuccess = () => {
-            console.log('IndexedDB version aligned to 5');
-            resolve(upgradeRequest.result);
-          };
-
-          upgradeRequest.onerror = () => {
-            console.error('Failed to align IndexedDB version:', upgradeRequest.error);
-            reject(new Error(`Failed to align IndexedDB version: ${upgradeRequest.error.message}`));
-          };
-        } else {
-          console.log('IndexedDB already has "store" and is at version 5 or higher');
-          resolve(db);
+      openRequest.onupgradeneeded = (event) => {
+        const db = openRequest.result;
+        console.log('onupgradeneeded triggered for dcrypt_db version', db.version);
+        if (!db.objectStoreNames.contains('store')) {
+          db.createObjectStore('store', { keyPath: 'id' });
+          console.log('Created object store: store in index.js');
         }
-      }
+        // Note: Other object stores ('transactions', 'offlineQueue', 'chunkCache') are created in dht.js
+      };
+
+      openRequest.onsuccess = () => {
+        console.log('IndexedDB opened successfully at version', openRequest.result.version);
+        resolve(openRequest.result);
+      };
+
+      openRequest.onerror = () => {
+        console.error('Failed to open IndexedDB:', openRequest.error);
+        reject(new Error(`Failed to open IndexedDB: ${openRequest.error.message}`));
+      };
     };
 
-    initialRequest.onerror = () => {
-      console.error('Failed to open IndexedDB initially:', initialRequest.error);
-      reject(new Error(`Failed to open IndexedDB initially: ${initialRequest.error.message}`));
+    checkRequest.onerror = () => {
+      console.error('Failed to check IndexedDB version:', checkRequest.error);
+      reject(new Error(`Failed to check IndexedDB version: ${checkRequest.error.message}`));
     };
   });
 }
@@ -877,6 +851,16 @@ async function withdraw(amount) {
   }
 }
 
+// Wait for auth state to resolve
+async function waitForAuthState() {
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+}
+
 // Main DOMContentLoaded event handler
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
@@ -927,83 +911,70 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Node detected, but should have been redirected already.');
     }
 
-    // Update UI based on authentication state
-    onAuthStateChanged(auth, async (user) => {
-      showLoading(true);
-      if (user) {
-        console.log('User is signed in:', user.uid);
-        elements.signupButton.classList.add('hidden');
-        elements.loginButton.classList.add('hidden');
-        elements.logoutButton.classList.remove('hidden');
-        elements.publishButton.disabled = false;
-        elements.searchButton.disabled = false;
-        elements.depositButton.disabled = false;
-        elements.withdrawButton.disabled = false;
-        elements.toggleHistoryButton.disabled = false;
-        elements.buyHashButton.disabled = false;
+    // Wait for auth state to resolve to handle redirects
+    showLoading(true);
+    const user = await waitForAuthState();
+    if (user) {
+      console.log('User is signed in:', user.uid);
+      elements.signupButton.classList.add('hidden');
+      elements.loginButton.classList.add('hidden');
+      elements.logoutButton.classList.remove('hidden');
+      elements.publishButton.disabled = false;
+      elements.searchButton.disabled = false;
+      elements.depositButton.disabled = false;
+      elements.withdrawButton.disabled = false;
+      elements.toggleHistoryButton.disabled = false;
+      elements.buyHashButton.disabled = false;
 
-        const pendingRole = localStorage.getItem('pendingRole') || 'user';
-        localStorage.removeItem('pendingRole');
+      const pendingRole = localStorage.getItem('pendingRole') || 'user';
+      localStorage.removeItem('pendingRole');
 
-        const currentPath = window.location.pathname;
-        if (pendingRole === 'user') {
-          const userRef = doc(db, 'users', user.uid);
-          await setDoc(userRef, { role: 'user', createdAt: Date.now(), balance: 0 }, { merge: true });
+      const currentPath = window.location.pathname;
+      if (pendingRole === 'user') {
+        const userRef = doc(db, 'users', user.uid);
+        await setDoc(userRef, { role: 'user', createdAt: Date.now(), balance: 0 }, { merge: true });
 
-          if (!currentPath.includes('index.html') && currentPath !== '/datasharingApp/') {
-            console.log('Redirecting to index.html for user role');
-            window.location.href = '/datasharingApp/index.html';
-            showLoading(false);
-            return;
-          }
-        } else {
-          const nodeId = generateUUID();
-          localStorage.setItem('nodeId', nodeId);
-          localStorage.setItem('role', 'node');
-          const nodeRef = doc(db, 'nodes', nodeId);
-          await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
-
-          if (!currentPath.includes('node-instructions.html')) {
-            console.log('Redirecting to node-instructions.html for node role');
-            window.location.href = '/datasharingApp/node-instructions.html';
-            showLoading(false);
-            return;
-          }
+        if (!currentPath.includes('index.html') && currentPath !== '/datasharingApp/') {
+          console.log('Redirecting to index.html for user role');
+          window.location.href = '/datasharingApp/index.html';
+          showLoading(false);
+          return;
         }
-
-        await init(user.uid);
       } else {
-        console.log('No user is signed in. Checking IndexedDB for keypair...');
-        try {
-          const db = await initializeIndexedDB();
-          const keypair = await loadKeypair(db);
-          if (keypair) {
-            console.log('Found keypair in IndexedDB, initializing app...');
-            elements.signupButton.classList.add('hidden');
-            elements.loginButton.classList.add('hidden');
-            elements.logoutButton.classList.remove('hidden');
-            elements.publishButton.disabled = false;
-            elements.searchButton.disabled = false;
-            elements.depositButton.disabled = false;
-            elements.withdrawButton.disabled = false;
-            elements.toggleHistoryButton.disabled = false;
-            elements.buyHashButton.disabled = false;
-            await init(new TextDecoder().decode(keypair));
-          } else {
-            console.log('No keypair found in IndexedDB.');
-            elements.signupButton.classList.remove('hidden');
-            elements.loginButton.classList.remove('hidden');
-            elements.logoutButton.classList.add('hidden');
-            elements.publishButton.disabled = true;
-            elements.searchButton.disabled = true;
-            elements.depositButton.disabled = true;
-            elements.withdrawButton.disabled = true;
-            elements.toggleHistoryButton.disabled = true;
-            elements.buyHashButton.disabled = true;
-            updateUIForSignOut();
-          }
-        } catch (error) {
-          console.error('Failed to initialize IndexedDB or load keypair:', error);
+        const nodeId = generateUUID();
+        localStorage.setItem('nodeId', nodeId);
+        localStorage.setItem('role', 'node');
+        const nodeRef = doc(db, 'nodes', nodeId);
+        await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
+
+        if (!currentPath.includes('node-instructions.html')) {
+          console.log('Redirecting to node-instructions.html for node role');
+          window.location.href = '/datasharingApp/node-instructions.html';
+          showLoading(false);
+          return;
+        }
+      }
+
+      await init(user.uid);
+    } else {
+      console.log('No user is signed in. Checking IndexedDB for keypair...');
+      try {
+        const db = await initializeIndexedDB();
+        const keypair = await loadKeypair(db);
+        if (keypair) {
+          console.log('Found keypair in IndexedDB, initializing app...');
+          elements.signupButton.classList.add('hidden');
+          elements.loginButton.classList.add('hidden');
+          elements.logoutButton.classList.remove('hidden');
+          elements.publishButton.disabled = false;
+          elements.searchButton.disabled = false;
+          elements.depositButton.disabled = false;
+          elements.withdrawButton.disabled = false;
+          elements.toggleHistoryButton.disabled = false;
+          elements.buyHashButton.disabled = false;
+          await init(new TextDecoder().decode(keypair));
+        } else {
+          console.log('No keypair found in IndexedDB.');
           elements.signupButton.classList.remove('hidden');
           elements.loginButton.classList.remove('hidden');
           elements.logoutButton.classList.add('hidden');
@@ -1015,13 +986,21 @@ document.addEventListener('DOMContentLoaded', async () => {
           elements.buyHashButton.disabled = true;
           updateUIForSignOut();
         }
+      } catch (error) {
+        console.error('Failed to initialize IndexedDB or load keypair:', error);
+        elements.signupButton.classList.remove('hidden');
+        elements.loginButton.classList.remove('hidden');
+        elements.logoutButton.classList.add('hidden');
+        elements.publishButton.disabled = true;
+        elements.searchButton.disabled = true;
+        elements.depositButton.disabled = true;
+        elements.withdrawButton.disabled = true;
+        elements.toggleHistoryButton.disabled = true;
+        elements.buyHashButton.disabled = true;
+        updateUIForSignOut();
       }
-      showLoading(false);
-    }, (error) => {
-      console.error('onAuthStateChanged error:', error);
-      showToast('Failed to monitor authentication state.', true);
-      showLoading(false);
-    });
+    }
+    showLoading(false);
 
     // Set up event listeners
     elements.loginButton.addEventListener('click', (event) => {
