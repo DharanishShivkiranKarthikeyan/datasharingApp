@@ -18,6 +18,7 @@ let isNode = false;
 let userBalance = 0;
 let testPeers = [];
 let isSigningUp = false;
+let isInitializing = false;
 
 // Initialize Firebase services asynchronously
 async function initializeFirebase() {
@@ -246,40 +247,97 @@ function setupPremiumToggle() {
   }
 }
 
+// Initialize IndexedDB with schema setup
+async function initializeIndexedDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('dcrypt_db', 4); // Match version with dht.js
+
+    request.onupgradeneeded = (event) => {
+      const db = request.result;
+      console.log('onupgradeneeded triggered for dcrypt_db version', event.target.result.version);
+      if (!db.objectStoreNames.contains('store')) {
+        db.createObjectStore('store', { keyPath: 'id' });
+        console.log('Created object store: store in index.js');
+      }
+      // Note: Other object stores ('transactions', 'offlineQueue', 'chunkCache') are created in dht.js
+    };
+
+    request.onsuccess = () => {
+      console.log('IndexedDB opened successfully in initializeIndexedDB');
+      resolve(request.result);
+    };
+
+    request.onerror = () => {
+      console.error('Failed to open IndexedDB:', request.error);
+      reject(new Error(`Failed to open IndexedDB: ${request.error.message}`));
+    };
+  });
+}
+
+// Load keypair from IndexedDB
+async function loadKeypair(db) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('store', 'readonly');
+    const store = tx.objectStore('store');
+    const request = store.get('dcrypt_identity');
+
+    request.onsuccess = () => {
+      if (request.result?.value) {
+        console.log('Loaded keypair from IndexedDB:', request.result.value);
+        resolve(new TextEncoder().encode(request.result.value));
+      } else {
+        resolve(null);
+      }
+    };
+
+    request.onerror = () => {
+      console.error('Failed to load keypair from IndexedDB:', request.error);
+      reject(new Error('Failed to load keypair from IndexedDB'));
+    };
+  });
+}
+
+// Store keypair in IndexedDB
+async function storeKeypair(db, userId) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('store', 'readwrite');
+    const store = tx.objectStore('store');
+    const request = store.put({ id: 'dcrypt_identity', value: userId });
+
+    request.onsuccess = () => {
+      console.log('Stored keypair in IndexedDB:', userId);
+      resolve();
+    };
+
+    request.onerror = () => {
+      console.error('Failed to store keypair in IndexedDB:', request.error);
+      reject(new Error('Failed to store keypair in IndexedDB'));
+    };
+  });
+}
+
 // Initialize the app
 async function init(userId) {
+  if (isInitializing) {
+    console.log('Initialization already in progress, skipping...');
+    return;
+  }
+  isInitializing = true;
   console.log('Initializing app with userId:', userId);
   showLoading(true);
   try {
-    // Initialize IndexedDB and load keypair
-    let keypair;
-    const dbRequest = indexedDB.open('dcrypt_db', 4); // Match version with dht.js
-    await new Promise((resolve, reject) => {
-      dbRequest.onsuccess = () => {
-        const db = dbRequest.result;
-        const tx = db.transaction('store', 'readonly');
-        const store = tx.objectStore('store');
-        const request = store.get('dcrypt_identity');
-        request.onsuccess = () => {
-          if (request.result?.value) {
-            keypair = new TextEncoder().encode(request.result.value);
-            console.log('Loaded keypair from IndexedDB:', request.result.value);
-          } else if (userId) {
-            keypair = new TextEncoder().encode(userId);
-            const txWrite = db.transaction('store', 'readwrite');
-            const storeWrite = txWrite.objectStore('store');
-            storeWrite.put({ id: 'dcrypt_identity', value: userId });
-            console.log('Stored new keypair in IndexedDB:', userId);
-          } else {
-            reject(new Error('No user ID or stored keypair found'));
-            return;
-          }
-          resolve();
-        };
-        request.onerror = () => reject(new Error('Failed to load keypair from IndexedDB'));
-      };
-      dbRequest.onerror = () => reject(new Error('Failed to open IndexedDB'));
-    });
+    // Initialize IndexedDB
+    const db = await initializeIndexedDB();
+
+    // Load or store keypair
+    let keypair = await loadKeypair(db);
+    if (!keypair && userId) {
+      await storeKeypair(db, userId);
+      keypair = new TextEncoder().encode(userId);
+    }
+    if (!keypair) {
+      throw new Error('No keypair available and no userId provided to create one');
+    }
 
     // Check if user is a node
     isNode = await checkIfUserIsNode(userId);
@@ -298,7 +356,7 @@ async function init(userId) {
     window.dht = dht;
 
     await dht.initDB();
-    console.log('IndexedDB initialized.');
+    console.log('IndexedDB initialized via DHT.');
 
     await dht.initSwarm();
     console.log('DHT swarm initialized.');
@@ -323,6 +381,7 @@ async function init(userId) {
   } finally {
     showLoading(false);
     setupPremiumToggle();
+    isInitializing = false;
   }
 }
 
@@ -403,10 +462,12 @@ async function signIn() {
     if (!auth) throw new Error('Firebase Auth is not initialized');
     const provider = new GoogleAuthProvider();
     console.log('Initiating signInWithRedirect');
+    showLoading(true);
     await signInWithRedirect(auth, provider);
   } catch (error) {
     console.error('Login failed:', error);
     showToast(`Login failed: ${error.message}`, true);
+    showLoading(false);
   }
 }
 
@@ -424,16 +485,13 @@ async function signOutUser() {
     }
 
     // Clear IndexedDB keypair
-    const dbRequest = indexedDB.open('dcrypt_db', 4);
+    const db = await initializeIndexedDB();
+    const tx = db.transaction('store', 'readwrite');
+    const store = tx.objectStore('store');
     await new Promise((resolve, reject) => {
-      dbRequest.onsuccess = () => {
-        const db = dbRequest.result;
-        const tx = db.transaction('store', 'readwrite');
-        const store = tx.objectStore('store');
-        store.delete('dcrypt_identity');
-        resolve();
-      };
-      dbRequest.onerror = () => reject(new Error('Failed to open IndexedDB during sign-out'));
+      const request = store.delete('dcrypt_identity');
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to delete keypair from IndexedDB'));
     });
 
     dht = null;
@@ -815,6 +873,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Update UI based on authentication state
     onAuthStateChanged(auth, async (user) => {
+      showLoading(true);
       if (user) {
         console.log('User is signed in:', user.uid);
         elements.signupButton.classList.add('hidden');
@@ -838,6 +897,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (!currentPath.includes('index.html') && currentPath !== '/datasharingApp/') {
             console.log('Redirecting to index.html for user role');
             window.location.href = '/datasharingApp/index.html';
+            showLoading(false);
             return;
           }
         } else {
@@ -850,6 +910,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (!currentPath.includes('node-instructions.html')) {
             console.log('Redirecting to node-instructions.html for node role');
             window.location.href = '/datasharingApp/node-instructions.html';
+            showLoading(false);
             return;
           }
         }
@@ -857,52 +918,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         await init(user.uid);
       } else {
         console.log('No user is signed in. Checking IndexedDB for keypair...');
-        const dbRequest = indexedDB.open('dcrypt_db', 4);
-        await new Promise((resolve, reject) => {
-          dbRequest.onsuccess = async () => {
-            const db = dbRequest.result;
-            const tx = db.transaction('store', 'readonly');
-            const store = tx.objectStore('store');
-            const request = store.get('dcrypt_identity');
-            request.onsuccess = async () => {
-              if (request.result?.value) {
-                const keypair = new TextEncoder().encode(request.result.value);
-                console.log('Found keypair in IndexedDB, initializing app...');
-                elements.signupButton.classList.add('hidden');
-                elements.loginButton.classList.add('hidden');
-                elements.logoutButton.classList.remove('hidden');
-                elements.publishButton.disabled = false;
-                elements.searchButton.disabled = false;
-                elements.depositButton.disabled = false;
-                elements.withdrawButton.disabled = false;
-                elements.toggleHistoryButton.disabled = false;
-                elements.buyHashButton.disabled = false;
-                await init(request.result.value);
-              } else {
-                console.log('No keypair found in IndexedDB.');
-                elements.signupButton.classList.remove('hidden');
-                elements.loginButton.classList.remove('hidden');
-                elements.logoutButton.classList.add('hidden');
-                elements.publishButton.disabled = true;
-                elements.searchButton.disabled = true;
-                elements.depositButton.disabled = true;
-                elements.withdrawButton.disabled = true;
-                elements.toggleHistoryButton.disabled = true;
-                elements.buyHashButton.disabled = true;
-                updateUIForSignOut();
-              }
-              resolve();
-            };
-            request.onerror = () => {
-              console.error('Failed to load keypair from IndexedDB');
-              reject(new Error('Failed to load keypair from IndexedDB'));
-            };
-          };
-          dbRequest.onerror = () => {
-            console.error('Failed to open IndexedDB');
-            reject(new Error('Failed to open IndexedDB'));
-          };
-        }).catch(() => {
+        try {
+          const db = await initializeIndexedDB();
+          const keypair = await loadKeypair(db);
+          if (keypair) {
+            console.log('Found keypair in IndexedDB, initializing app...');
+            elements.signupButton.classList.add('hidden');
+            elements.loginButton.classList.add('hidden');
+            elements.logoutButton.classList.remove('hidden');
+            elements.publishButton.disabled = false;
+            elements.searchButton.disabled = false;
+            elements.depositButton.disabled = false;
+            elements.withdrawButton.disabled = false;
+            elements.toggleHistoryButton.disabled = false;
+            elements.buyHashButton.disabled = false;
+            await init(new TextDecoder().decode(keypair));
+          } else {
+            console.log('No keypair found in IndexedDB.');
+            elements.signupButton.classList.remove('hidden');
+            elements.loginButton.classList.remove('hidden');
+            elements.logoutButton.classList.add('hidden');
+            elements.publishButton.disabled = true;
+            elements.searchButton.disabled = true;
+            elements.depositButton.disabled = true;
+            elements.withdrawButton.disabled = true;
+            elements.toggleHistoryButton.disabled = true;
+            elements.buyHashButton.disabled = true;
+            updateUIForSignOut();
+          }
+        } catch (error) {
+          console.error('Failed to initialize IndexedDB or load keypair:', error);
           elements.signupButton.classList.remove('hidden');
           elements.loginButton.classList.remove('hidden');
           elements.logoutButton.classList.add('hidden');
@@ -913,11 +958,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           elements.toggleHistoryButton.disabled = true;
           elements.buyHashButton.disabled = true;
           updateUIForSignOut();
-        });
+        }
       }
+      showLoading(false);
     }, (error) => {
       console.error('onAuthStateChanged error:', error);
       showToast('Failed to monitor authentication state.', true);
+      showLoading(false);
     });
 
     // Set up event listeners
