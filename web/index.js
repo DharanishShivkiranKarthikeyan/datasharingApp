@@ -98,10 +98,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         buyHashButton.disabled = false;
 
         // Handle role-based logic after sign-in
-        const role = localStorage.getItem('pendingRole') || 'user';
-        localStorage.removeItem('pendingRole'); // Clear the pending role
+        const pendingRole = localStorage.getItem('pendingRole') || 'user';
+        localStorage.removeItem('pendingRole'); // Clear immediately to avoid persistence
 
-        if (role === 'user') {
+        // Determine the current page
+        const currentPath = window.location.pathname;
+
+        if (pendingRole === 'user') {
           // Store user data in Firestore
           const userRef = doc(db, 'users', user.uid);
           await setDoc(userRef, {
@@ -109,7 +112,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             createdAt: Date.now(),
             balance: 0
           }, { merge: true });
-          window.location.href = '/datasharingApp/index.html';
+
+          // Only redirect if not already on index.html
+          if (!currentPath.includes('index.html') && currentPath !== '/datasharingApp/') {
+            console.log('Redirecting to index.html for user role');
+            window.location.href = '/datasharingApp/index.html';
+            return; // Exit to prevent further execution until redirect
+          }
         } else {
           // Store node data in Firestore
           const nodeId = generateUUID();
@@ -121,9 +130,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             createdAt: Date.now(),
             status: 'active'
           }, { merge: true });
-          window.location.href = '/datasharingApp/node-instructions.html';
+
+          // Only redirect if not already on node-instructions.html
+          if (!currentPath.includes('node-instructions.html')) {
+            console.log('Redirecting to node-instructions.html for node role');
+            window.location.href = '/datasharingApp/node-instructions.html';
+            return; // Exit to prevent further execution until redirect
+          }
         }
 
+        // Initialize the app if no redirect is needed
         await init(user.uid);
       } else {
         console.log('No user is signed in. Checking IndexedDB for keypair...');
@@ -486,7 +502,7 @@ export async function buySnippet(hash) {
 export async function buySnippetByHash(hashInput) {
   const hash = hashInput || document.getElementById('buyHashInput').value.trim();
   if (!hash) {
-    showToast('Please enter a valid hash.', true);
+    showToast('Please enter a valid hash.',true);
     return;
   }
   const result = await buySnippet(hash);
