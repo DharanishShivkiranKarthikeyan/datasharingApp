@@ -231,7 +231,7 @@ export async function handleSignup() {
   }
 
   isSigningUp = true;
-  const signupButton = document.querySelector('button[onclick="event.preventDefault(); window.handleSignup()"]');
+  const signupButton = document.getElementById("signupButton");
   if (signupButton) {
     signupButton.disabled = true;
     signupButton.textContent = 'Signing Up...';
