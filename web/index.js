@@ -247,29 +247,74 @@ function setupPremiumToggle() {
   }
 }
 
-// Initialize IndexedDB with schema setup
+// Initialize IndexedDB with schema setup and version check
 async function initializeIndexedDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('dcrypt_db', 4); // Match version with dht.js
+    // Start with version 1 to check the current state
+    const initialRequest = indexedDB.open('dcrypt_db', 1);
 
-    request.onupgradeneeded = (event) => {
-      const db = request.result;
-      console.log('onupgradeneeded triggered for dcrypt_db version', event.target.result.version);
+    initialRequest.onsuccess = () => {
+      const db = initialRequest.result;
+      const currentVersion = db.version;
+      console.log('Current IndexedDB version:', currentVersion);
+
+      // If 'store' doesn't exist, we need to upgrade the database
       if (!db.objectStoreNames.contains('store')) {
-        db.createObjectStore('store', { keyPath: 'id' });
-        console.log('Created object store: store in index.js');
+        console.log('Object store "store" not found, upgrading database...');
+        db.close();
+
+        // Open with a higher version to trigger onupgradeneeded
+        const upgradeRequest = indexedDB.open('dcrypt_db', 5); // Increment version to force upgrade
+
+        upgradeRequest.onupgradeneeded = (event) => {
+          const upgradeDb = upgradeRequest.result;
+          console.log('onupgradeneeded triggered for dcrypt_db version', upgradeDb.version);
+          if (!upgradeDb.objectStoreNames.contains('store')) {
+            upgradeDb.createObjectStore('store', { keyPath: 'id' });
+            console.log('Created object store: store in index.js');
+          }
+        };
+
+        upgradeRequest.onsuccess = () => {
+          console.log('IndexedDB upgraded and opened successfully');
+          resolve(upgradeRequest.result);
+        };
+
+        upgradeRequest.onerror = () => {
+          console.error('Failed to upgrade IndexedDB:', upgradeRequest.error);
+          reject(new Error(`Failed to upgrade IndexedDB: ${upgradeRequest.error.message}`));
+        };
+      } else {
+        // If 'store' exists, but we need to ensure version 5 for dht.js compatibility
+        if (currentVersion < 5) {
+          db.close();
+          const upgradeRequest = indexedDB.open('dcrypt_db', 5);
+
+          upgradeRequest.onupgradeneeded = (event) => {
+            const upgradeDb = upgradeRequest.result;
+            console.log('onupgradeneeded triggered for version alignment to 5');
+            // Let dht.js handle additional object stores
+          };
+
+          upgradeRequest.onsuccess = () => {
+            console.log('IndexedDB version aligned to 5');
+            resolve(upgradeRequest.result);
+          };
+
+          upgradeRequest.onerror = () => {
+            console.error('Failed to align IndexedDB version:', upgradeRequest.error);
+            reject(new Error(`Failed to align IndexedDB version: ${upgradeRequest.error.message}`));
+          };
+        } else {
+          console.log('IndexedDB already has "store" and is at version 5 or higher');
+          resolve(db);
+        }
       }
-      // Note: Other object stores ('transactions', 'offlineQueue', 'chunkCache') are created in dht.js
     };
 
-    request.onsuccess = () => {
-      console.log('IndexedDB opened successfully in initializeIndexedDB');
-      resolve(request.result);
-    };
-
-    request.onerror = () => {
-      console.error('Failed to open IndexedDB:', request.error);
-      reject(new Error(`Failed to open IndexedDB: ${request.error.message}`));
+    initialRequest.onerror = () => {
+      console.error('Failed to open IndexedDB initially:', initialRequest.error);
+      reject(new Error(`Failed to open IndexedDB initially: ${initialRequest.error.message}`));
     };
   });
 }
@@ -277,42 +322,52 @@ async function initializeIndexedDB() {
 // Load keypair from IndexedDB
 async function loadKeypair(db) {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('store', 'readonly');
-    const store = tx.objectStore('store');
-    const request = store.get('dcrypt_identity');
+    try {
+      const tx = db.transaction('store', 'readonly');
+      const store = tx.objectStore('store');
+      const request = store.get('dcrypt_identity');
 
-    request.onsuccess = () => {
-      if (request.result?.value) {
-        console.log('Loaded keypair from IndexedDB:', request.result.value);
-        resolve(new TextEncoder().encode(request.result.value));
-      } else {
-        resolve(null);
-      }
-    };
+      request.onsuccess = () => {
+        if (request.result?.value) {
+          console.log('Loaded keypair from IndexedDB:', request.result.value);
+          resolve(new TextEncoder().encode(request.result.value));
+        } else {
+          resolve(null);
+        }
+      };
 
-    request.onerror = () => {
-      console.error('Failed to load keypair from IndexedDB:', request.error);
-      reject(new Error('Failed to load keypair from IndexedDB'));
-    };
+      request.onerror = () => {
+        console.error('Failed to load keypair from IndexedDB:', request.error);
+        reject(new Error('Failed to load keypair from IndexedDB'));
+      };
+    } catch (error) {
+      console.error('Error accessing "store" object store:', error);
+      reject(error);
+    }
   });
 }
 
 // Store keypair in IndexedDB
 async function storeKeypair(db, userId) {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('store', 'readwrite');
-    const store = tx.objectStore('store');
-    const request = store.put({ id: 'dcrypt_identity', value: userId });
+    try {
+      const tx = db.transaction('store', 'readwrite');
+      const store = tx.objectStore('store');
+      const request = store.put({ id: 'dcrypt_identity', value: userId });
 
-    request.onsuccess = () => {
-      console.log('Stored keypair in IndexedDB:', userId);
-      resolve();
-    };
+      request.onsuccess = () => {
+        console.log('Stored keypair in IndexedDB:', userId);
+        resolve();
+      };
 
-    request.onerror = () => {
-      console.error('Failed to store keypair in IndexedDB:', request.error);
-      reject(new Error('Failed to store keypair in IndexedDB'));
-    };
+      request.onerror = () => {
+        console.error('Failed to store keypair in IndexedDB:', request.error);
+        reject(new Error('Failed to store keypair in IndexedDB'));
+      };
+    } catch (error) {
+      console.error('Error storing keypair in "store" object store:', error);
+      reject(error);
+    }
   });
 }
 
@@ -832,6 +887,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initializeFirebase();
   } catch (error) {
     console.error('Firebase initialization failed, aborting setup:', error);
+    showToast('Firebase initialization failed. Please check your configuration.', true);
     return;
   }
 
