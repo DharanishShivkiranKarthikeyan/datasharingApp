@@ -144,6 +144,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else {
         console.log('No user is signed in. Checking IndexedDB for keypair...');
         const dbRequest = indexedDB.open('dcrypt_db', 3);
+        dbRequest.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains('store')) {
+            db.createObjectStore('store', { keyPath: 'id' });
+            console.log('Created object store: store');
+          }
+        };
         dbRequest.onsuccess = async () => {
           const db = dbRequest.result;
           const tx = db.transaction('store', 'readonly');
@@ -347,6 +354,13 @@ export async function signOutUser() {
     }
     // Clear IndexedDB keypair
     const dbRequest = indexedDB.open('dcrypt_db', 3);
+    dbRequest.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('store')) {
+        db.createObjectStore('store', { keyPath: 'id' });
+        console.log('Created object store: store');
+      }
+    };
     dbRequest.onsuccess = () => {
       const db = dbRequest.result;
       const tx = db.transaction('store', 'readwrite');
@@ -502,7 +516,7 @@ export async function buySnippet(hash) {
 export async function buySnippetByHash(hashInput) {
   const hash = hashInput || document.getElementById('buyHashInput').value.trim();
   if (!hash) {
-    showToast('Please enter a valid hash.',true);
+    showToast('Please enter a valid hash.', true);
     return;
   }
   const result = await buySnippet(hash);
@@ -913,6 +927,13 @@ export async function init(userId) {
   try {
     let keypair;
     const dbRequest = indexedDB.open('dcrypt_db', 3);
+    dbRequest.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('store')) {
+        db.createObjectStore('store', { keyPath: 'id' });
+        console.log('Created object store: store');
+      }
+    };
     await new Promise((resolve, reject) => {
       dbRequest.onsuccess = () => {
         const db = dbRequest.result;
