@@ -1,16 +1,3 @@
-// Import Firebase services dynamically to catch initialization errors
-let auth, db;
-
-try {
-  const firebaseModule = import('./firebase.js');
-  auth = firebaseModule.auth;
-  db = firebaseModule.db;
-  console.log('Firebase services imported successfully');
-} catch (error) {
-  console.error('Failed to import Firebase services:', error);
-  showToast('Failed to initialize Firebase. Please try again later.', true);
-}
-
 // Import Firebase Auth and Firestore methods
 import { GoogleAuthProvider, onAuthStateChanged, signInWithRedirect, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
@@ -24,16 +11,40 @@ import './sw.js';
 import './utils.js';
 
 // Global state variables
+let auth = null;
+let db = null;
 let dht = null;
 let isNode = false;
 let userBalance = 0;
 let testPeers = [];
 let isSigningUp = false;
 
+// Initialize Firebase services asynchronously
+async function initializeFirebase() {
+  try {
+    const firebaseModule = await import('./firebase.js');
+    auth = firebaseModule.auth;
+    db = firebaseModule.db;
+    console.log('Firebase services initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize Firebase services:', error);
+    showToast('Failed to initialize Firebase. Please try again later.', true);
+    throw error; // Re-throw to handle in the caller
+  }
+}
+
 // Wait for the DOM to load before accessing elements
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
+
+  // Initialize Firebase before proceeding
+  try {
+    await initializeFirebase();
+  } catch (error) {
+    console.error('Firebase initialization failed, aborting setup:', error);
+    return; // Stop execution if Firebase fails to initialize
+  }
 
   // Check if the user is a node and redirect if on index.html
   const role = localStorage.getItem('role');
