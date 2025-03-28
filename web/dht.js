@@ -91,30 +91,49 @@ export class DHT {
 
   async initDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('dcrypt_db', 3);
-      request.onupgradeneeded = () => {
-        const db = request.result;
+      const request = indexedDB.open('dcrypt_db', 4); // Increment version to ensure schema updates
+      let db;
+
+      request.onupgradeneeded = (event) => {
+        console.log('onupgradeneeded triggered for dcrypt_db version', event.target.result.version);
+        db = request.result;
+        // Create all required object stores if they don't exist
         if (!db.objectStoreNames.contains('store')) {
           db.createObjectStore('store', { keyPath: 'id' });
+          console.log('Created object store: store');
         }
         if (!db.objectStoreNames.contains('transactions')) {
           db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
+          console.log('Created object store: transactions');
         }
         if (!db.objectStoreNames.contains('offlineQueue')) {
           db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
+          console.log('Created object store: offlineQueue');
         }
         if (!db.objectStoreNames.contains('chunkCache')) {
           db.createObjectStore('chunkCache', { keyPath: 'id' });
+          console.log('Created object store: chunkCache');
         }
       };
+
       request.onsuccess = () => {
         this.db = request.result;
-        this.loadIdentity();
-        this.loadOfflineQueue();
-        this.loadTransactions();
-        console.log('IndexedDB initialized successfully');
-        resolve();
+        console.log('IndexedDB opened successfully');
+
+        // Load data only after the database is fully initialized
+        Promise.all([
+          this.loadIdentity(),
+          this.loadOfflineQueue(),
+          this.loadTransactions()
+        ]).then(() => {
+          console.log('IndexedDB initialized successfully');
+          resolve();
+        }).catch(error => {
+          console.error('Failed to load data after IndexedDB initialization:', error);
+          reject(new Error(`Failed to load data: ${error.message}`));
+        });
       };
+
       request.onerror = (error) => {
         console.error('Failed to initialize IndexedDB:', error.target.error);
         reject(new Error(`Failed to initialize IndexedDB: ${error.target.error.message}`));
@@ -734,35 +753,38 @@ export class DHT {
     }
   }
 
-  loadIdentity() {
+  async loadIdentity() {
     if (!this.db) return;
-    this.dbGet('store', 'dcrypt_identity').then(hex => {
+    try {
+      const hex = await this.dbGet('store', 'dcrypt_identity');
       if (hex && hex.value && typeof hex.value === 'string') {
         this.keypair = this.hexToUint8Array(hex.value);
         console.log('Loaded identity from IndexedDB');
       }
-    }).catch(error => {
+    } catch (error) {
       console.error('Failed to load identity:', error);
-    });
+    }
   }
 
-  loadOfflineQueue() {
+  async loadOfflineQueue() {
     if (!this.db) return;
-    this.dbGetAll('offlineQueue').then(queue => {
+    try {
+      const queue = await this.dbGetAll('offlineQueue');
       this.offlineQueue = queue.map(q => q.value);
       console.log('Loaded offline queue:', this.offlineQueue);
-    }).catch(error => {
+    } catch (error) {
       console.error('Failed to load offline queue:', error);
-    });
+    }
   }
 
-  loadTransactions() {
+  async loadTransactions() {
     if (!this.db) return;
-    this.dbGetAll('transactions').then(transactions => {
+    try {
+      const transactions = await this.dbGetAll('transactions');
       console.log('Loaded transactions:', transactions);
-    }).catch(error => {
+    } catch (error) {
       console.error('Failed to load transactions:', error);
-    });
+    }
   }
 
   async dbPut(storeName, value) {
