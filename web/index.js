@@ -29,6 +29,8 @@ async function initializeFirebase() {
     // Set persistence to local to ensure auth state persists across redirects
     await setPersistence(auth, browserLocalPersistence);
     console.log('Firebase services initialized successfully with local persistence');
+    // Log the current user to debug auth state
+    console.log('Current Firebase user on init:', auth.currentUser);
   } catch (error) {
     console.error('Failed to initialize Firebase services:', error);
     showToast('Failed to initialize Firebase. Please try again later.', true);
@@ -488,7 +490,10 @@ async function handleSignup() {
 async function signIn() {
   console.log('signIn function called');
   try {
-    if (!auth) throw new Error('Firebase Auth is not initialized');
+    if (!auth) {
+      console.error('Firebase Auth is not initialized, initializing now...');
+      await initializeFirebase();
+    }
     const provider = new GoogleAuthProvider();
     console.log('Initiating signInWithRedirect');
     showLoading(true);
@@ -851,16 +856,6 @@ async function withdraw(amount) {
   }
 }
 
-// Wait for auth state to resolve
-async function waitForAuthState() {
-  return new Promise((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe();
-      resolve(user);
-    });
-  });
-}
-
 // Main DOMContentLoaded event handler
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
@@ -911,70 +906,83 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Node detected, but should have been redirected already.');
     }
 
-    // Wait for auth state to resolve to handle redirects
-    showLoading(true);
-    const user = await waitForAuthState();
-    if (user) {
-      console.log('User is signed in:', user.uid);
-      elements.signupButton.classList.add('hidden');
-      elements.loginButton.classList.add('hidden');
-      elements.logoutButton.classList.remove('hidden');
-      elements.publishButton.disabled = false;
-      elements.searchButton.disabled = false;
-      elements.depositButton.disabled = false;
-      elements.withdrawButton.disabled = false;
-      elements.toggleHistoryButton.disabled = false;
-      elements.buyHashButton.disabled = false;
+    // Update UI based on authentication state
+    onAuthStateChanged(auth, async (user) => {
+      showLoading(true);
+      if (user) {
+        console.log('User is signed in:', user.uid);
+        elements.signupButton.classList.add('hidden');
+        elements.loginButton.classList.add('hidden');
+        elements.logoutButton.classList.remove('hidden');
+        elements.publishButton.disabled = false;
+        elements.searchButton.disabled = false;
+        elements.depositButton.disabled = false;
+        elements.withdrawButton.disabled = false;
+        elements.toggleHistoryButton.disabled = false;
+        elements.buyHashButton.disabled = false;
 
-      const pendingRole = localStorage.getItem('pendingRole') || 'user';
-      localStorage.removeItem('pendingRole');
+        const pendingRole = localStorage.getItem('pendingRole') || 'user';
+        localStorage.removeItem('pendingRole');
 
-      const currentPath = window.location.pathname;
-      if (pendingRole === 'user') {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(userRef, { role: 'user', createdAt: Date.now(), balance: 0 }, { merge: true });
+        const currentPath = window.location.pathname;
+        if (pendingRole === 'user') {
+          const userRef = doc(db, 'users', user.uid);
+          await setDoc(userRef, { role: 'user', createdAt: Date.now(), balance: 0 }, { merge: true });
 
-        if (!currentPath.includes('index.html') && currentPath !== '/datasharingApp/') {
-          console.log('Redirecting to index.html for user role');
-          window.location.href = '/datasharingApp/index.html';
-          showLoading(false);
-          return;
-        }
-      } else {
-        const nodeId = generateUUID();
-        localStorage.setItem('nodeId', nodeId);
-        localStorage.setItem('role', 'node');
-        const nodeRef = doc(db, 'nodes', nodeId);
-        await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
-
-        if (!currentPath.includes('node-instructions.html')) {
-          console.log('Redirecting to node-instructions.html for node role');
-          window.location.href = '/datasharingApp/node-instructions.html';
-          showLoading(false);
-          return;
-        }
-      }
-
-      await init(user.uid);
-    } else {
-      console.log('No user is signed in. Checking IndexedDB for keypair...');
-      try {
-        const db = await initializeIndexedDB();
-        const keypair = await loadKeypair(db);
-        if (keypair) {
-          console.log('Found keypair in IndexedDB, initializing app...');
-          elements.signupButton.classList.add('hidden');
-          elements.loginButton.classList.add('hidden');
-          elements.logoutButton.classList.remove('hidden');
-          elements.publishButton.disabled = false;
-          elements.searchButton.disabled = false;
-          elements.depositButton.disabled = false;
-          elements.withdrawButton.disabled = false;
-          elements.toggleHistoryButton.disabled = false;
-          elements.buyHashButton.disabled = false;
-          await init(new TextDecoder().decode(keypair));
+          if (!currentPath.includes('index.html') && currentPath !== '/datasharingApp/') {
+            console.log('Redirecting to index.html for user role');
+            window.location.href = '/datasharingApp/index.html';
+            showLoading(false);
+            return;
+          }
         } else {
-          console.log('No keypair found in IndexedDB.');
+          const nodeId = generateUUID();
+          localStorage.setItem('nodeId', nodeId);
+          localStorage.setItem('role', 'node');
+          const nodeRef = doc(db, 'nodes', nodeId);
+          await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
+
+          if (!currentPath.includes('node-instructions.html')) {
+            console.log('Redirecting to node-instructions.html for node role');
+            window.location.href = '/datasharingApp/node-instructions.html';
+            showLoading(false);
+            return;
+          }
+        }
+
+        await init(user.uid);
+      } else {
+        console.log('No user is signed in. Checking IndexedDB for keypair...');
+        try {
+          const db = await initializeIndexedDB();
+          const keypair = await loadKeypair(db);
+          if (keypair) {
+            console.log('Found keypair in IndexedDB, initializing app...');
+            elements.signupButton.classList.add('hidden');
+            elements.loginButton.classList.add('hidden');
+            elements.logoutButton.classList.remove('hidden');
+            elements.publishButton.disabled = false;
+            elements.searchButton.disabled = false;
+            elements.depositButton.disabled = false;
+            elements.withdrawButton.disabled = false;
+            elements.toggleHistoryButton.disabled = false;
+            elements.buyHashButton.disabled = false;
+            await init(new TextDecoder().decode(keypair));
+          } else {
+            console.log('No keypair found in IndexedDB.');
+            elements.signupButton.classList.remove('hidden');
+            elements.loginButton.classList.remove('hidden');
+            elements.logoutButton.classList.add('hidden');
+            elements.publishButton.disabled = true;
+            elements.searchButton.disabled = true;
+            elements.depositButton.disabled = true;
+            elements.withdrawButton.disabled = true;
+            elements.toggleHistoryButton.disabled = true;
+            elements.buyHashButton.disabled = true;
+            updateUIForSignOut();
+          }
+        } catch (error) {
+          console.error('Failed to initialize IndexedDB or load keypair:', error);
           elements.signupButton.classList.remove('hidden');
           elements.loginButton.classList.remove('hidden');
           elements.logoutButton.classList.add('hidden');
@@ -986,21 +994,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           elements.buyHashButton.disabled = true;
           updateUIForSignOut();
         }
-      } catch (error) {
-        console.error('Failed to initialize IndexedDB or load keypair:', error);
-        elements.signupButton.classList.remove('hidden');
-        elements.loginButton.classList.remove('hidden');
-        elements.logoutButton.classList.add('hidden');
-        elements.publishButton.disabled = true;
-        elements.searchButton.disabled = true;
-        elements.depositButton.disabled = true;
-        elements.withdrawButton.disabled = true;
-        elements.toggleHistoryButton.disabled = true;
-        elements.buyHashButton.disabled = true;
-        updateUIForSignOut();
       }
-    }
-    showLoading(false);
+      showLoading(false);
+    }, (error) => {
+      console.error('onAuthStateChanged error:', error);
+      showToast('Failed to monitor authentication state.', true);
+      showLoading(false);
+    });
 
     // Set up event listeners
     elements.loginButton.addEventListener('click', (event) => {
