@@ -1,5 +1,5 @@
 // Import Firebase Auth and Firestore methods
-import { GoogleAuthProvider, onAuthStateChanged, signInWithRedirect, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 import { createTestPeers } from './testPeers.js';
@@ -7,7 +7,6 @@ import { createTestPeers } from './testPeers.js';
 // Import other JavaScript files to ensure they're included in the bundle
 import './signup.js';
 import './node-instructions.js';
-import './sw.js';
 import './utils.js';
 
 // Global state variables
@@ -27,7 +26,7 @@ async function initializeFirebase() {
     const firebaseModule = await import('./firebase.js');
     auth = firebaseModule.auth;
     db = firebaseModule.db;
-    // Set persistence to local to ensure auth state persists across redirects
+    // Set persistence to local to ensure auth state persists across sessions
     await setPersistence(auth, browserLocalPersistence);
     console.log('Firebase services initialized successfully with local persistence');
     console.log('Auth object:', auth);
@@ -473,10 +472,11 @@ async function handleSignup() {
   localStorage.setItem('pendingRole', role);
 
   try {
-    console.log('Auth state before signInWithRedirect in handleSignup:', auth);
+    console.log('Auth state before signInWithPopup in handleSignup:', auth);
     const provider = new GoogleAuthProvider();
-    console.log('Initiating signInWithRedirect for signup');
-    await signInWithRedirect(auth, provider);
+    console.log('Initiating signInWithPopup for signup');
+    const result = await signInWithPopup(auth, provider);
+    console.log('Sign-up successful, user:', result.user);
   } catch (error) {
     console.error('Signup failed:', error);
     showToast(`Sign-up failed: ${error.message}`, true);
@@ -496,11 +496,12 @@ async function signIn() {
       console.error('Firebase Auth is not initialized, initializing now...');
       await initializeFirebase();
     }
-    console.log('Auth state before signInWithRedirect:', auth);
+    console.log('Auth state before signInWithPopup:', auth);
     const provider = new GoogleAuthProvider();
-    console.log('Initiating signInWithRedirect');
+    console.log('Initiating signInWithPopup');
     showLoading(true);
-    await signInWithRedirect(auth, provider);
+    const result = await signInWithPopup(auth, provider);
+    console.log('Sign-in successful, user:', result.user);
   } catch (error) {
     console.error('Login failed:', error);
     showToast(`Login failed: ${error.message}`, true);
