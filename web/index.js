@@ -251,9 +251,9 @@ function setupPremiumToggle() {
   }
 }
 
-// Initialize IndexedDB with schema setup
+// Initialize IndexedDB with schema setup for all object stores
 async function initializeIndexedDB() {
-  const TARGET_VERSION = 5; // Match with dht.js
+  const TARGET_VERSION = 4; // Use version 5 consistently across the app
   return new Promise((resolve, reject) => {
     // Open the database without specifying a version to get the current version
     const checkRequest = indexedDB.open('dcrypt_db');
@@ -270,11 +270,23 @@ async function initializeIndexedDB() {
       openRequest.onupgradeneeded = (event) => {
         const db = openRequest.result;
         console.log('onupgradeneeded triggered for dcrypt_db version', db.version);
+        // Create all required object stores
         if (!db.objectStoreNames.contains('store')) {
           db.createObjectStore('store', { keyPath: 'id' });
           console.log('Created object store: store in index.js');
         }
-        // Note: Other object stores ('transactions', 'offlineQueue', 'chunkCache') are created in dht.js
+        if (!db.objectStoreNames.contains('transactions')) {
+          db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
+          console.log('Created object store: transactions in index.js');
+        }
+        if (!db.objectStoreNames.contains('offlineQueue')) {
+          db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
+          console.log('Created object store: offlineQueue in index.js');
+        }
+        if (!db.objectStoreNames.contains('chunkCache')) {
+          db.createObjectStore('chunkCache', { keyPath: 'id' });
+          console.log('Created object store: chunkCache in index.js');
+        }
       };
 
       openRequest.onsuccess = () => {
@@ -296,10 +308,10 @@ async function initializeIndexedDB() {
 }
 
 // Load keypair from IndexedDB
-async function loadKeypair(db) {
+async function loadKeypair(indexedDB) {
   return new Promise((resolve, reject) => {
     try {
-      const tx = db.transaction('store', 'readonly');
+      const tx = indexedDB.transaction('store', 'readonly');
       const store = tx.objectStore('store');
       const request = store.get('dcrypt_identity');
 
@@ -324,10 +336,10 @@ async function loadKeypair(db) {
 }
 
 // Store keypair in IndexedDB
-async function storeKeypair(db, userId) {
+async function storeKeypair(indexedDB, userId) {
   return new Promise((resolve, reject) => {
     try {
-      const tx = db.transaction('store', 'readwrite');
+      const tx = indexedDB.transaction('store', 'readwrite');
       const store = tx.objectStore('store');
       const request = store.put({ id: 'dcrypt_identity', value: userId });
 
@@ -358,12 +370,12 @@ async function init(userId) {
   showLoading(true);
   try {
     // Initialize IndexedDB
-    const db = await initializeIndexedDB();
+    const indexedDB = await initializeIndexedDB();
 
     // Load or store keypair
-    let keypair = await loadKeypair(db);
+    let keypair = await loadKeypair(indexedDB);
     if (!keypair && userId) {
-      await storeKeypair(db, userId);
+      await storeKeypair(indexedDB, userId);
       keypair = new TextEncoder().encode(userId);
     }
     if (!keypair) {
@@ -374,20 +386,19 @@ async function init(userId) {
     isNode = await checkIfUserIsNode(userId);
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
-    // Create test peers if not already created
-    if (testPeers.length === 0) {
-      console.log('Creating test peers...');
-      testPeers = await createTestPeers();
-      console.log('Test peers created:', testPeers.map((p) => p.peerId));
-    }
 
-    // Initialize DHT
+    // Initialize DHT with the IndexedDB instance
     console.log('Initializing DHT...');
-    dht = new DHT(keypair, isNode);
+    dht = new DHT(keypair, isNode, indexedDB); // Pass the IndexedDB instance to DHT
     window.dht = dht;
 
-    await dht.initDB();
-    console.log('IndexedDB initialized via DHT.');
+    // Load initial data (identity, offline queue, transactions)
+    await Promise.all([
+      dht.loadIdentity(),
+      dht.loadOfflineQueue(),
+      dht.loadTransactions(),
+    ]);
+    console.log('DHT initial data loaded.');
 
     await dht.initSwarm();
     console.log('DHT swarm initialized.');
@@ -523,8 +534,8 @@ async function signOutUser() {
     }
 
     // Clear IndexedDB keypair
-    const db = await initializeIndexedDB();
-    const tx = db.transaction('store', 'readwrite');
+    const indexedDB = await initializeIndexedDB();
+    const tx = indexedDB.transaction('store', 'readwrite');
     const store = tx.objectStore('store');
     await new Promise((resolve, reject) => {
       const request = store.delete('dcrypt_identity');
@@ -959,8 +970,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else {
         console.log('No user is signed in. Checking IndexedDB for keypair...');
         try {
-          const db = await initializeIndexedDB();
-          const keypair = await loadKeypair(db);
+          const indexedDB = await initializeIndexedDB();
+          const keypair = await loadKeypair(indexedDB);
           if (keypair) {
             console.log('Found keypair in IndexedDB, initializing app...');
             elements.signupButton?.classList.add('hidden');
