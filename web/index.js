@@ -22,6 +22,7 @@ let isInitializing = false;
 
 // Initialize Firebase services asynchronously
 async function initializeFirebase() {
+  console.log('Starting Firebase initialization...');
   try {
     const firebaseModule = await import('./firebase.js');
     auth = firebaseModule.auth;
@@ -29,7 +30,7 @@ async function initializeFirebase() {
     // Set persistence to local to ensure auth state persists across redirects
     await setPersistence(auth, browserLocalPersistence);
     console.log('Firebase services initialized successfully with local persistence');
-    // Log the current user to debug auth state
+    console.log('Auth object:', auth);
     console.log('Current Firebase user on init:', auth.currentUser);
   } catch (error) {
     console.error('Failed to initialize Firebase services:', error);
@@ -472,6 +473,7 @@ async function handleSignup() {
   localStorage.setItem('pendingRole', role);
 
   try {
+    console.log('Auth state before signInWithRedirect in handleSignup:', auth);
     const provider = new GoogleAuthProvider();
     console.log('Initiating signInWithRedirect for signup');
     await signInWithRedirect(auth, provider);
@@ -494,6 +496,7 @@ async function signIn() {
       console.error('Firebase Auth is not initialized, initializing now...');
       await initializeFirebase();
     }
+    console.log('Auth state before signInWithRedirect:', auth);
     const provider = new GoogleAuthProvider();
     console.log('Initiating signInWithRedirect');
     showLoading(true);
@@ -897,7 +900,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   // Check if we're on index.html
-  const isOnIndexPage = Object.values(elements).every((el) => el !== null && el !== undefined);
+  const isOnIndexPage = Object.values(elements).some((el) => el !== null && el !== undefined);
   if (isOnIndexPage) {
     console.log('On index.html, setting up UI and event listeners');
 
@@ -908,12 +911,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Update UI based on authentication state
     onAuthStateChanged(auth, async (user) => {
+      console.log('onAuthStateChanged triggered');
       showLoading(true);
       if (user) {
         console.log('User is signed in:', user.uid);
-        elements.signupButton.classList.add('hidden');
-        elements.loginButton.classList.add('hidden');
-        elements.logoutButton.classList.remove('hidden');
+        elements.signupButton?.classList.add('hidden');
+        elements.loginButton?.classList.add('hidden');
+        elements.logoutButton?.classList.remove('hidden');
         elements.publishButton.disabled = false;
         elements.searchButton.disabled = false;
         elements.depositButton.disabled = false;
@@ -958,9 +962,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           const keypair = await loadKeypair(db);
           if (keypair) {
             console.log('Found keypair in IndexedDB, initializing app...');
-            elements.signupButton.classList.add('hidden');
-            elements.loginButton.classList.add('hidden');
-            elements.logoutButton.classList.remove('hidden');
+            elements.signupButton?.classList.add('hidden');
+            elements.loginButton?.classList.add('hidden');
+            elements.logoutButton?.classList.remove('hidden');
             elements.publishButton.disabled = false;
             elements.searchButton.disabled = false;
             elements.depositButton.disabled = false;
@@ -970,9 +974,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             await init(new TextDecoder().decode(keypair));
           } else {
             console.log('No keypair found in IndexedDB.');
-            elements.signupButton.classList.remove('hidden');
-            elements.loginButton.classList.remove('hidden');
-            elements.logoutButton.classList.add('hidden');
+            elements.signupButton?.classList.remove('hidden');
+            elements.loginButton?.classList.remove('hidden');
+            elements.logoutButton?.classList.add('hidden');
             elements.publishButton.disabled = true;
             elements.searchButton.disabled = true;
             elements.depositButton.disabled = true;
@@ -983,9 +987,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         } catch (error) {
           console.error('Failed to initialize IndexedDB or load keypair:', error);
-          elements.signupButton.classList.remove('hidden');
-          elements.loginButton.classList.remove('hidden');
-          elements.logoutButton.classList.add('hidden');
+          elements.signupButton?.classList.remove('hidden');
+          elements.loginButton?.classList.remove('hidden');
+          elements.logoutButton?.classList.add('hidden');
           elements.publishButton.disabled = true;
           elements.searchButton.disabled = true;
           elements.depositButton.disabled = true;
@@ -1003,13 +1007,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Set up event listeners
-    elements.loginButton.addEventListener('click', (event) => {
+    elements.loginButton?.addEventListener('click', (event) => {
       event.preventDefault();
       console.log('Login button clicked');
       signIn();
     });
 
-    elements.logoutButton.addEventListener('click', (event) => {
+    elements.logoutButton?.addEventListener('click', (event) => {
       event.preventDefault();
       console.log('Logout button clicked');
       signOutUser();
