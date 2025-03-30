@@ -190,6 +190,8 @@ export class DHT {
   async initSwarm() {
     try {
       const basePeerId = new TextDecoder().decode(this.keypair);
+      console.log(basePeerId+"NIGGANIGGANIGGANIGGA");
+      console.log(this.keypair.substring(0,this.keypair/2));
       // Append a random suffix to ensure uniqueness across sessions
       const suffix = this.generateRandomSuffix();
       this.peerId = this.isNode ? `node-${basePeerId}-${suffix}` : `${basePeerId}-${suffix}`;
