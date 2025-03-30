@@ -100,8 +100,9 @@ export class DHT {
       let db;
   
       request.onupgradeneeded = (event) => {
-        console.log('onupgradeneeded triggered for dcrypt_db version', event.target.result.version);
+        console.log('Upgrading dcrypt_db to version', event.target.result.version);
         db = request.result;
+        // Create required object stores if they don’t exist
         if (!db.objectStoreNames.contains('store')) {
           db.createObjectStore('store', { keyPath: 'id' });
           console.log('Created object store: store');
@@ -121,28 +122,84 @@ export class DHT {
       };
   
       request.onsuccess = () => {
-        this.db = request.result;
-        console.log('IndexedDB opened successfully');
+        db = request.result;
+        console.log('IndexedDB opened successfully at version', db.version);
   
-        Promise.all([
-          this.loadIdentity(),
-          this.loadOfflineQueue(),
-          this.loadTransactions()
-        ]).then(() => {
-          console.log('IndexedDB initialized successfully');
-          resolve();
-        }).catch(error => {
-          console.error('Failed to load data after IndexedDB initialization:', error);
-          reject(new Error(`Failed to load data: ${error.message}`));
-        });
+        // Check if all required stores exist
+        const requiredStores = ['store', 'transactions', 'offlineQueue', 'chunkCache'];
+        const missingStores = requiredStores.filter(store => !db.objectStoreNames.contains(store));
+  
+        if (missingStores.length === 0) {
+          // All stores exist, proceed with initialization
+          this.db = db;
+          Promise.all([
+            this.loadIdentity(),
+            this.loadOfflineQueue(),
+            this.loadTransactions()
+          ]).then(() => {
+            console.log('IndexedDB initialized successfully');
+            resolve();
+          }).catch(error => {
+            console.error('Failed to load data after IndexedDB initialization:', error);
+            reject(new Error(`Failed to load data: ${error.message}`));
+          });
+        } else {
+          // Missing stores detected, upgrade the database
+          console.log('Missing stores:', missingStores, 'Upgrading database...');
+          db.close();
+          const upgradeRequest = indexedDB.open('dcrypt_db', 5); // Increment to version 5
+  
+          upgradeRequest.onupgradeneeded = (event) => {
+            db = event.target.result;
+            console.log('Upgrading to version', db.version);
+            // Create any missing stores
+            if (!db.objectStoreNames.contains('store')) {
+              db.createObjectStore('store', { keyPath: 'id' });
+              console.log('Created object store: store');
+            }
+            if (!db.objectStoreNames.contains('transactions')) {
+              db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
+              console.log('Created object store: transactions');
+            }
+            if (!db.objectStoreNames.contains('offlineQueue')) {
+              db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
+              console.log('Created object store: offlineQueue');
+            }
+            if (!db.objectStoreNames.contains('chunkCache')) {
+              db.createObjectStore('chunkCache', { keyPath: 'id' });
+              console.log('Created object store: chunkCache');
+            }
+          };
+  
+          upgradeRequest.onsuccess = () => {
+            this.db = upgradeRequest.result;
+            Promise.all([
+              this.loadIdentity(),
+              this.loadOfflineQueue(),
+              this.loadTransactions()
+            ]).then(() => {
+              console.log('Database upgraded and initialized successfully');
+              resolve();
+            }).catch(error => {
+              console.error('Failed to load data after database upgrade:', error);
+              reject(new Error(`Failed to load data: ${error.message}`));
+            });
+          };
+  
+          upgradeRequest.onerror = (error) => {
+            console.error('Failed to upgrade database:', error.target.error);
+            reject(new Error(`Failed to upgrade database: ${error.target.error.message}`));
+          };
+        }
       };
   
       request.onerror = (error) => {
-        console.error('Failed to initialize IndexedDB:', error.target.error);
-        reject(new Error(`Failed to initialize IndexedDB: ${error.target.error.message}`));
+        console.error('Failed to open database:', error.target.error);
+        reject(new Error(`Failed to open database: ${error.target.error.message}`));
       };
     });
   }
+
 
   async syncUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
