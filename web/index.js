@@ -250,8 +250,9 @@ function setupPremiumToggle() {
 
 // Initialize IndexedDB with schema setup
 async function initializeIndexedDB() {
-  const TARGET_VERSION = 4;
+  const TARGET_VERSION = 5; // Upgrade to version 5
   return new Promise((resolve, reject) => {
+    console.log('Starting IndexedDB initialization...');
     const checkRequest = indexedDB.open('dcrypt_db');
 
     checkRequest.onsuccess = () => {
@@ -264,16 +265,31 @@ async function initializeIndexedDB() {
 
       openRequest.onupgradeneeded = (event) => {
         const db = openRequest.result;
-        console.log('onupgradeneeded triggered for dcrypt_db version', db.version);
+        console.log('Upgrading database to version', TARGET_VERSION);
+        // Create all required object stores if they don’t exist
         if (!db.objectStoreNames.contains('store')) {
           db.createObjectStore('store', { keyPath: 'id' });
-          console.log('Created object store: store in index.js');
+          console.log('Created object store: store');
         }
+        if (!db.objectStoreNames.contains('transactions')) {
+          db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
+          console.log('Created object store: transactions');
+        }
+        if (!db.objectStoreNames.contains('offlineQueue')) {
+          db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
+          console.log('Created object store: offlineQueue');
+        }
+        if (!db.objectStoreNames.contains('chunkCache')) {
+          db.createObjectStore('chunkCache', { keyPath: 'id' });
+          console.log('Created object store: chunkCache');
+        }
+        console.log('Database upgrade completed');
       };
 
       openRequest.onsuccess = () => {
-        console.log('IndexedDB opened successfully at version', openRequest.result.version);
-        resolve(openRequest.result);
+        const db = openRequest.result;
+        console.log('IndexedDB opened successfully at version', db.version);
+        resolve(db);
       };
 
       openRequest.onerror = () => {
