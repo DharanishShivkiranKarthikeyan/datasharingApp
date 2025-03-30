@@ -40,15 +40,7 @@ export class DHT {
 
   // Utility to generate a random suffix for peerId
   generateRandomSuffix() {
-    let length = 5;
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  
-    
+    return Math.random().toString(36).substring(2, 8); // Generates a 6-character random string
   }
 
   async initializeKnownNodes() {
@@ -189,10 +181,7 @@ export class DHT {
 
   async initSwarm() {
     try {
-      const basePeerId = new TextDecoder().decode(this.keypair);
-      console.log(basePeerId+"NIGGANIGGANIGGANIGGA");
-      console.log(this.keypair);
-      console.log(String(this.keypair).substring(0,5));
+      const basePeerId = this.uint8ArrayToHex(this.keypair);
       // Append a random suffix to ensure uniqueness across sessions
       const suffix = this.generateRandomSuffix();
       this.peerId = this.isNode ? `node-${basePeerId}-${suffix}` : `${basePeerId}-${suffix}`;
