@@ -2,7 +2,6 @@
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
-import { createTestPeers } from './testPeers.js';
 
 // Import other JavaScript files to ensure they're included in the bundle
 import './signup.js';
@@ -15,7 +14,6 @@ let db = null;
 let dht = null;
 let isNode = false;
 let userBalance = 0;
-let testPeers = [];
 let isSigningUp = false;
 let isInitializing = false;
 
@@ -251,9 +249,9 @@ function setupPremiumToggle() {
   }
 }
 
-// Initialize IndexedDB with schema setup for all object stores
+// Initialize IndexedDB with schema setup
 async function initializeIndexedDB() {
-  const TARGET_VERSION = 4; // Use version 5 consistently across the app
+  const TARGET_VERSION = 4; // Match with dht.js version
   return new Promise((resolve, reject) => {
     // Open the database without specifying a version to get the current version
     const checkRequest = indexedDB.open('dcrypt_db');
@@ -270,22 +268,10 @@ async function initializeIndexedDB() {
       openRequest.onupgradeneeded = (event) => {
         const db = openRequest.result;
         console.log('onupgradeneeded triggered for dcrypt_db version', db.version);
-        // Create all required object stores
+        // Create object stores needed by the app
         if (!db.objectStoreNames.contains('store')) {
           db.createObjectStore('store', { keyPath: 'id' });
           console.log('Created object store: store in index.js');
-        }
-        if (!db.objectStoreNames.contains('transactions')) {
-          db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
-          console.log('Created object store: transactions in index.js');
-        }
-        if (!db.objectStoreNames.contains('offlineQueue')) {
-          db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
-          console.log('Created object store: offlineQueue in index.js');
-        }
-        if (!db.objectStoreNames.contains('chunkCache')) {
-          db.createObjectStore('chunkCache', { keyPath: 'id' });
-          console.log('Created object store: chunkCache in index.js');
         }
       };
 
@@ -386,19 +372,14 @@ async function init(userId) {
     isNode = await checkIfUserIsNode(userId);
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
-
-    // Initialize DHT with the IndexedDB instance
+    // Initialize DHT
     console.log('Initializing DHT...');
-    dht = new DHT(keypair, isNode, indexedDB); // Pass the IndexedDB instance to DHT
+    dht = new DHT(keypair, isNode);
     window.dht = dht;
 
-    // Load initial data (identity, offline queue, transactions)
-    await Promise.all([
-      dht.loadIdentity(),
-      dht.loadOfflineQueue(),
-      dht.loadTransactions(),
-    ]);
-    console.log('DHT initial data loaded.');
+    // Initialize the database in DHT
+    await dht.initDB();
+    console.log('DHT database initialized.');
 
     await dht.initSwarm();
     console.log('DHT swarm initialized.');
@@ -545,7 +526,6 @@ async function signOutUser() {
 
     dht = null;
     window.dht = null;
-    testPeers = [];
     userBalance = 0;
     updateUIForSignOut();
   } catch (error) {
@@ -744,133 +724,6 @@ async function flagSnippet(ipHash) {
   }
 }
 
-// Search for snippets
-async function searchSnippets(query) {
-  if (!isAuthenticated()) {
-    showToast('Please sign in to search.');
-    return;
-  }
-
-  showLoading(true);
-  try {
-    if (!dht) throw new Error('DHT not initialized');
-    if (!query) throw new Error('Search query is required');
-
-    console.log('Starting search with query:', query);
-    const publishedItemsTableBody = document.getElementById('publishedItems').querySelector('tbody');
-    publishedItemsTableBody.innerHTML = '';
-
-    const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
-    const snippetsData = {};
-    snippetsSnapshot.forEach((doc) => {
-      snippetsData[doc.id] = doc.data();
-    });
-
-    let foundResults = false;
-    const queryLower = query.toLowerCase();
-    dht.knownObjects.forEach((value, key) => {
-      const { content_type, description, tags } = value.metadata;
-      const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
-
-      if (
-        snippetInfo.reviewStatus === 'active' &&
-        (
-          content_type.toLowerCase().includes(queryLower) ||
-          (description && description.toLowerCase().includes(queryLower)) ||
-          (tags && tags.some((tag) => tag.toLowerCase().includes(queryLower)))
-        )
-      ) {
-        foundResults = true;
-        const isPremium = value.metadata.isPremium || false;
-        const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
-        const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td class="py-2 px-4">${content_type}</td>
-          <td class="py-2 px-4">${description || 'No description'}</td>
-          <td class="py-2 px-4">${tags.join(', ') || 'No tags'}</td>
-          <td class="py-2 px-4">${snippetInfo.averageRating} / 5</td>
-          <td class="py-2 px-4">
-            <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
-            <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
-          </td>
-        `;
-        publishedItemsTableBody.appendChild(row);
-      }
-    });
-
-    showToast(foundResults ? 'Search completed!' : 'No snippets found matching your search.');
-  } catch (error) {
-    console.error('searchSnippets failed:', error);
-    showToast(`Search failed: ${error.message}`, true);
-  } finally {
-    showLoading(false);
-  }
-}
-
-// Deposit funds
-async function deposit(amount) {
-  if (!isAuthenticated()) {
-    showToast('Please sign in to deposit.');
-    return;
-  }
-
-  showLoading(true);
-  try {
-    if (!dht) throw new Error('DHT not initialized');
-    if (!amount || amount <= 0) throw new Error('Invalid deposit amount');
-
-    const balance = await dht.getBalance(dht.keypair);
-    const newBalance = balance + amount;
-    await dht.putBalance(dht.keypair, newBalance);
-    await dht.dbAdd('transactions', { type: 'deposit', amount, timestamp: Date.now() });
-
-    showToast(`Deposited ${amount} DCT successfully!`);
-    await Promise.all([
-      updateTransactionHistory(),
-      updateBalanceDisplay(),
-      uploadUserDataToFirebase(),
-    ]);
-  } catch (error) {
-    console.error('deposit failed:', error);
-    showToast(`Deposit failed: ${error.message}`, true);
-  } finally {
-    showLoading(false);
-  }
-}
-
-// Withdraw funds
-async function withdraw(amount) {
-  if (!isAuthenticated()) {
-    showToast('Please sign in to withdraw.');
-    return;
-  }
-
-  showLoading(true);
-  try {
-    if (!dht) throw new Error('DHT not initialized');
-    if (!amount || amount <= 0) throw new Error('Invalid withdrawal amount');
-
-    const balance = await dht.getBalance(dht.keypair);
-    if (balance < amount) throw new Error('Insufficient balance');
-
-    await dht.putBalance(dht.keypair, balance - amount);
-    await dht.dbAdd('transactions', { type: 'withdraw', amount, timestamp: Date.now() });
-
-    showToast(`Withdrew ${amount} DCT successfully!`);
-    await Promise.all([
-      updateTransactionHistory(),
-      updateBalanceDisplay(),
-      uploadUserDataToFirebase(),
-    ]);
-  } catch (error) {
-    console.error('withdraw failed:', error);
-    showToast(`Withdrawal failed: ${error.message}`, true);
-  } finally {
-    showLoading(false);
-  }
-}
-
 // Main DOMContentLoaded event handler
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
@@ -1039,9 +892,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.publishSnippet = publishSnippet;
   window.buySnippet = buySnippet;
   window.buySnippetByHash = buySnippetByHash;
-  window.searchSnippets = searchSnippets;
-  window.deposit = deposit;
-  window.withdraw = withdraw;
   window.toggleTransactionHistory = toggleTransactionHistory;
   window.flagSnippet = flagSnippet;
   window.handleSignup = handleSignup;
