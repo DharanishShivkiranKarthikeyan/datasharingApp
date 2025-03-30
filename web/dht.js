@@ -98,7 +98,7 @@ export class DHT {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('dcrypt_db', 4);
       let db;
-
+  
       request.onupgradeneeded = (event) => {
         console.log('onupgradeneeded triggered for dcrypt_db version', event.target.result.version);
         db = request.result;
@@ -119,11 +119,11 @@ export class DHT {
           console.log('Created object store: chunkCache');
         }
       };
-
+  
       request.onsuccess = () => {
         this.db = request.result;
         console.log('IndexedDB opened successfully');
-
+  
         Promise.all([
           this.loadIdentity(),
           this.loadOfflineQueue(),
@@ -136,7 +136,7 @@ export class DHT {
           reject(new Error(`Failed to load data: ${error.message}`));
         });
       };
-
+  
       request.onerror = (error) => {
         console.error('Failed to initialize IndexedDB:', error.target.error);
         reject(new Error(`Failed to initialize IndexedDB: ${error.target.error.message}`));
