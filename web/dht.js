@@ -191,7 +191,8 @@ export class DHT {
     try {
       const basePeerId = new TextDecoder().decode(this.keypair);
       console.log(basePeerId+"NIGGANIGGANIGGANIGGA");
-      console.log(this.keypair.substring(0,this.keypair/2));
+      console.log(this.keypair);
+      console.log(String(this.keypair).substring(0,5));
       // Append a random suffix to ensure uniqueness across sessions
       const suffix = this.generateRandomSuffix();
       this.peerId = this.isNode ? `node-${basePeerId}-${suffix}` : `${basePeerId}-${suffix}`;
