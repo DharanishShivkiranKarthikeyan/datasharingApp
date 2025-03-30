@@ -354,9 +354,13 @@ async function init(userId) {
     const indexedDB = await initializeIndexedDB();
 
     let keypair = await loadKeypair(indexedDB);
+    console.log(keypair)
+    console.log(new TextDecoder.decode(userId));
+    console.log("on the index.js")
     if (!keypair && userId) {
       await storeKeypair(indexedDB, userId);
       keypair = new TextEncoder().encode(userId);
+      
     }
     if (!keypair) {
       throw new Error('No keypair available and no userId provided to create one');
