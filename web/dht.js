@@ -38,6 +38,11 @@ export class DHT {
     this.initializeKnownNodes();
   }
 
+  // Utility to generate a random suffix for peerId
+  generateRandomSuffix() {
+    return Math.random().toString(36).substring(2, 8); // Generates a 6-character random string
+  }
+
   async initializeKnownNodes() {
     const fetchNodes = async () => {
       try {
@@ -91,13 +96,12 @@ export class DHT {
 
   async initDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('dcrypt_db', 4); // Increment version to ensure schema updates
+      const request = indexedDB.open('dcrypt_db', 4);
       let db;
 
       request.onupgradeneeded = (event) => {
         console.log('onupgradeneeded triggered for dcrypt_db version', event.target.result.version);
         db = request.result;
-        // Create all required object stores if they don't exist
         if (!db.objectStoreNames.contains('store')) {
           db.createObjectStore('store', { keyPath: 'id' });
           console.log('Created object store: store');
@@ -120,7 +124,6 @@ export class DHT {
         this.db = request.result;
         console.log('IndexedDB opened successfully');
 
-        // Load data only after the database is fully initialized
         Promise.all([
           this.loadIdentity(),
           this.loadOfflineQueue(),
@@ -179,51 +182,85 @@ export class DHT {
   async initSwarm() {
     try {
       const basePeerId = new TextDecoder().decode(this.keypair);
-      this.peerId = this.isNode ? `node-${basePeerId}` : basePeerId;
+      // Append a random suffix to ensure uniqueness across sessions
+      const suffix = this.generateRandomSuffix();
+      this.peerId = this.isNode ? `node-${basePeerId}-${suffix}` : `${basePeerId}-${suffix}`;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
 
-      this.peer = new Peer(this.peerId, {
-        host: '0.peerjs.com',
-        port: 443,
-        path: '/',
-        secure: true,
-        debug: 2
-      });
+      const maxRetries = 3;
+      let attempt = 0;
 
-      return new Promise((resolve, reject) => {
-        this.peer.on('open', id => {
-          console.log(`PeerJS connection opened with ID: ${id}`);
-          this.activeNodes.add(this.peerId);
-
-          this.peer.on('connection', conn => {
-            this.handleConnection(conn);
+      while (attempt < maxRetries) {
+        try {
+          this.peer = new Peer(this.peerId, {
+            host: '0.peerjs.com',
+            port: 443,
+            path: '/',
+            secure: true,
+            debug: 2
           });
 
-          this.peer.on('error', err => {
-            console.error('PeerJS error:', err.type, err.message);
-            if (err.type === 'peer-unavailable') {
-              const peerId = err.message.match(/Peer (.+) is unavailable/)?.[1];
-              if (peerId) {
-                this.handlePeerDisconnect(peerId);
+          return await new Promise((resolve, reject) => {
+            this.peer.on('open', id => {
+              console.log(`PeerJS connection opened with ID: ${id}`);
+              this.activeNodes.add(this.peerId);
+
+              this.peer.on('connection', conn => {
+                this.handleConnection(conn);
+              });
+
+              this.peer.on('error', err => {
+                console.error('PeerJS error:', err.type, err.message);
+                if (err.type === 'peer-unavailable') {
+                  const peerId = err.message.match(/Peer (.+) is unavailable/)?.[1];
+                  if (peerId) {
+                    this.handlePeerDisconnect(peerId);
+                  }
+                }
+              });
+
+              this.peer.on('disconnected', () => {
+                console.log('PeerJS disconnected. Attempting to reconnect...');
+                this.peer.reconnect();
+              });
+
+              // Clean up PeerJS on page unload
+              window.addEventListener('beforeunload', () => {
+                if (this.peer && !this.peer.destroyed) {
+                  this.peer.destroy();
+                  console.log('PeerJS peer destroyed on page unload');
+                }
+              });
+
+              setInterval(() => this.discoverPeers(), 5000);
+              setInterval(() => this.measureLatency(), 60000);
+              resolve();
+            });
+
+            this.peer.on('error', err => {
+              console.error('PeerJS initialization error:', err);
+              reject(err);
+            });
+          });
+        } catch (error) {
+          if (error.message.includes('is taken')) {
+            console.warn(`Peer ID ${this.peerId} is taken. Retrying with a new ID... (Attempt ${attempt + 1}/${maxRetries})`);
+            attempt++;
+            if (attempt < maxRetries) {
+              const newSuffix = this.generateRandomSuffix();
+              this.peerId = this.isNode ? `node-${basePeerId}-${newSuffix}` : `${basePeerId}-${newSuffix}`;
+              console.log('Retrying with new Peer ID:', this.peerId);
+              if (this.peer && !this.peer.destroyed) {
+                this.peer.destroy();
               }
+              continue;
             }
-          });
+          }
+          throw error;
+        }
+      }
 
-          this.peer.on('disconnected', () => {
-            console.log('PeerJS disconnected. Attempting to reconnect...');
-            this.peer.reconnect();
-          });
-
-          setInterval(() => this.discoverPeers(), 5000);
-          setInterval(() => this.measureLatency(), 60000);
-          resolve();
-        });
-
-        this.peer.on('error', err => {
-          console.error('Failed to initialize PeerJS:', err);
-          reject(err);
-        });
-      });
+      throw new Error(`Failed to initialize PeerJS after ${maxRetries} attempts: ID conflict`);
     } catch (error) {
       console.error('initSwarm failed:', error);
       throw error;
@@ -236,7 +273,7 @@ export class DHT {
     console.log('Known peer IDs:', Array.from(this.nodes));
     const knownPeerIds = [
       ...Array.from(this.nodes)
-    ].filter(id => id !== this.peerId);
+    ].filter(id => !id.startsWith(this.peerId.split('-').slice(0, -1).join('-'))); // Avoid connecting to self
 
     if (knownPeerIds.length === 0) {
       console.warn('No known peers to connect to. Waiting for nodes to be discovered.');
@@ -446,7 +483,6 @@ export class DHT {
     if (!this.keypair) throw new Error('Keypair not initialized');
 
     try {
-      // Ensure tags is an array of strings
       const tags = Array.isArray(metadata.tags)
         ? metadata.tags.map(tag => {
             if (typeof tag !== 'string') {
@@ -454,20 +490,18 @@ export class DHT {
               return String(tag);
             }
             return tag;
-          }).filter(tag => tag.trim() !== '') // Remove empty strings
+          }).filter(tag => tag.trim() !== '')
         : [];
       console.log('Processed tags:', tags);
 
-      // Set pricing: free unless marked as premium with a price
       const isPremium = !!metadata.isPremium;
-      const priceUsd = isPremium ? (metadata.priceUsd || 30) : 0; // Free unless premium
+      const priceUsd = isPremium ? (metadata.priceUsd || 30) : 0;
 
       const contentArray = new Uint8Array(content);
       const contentType = metadata.content_type || '';
       const creatorId = this.keypair instanceof Uint8Array ? this.keypair : new Uint8Array(this.keypair);
       const fileTypeSafe = fileType || 'text/plain';
 
-      // Create the Intellectual Property object
       const ip = createIntellectualProperty(
         contentArray,
         contentType,
@@ -497,8 +531,8 @@ export class DHT {
       const updatedMetadata = {
         ...metadata,
         chunk_count: chunks.length,
-        isPremium, // Ensure metadata reflects the pricing
-        priceUsd: isPremium ? priceUsd : 0, // Free unless premium
+        isPremium,
+        priceUsd: isPremium ? priceUsd : 0,
       };
 
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
@@ -667,7 +701,7 @@ export class DHT {
     console.log(`Distributing commission of ${commission} to ${activeNodeList.length} nodes (${commissionPerNode} per node)`);
 
     for (const nodePeerId of activeNodeList) {
-      const nodeKeypair = this.hexToUint8Array(nodePeerId.replace('node-', ''));
+      const nodeKeypair = this.hexToUint8Array(nodePeerId.replace('node-', '').split('-')[0]); // Adjust for suffix
       const currentBalance = await this.getBalance(nodeKeypair);
       const newBalance = currentBalance + commissionPerNode;
       await this.putBalance(nodeKeypair, newBalance);
@@ -831,21 +865,37 @@ export class DHT {
     });
   }
 
-  uint8ArrayToHex(arr) {
-    return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  hexToUint8Array(hex) {
-    if (!hex || typeof hex !== 'string') return new Uint8Array(0);
-    const matches = hex.match(/.{1,2}/g);
-    return matches ? new Uint8Array(matches.map(byte => parseInt(byte, 16))) : new Uint8Array(0);
-  }
-
   broadcast(message) {
-    this.peers.forEach((peer, peerId) => {
-      if (peer.connected && peer.conn) {
-        peer.conn.send(message);
+    this.activeNodes.forEach(peerId => {
+      if (peerId !== this.peerId) {
+        const peer = this.peers.get(peerId);
+        if (peer && peer.connected && peer.conn) {
+          peer.conn.send(message);
+        }
       }
     });
+  }
+
+  uint8ArrayToHex(uint8Array) {
+    return Array.from(uint8Array)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  hexToUint8Array(hexString) {
+    return new Uint8Array(
+      hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+    );
+  }
+
+  // Method to clean up the peer when the DHT instance is destroyed
+  destroy() {
+    if (this.peer && !this.peer.destroyed) {
+      this.peer.destroy();
+      console.log('PeerJS peer destroyed');
+    }
+    this.peers.clear();
+    this.activeNodes.clear();
+    this.pendingRequests.clear();
   }
 }

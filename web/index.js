@@ -24,7 +24,6 @@ async function initializeFirebase() {
     const firebaseModule = await import('./firebase.js');
     auth = firebaseModule.auth;
     db = firebaseModule.db;
-    // Set persistence to local to ensure auth state persists across sessions
     await setPersistence(auth, browserLocalPersistence);
     console.log('Firebase services initialized successfully with local persistence');
     console.log('Auth object:', auth);
@@ -251,9 +250,8 @@ function setupPremiumToggle() {
 
 // Initialize IndexedDB with schema setup
 async function initializeIndexedDB() {
-  const TARGET_VERSION = 4; // Match with dht.js version
+  const TARGET_VERSION = 4;
   return new Promise((resolve, reject) => {
-    // Open the database without specifying a version to get the current version
     const checkRequest = indexedDB.open('dcrypt_db');
 
     checkRequest.onsuccess = () => {
@@ -262,13 +260,11 @@ async function initializeIndexedDB() {
       console.log('Current IndexedDB version:', currentVersion);
       db.close();
 
-      // Open the database at the target version (or higher if needed)
       const openRequest = indexedDB.open('dcrypt_db', Math.max(currentVersion, TARGET_VERSION));
 
       openRequest.onupgradeneeded = (event) => {
         const db = openRequest.result;
         console.log('onupgradeneeded triggered for dcrypt_db version', db.version);
-        // Create object stores needed by the app
         if (!db.objectStoreNames.contains('store')) {
           db.createObjectStore('store', { keyPath: 'id' });
           console.log('Created object store: store in index.js');
@@ -355,10 +351,8 @@ async function init(userId) {
   console.log('Initializing app with userId:', userId);
   showLoading(true);
   try {
-    // Initialize IndexedDB
     const indexedDB = await initializeIndexedDB();
 
-    // Load or store keypair
     let keypair = await loadKeypair(indexedDB);
     if (!keypair && userId) {
       await storeKeypair(indexedDB, userId);
@@ -368,16 +362,13 @@ async function init(userId) {
       throw new Error('No keypair available and no userId provided to create one');
     }
 
-    // Check if user is a node
     isNode = await checkIfUserIsNode(userId);
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
-    // Initialize DHT
     console.log('Initializing DHT...');
     dht = new DHT(keypair, isNode);
     window.dht = dht;
 
-    // Initialize the database in DHT
     await dht.initDB();
     console.log('DHT database initialized.');
 
@@ -387,7 +378,6 @@ async function init(userId) {
     await dht.syncUserData();
     console.log('User data synced.');
 
-    // Update UI
     await Promise.all([
       updateLiveFeed(),
       updateBalanceDisplay(),
@@ -396,7 +386,14 @@ async function init(userId) {
     console.log('UI updated.');
   } catch (error) {
     console.error('Error initializing application:', error);
-    showToast(`Initialization failed: ${error.message}`, true);
+    if (error.message.includes('ID conflict')) {
+      showToast('Failed to connect to the network due to an ID conflict. Please try signing out and signing in again.', true);
+    } else {
+      showToast(`Initialization failed: ${error.message}`, true);
+    }
+    if (dht) {
+      dht.destroy();
+    }
     dht = null;
     window.dht = null;
     userBalance = 0;
@@ -420,7 +417,7 @@ async function checkIfUserIsNode(userId) {
   }
 }
 
-// Handle signup process (sets the role and triggers Google Sign-In)
+// Handle signup process
 async function handleSignup() {
   console.log('handleSignup function called');
   if (isSigningUp) {
@@ -514,6 +511,13 @@ async function signOutUser() {
       showToast('Signed out successfully!');
     }
 
+    // Clean up DHT instance
+    if (dht) {
+      dht.destroy();
+      dht = null;
+      window.dht = null;
+    }
+
     // Clear IndexedDB keypair
     const indexedDB = await initializeIndexedDB();
     const tx = indexedDB.transaction('store', 'readwrite');
@@ -524,8 +528,6 @@ async function signOutUser() {
       request.onerror = () => reject(new Error('Failed to delete keypair from IndexedDB'));
     });
 
-    dht = null;
-    window.dht = null;
     userBalance = 0;
     updateUIForSignOut();
   } catch (error) {
@@ -729,7 +731,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
 
-  // Initialize Firebase
   try {
     await initializeFirebase();
   } catch (error) {
@@ -738,7 +739,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // Check for node redirect
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
   const isIndexPage = window.location.pathname.includes('index.html') || window.location.pathname === '/' || window.location.pathname === '/datasharingApp/';
@@ -748,7 +748,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // Get DOM elements for index.html
   const elements = {
     signupButton: document.getElementById('signupButton'),
     loginButton: document.getElementById('loginButton'),
@@ -764,7 +763,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     buyHashButton: document.getElementById('buyHashButton'),
   };
 
-  // Check if we're on index.html
   const isOnIndexPage = Object.values(elements).some((el) => el !== null && el !== undefined);
   if (isOnIndexPage) {
     console.log('On index.html, setting up UI and event listeners');
@@ -774,7 +772,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Node detected, but should have been redirected already.');
     }
 
-    // Update UI based on authentication state
     onAuthStateChanged(auth, async (user) => {
       console.log('onAuthStateChanged triggered');
       showLoading(true);
@@ -871,7 +868,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       showLoading(false);
     });
 
-    // Set up event listeners
     elements.loginButton?.addEventListener('click', (event) => {
       event.preventDefault();
       console.log('Login button clicked');
@@ -887,7 +883,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('Not on index.html, skipping index.html-specific setup');
   }
 
-  // Expose functions to the global scope
   window.logout = signOutUser;
   window.publishSnippet = publishSnippet;
   window.buySnippet = buySnippet;
