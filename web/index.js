@@ -355,9 +355,9 @@ async function init(userId) {
 
     let keypair = await loadKeypair(indexedDB);
     console.log(keypair)
-    console.log(TextDecoder.decode(userId));
     console.log("on the index.js")
     if (!keypair && userId) {
+      console.log("got here");
       await storeKeypair(indexedDB, userId);
       keypair = new TextEncoder().encode(userId);
       
