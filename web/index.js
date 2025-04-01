@@ -889,7 +889,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('Not on index.html, skipping index.html-specific setup');
 
     const nodeId = generateUUID();
-    console.log(node)
+    console.log(nodeId)
     localStorage.setItem('nodeId', nodeId);
     localStorage.setItem('role', 'node');
     const nodeRef = doc(db, 'nodes', nodeId);
