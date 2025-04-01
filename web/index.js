@@ -453,32 +453,9 @@ async function handleSignup() {
     console.log('Signup button disabled and text updated');
   }
 
-  const roleInputs = document.querySelectorAll('input[name="role"]');
-  if (!roleInputs.length) {
-    console.error('Role inputs not found');
-    showToast('Role selection not found.', true);
-    isSigningUp = false;
-    if (signupButton) {
-      signupButton.disabled = false;
-      signupButton.textContent = 'Sign Up with Google';
-    }
-    return;
-  }
-
-  const role = Array.from(roleInputs).find((input) => input.checked)?.value;
-  if (!role) {
-    console.error('No role selected');
-    showToast('Please select a role.', true);
-    isSigningUp = false;
-    if (signupButton) {
-      signupButton.disabled = false;
-      signupButton.textContent = 'Sign Up with Google';
-    }
-    return;
-  }
-
-  console.log('Selected role:', role);
-  localStorage.setItem('pendingRole', role);
+  
+  console.log('Selected role:', "user");
+  localStorage.setItem('pendingRole', "user");
 
   try {
     console.log('Auth state before signInWithPopup in handleSignup:', auth);
@@ -718,6 +695,22 @@ async function submitRating(ipHash, rating) {
   }
 }
 
+async function becomeNode(){
+  const nodeId = generateUUID();
+  console.log(nodeId)
+  localStorage.setItem('nodeId', nodeId);
+  localStorage.setItem('role', 'node');
+  const nodeRef = doc(db, 'nodes', nodeId);
+  await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
+
+  if (!window.location.pathname.includes('node-instructions.html')) {
+    console.log('Redirecting to node-instructions.html for node role');
+    window.location.href = '/datasharingApp/node-instructions.html';
+    showLoading(false);
+    return;
+  }
+}
+
 // Flag a snippet for moderation
 async function flagSnippet(ipHash) {
   const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
@@ -783,7 +776,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
     buyHashButton: document.getElementById('buyHashButton'),
   };
-  if (!window.location.href.includes("signup")) {
+  if (!window.location.href.includes("signup")||!window.location.href.includes("node")) {
     console.log('On index.html, setting up UI and event listeners');
 
     if (role === 'node' && nodeId) {
@@ -888,19 +881,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else {
     console.log('Not on index.html, skipping index.html-specific setup');
 
-    const nodeId = generateUUID();
-    console.log(nodeId)
-    localStorage.setItem('nodeId', nodeId);
-    localStorage.setItem('role', 'node');
-    const nodeRef = doc(db, 'nodes', nodeId);
-    await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
-
-    if (!window.location.pathname.includes('node-instructions.html')) {
-      console.log('Redirecting to node-instructions.html for node role');
-      window.location.href = '/datasharingApp/node-instructions.html';
-      showLoading(false);
-      return;
-    }
+   
   }
 
   window.logout = signOutUser;
@@ -910,4 +891,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.toggleTransactionHistory = toggleTransactionHistory;
   window.flagSnippet = flagSnippet;
   window.handleSignup = handleSignup;
+  window.becomeNode = becomeNode;
 })
