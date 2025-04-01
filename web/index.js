@@ -776,7 +776,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
     buyHashButton: document.getElementById('buyHashButton'),
   };
-  if (!window.location.href.includes("signup")||!window.location.href.includes("node")) {
+  if (window.location.href.includes("signup")||window.location.href.includes("node")) {
     console.log('On index.html, setting up UI and event listeners');
 
     if (role === 'node' && nodeId) {
