@@ -889,13 +889,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('Not on index.html, skipping index.html-specific setup');
 
     const nodeId = generateUUID();
-    console.log(nodeId+" NODE ID")
+    console.log(node)
     localStorage.setItem('nodeId', nodeId);
     localStorage.setItem('role', 'node');
     const nodeRef = doc(db, 'nodes', nodeId);
     await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
 
-    if (!currentPath.includes('node-instructions.html')) {
+    if (!window.location.pathname.includes('node-instructions.html')) {
       console.log('Redirecting to node-instructions.html for node role');
       window.location.href = '/datasharingApp/node-instructions.html';
       showLoading(false);
