@@ -16,9 +16,7 @@ import {
 } from './utils.js';
 
 export class DHT {
-
   constructor(keypair, isNode = false) {
-    
     this.peers = new Map();
     this.channels = new Map();
     this.knownObjects = new Map();
@@ -36,11 +34,9 @@ export class DHT {
     this.maxConnectionAttempts = 3;
     this.connectionRetryDelay = 5000;
     this.averageLatency = 0;
-    this.basePeerId = this.uint8ArrayToHex(this.keypair);
 
     this.initializeKnownNodes();
   }
-  
 
   // Utility to generate a random suffix for peerId
   generateRandomSuffix() {
@@ -188,6 +184,7 @@ export class DHT {
   async initSwarm() {
     try {
       console.log(this.keypair)
+      const basePeerId = this.uint8ArrayToHex(this.keypair);
       console.log(basePeerId)
       // Append a random suffix to ensure uniqueness across sessions
       const suffix = this.generateRandomSuffix();
@@ -280,7 +277,7 @@ export class DHT {
     console.log('Known peer IDs:', Array.from(this.nodes));
     const knownPeerIds = [
       ...Array.from(this.nodes)
-    ].filter(id => !id.includes(this.basePeerId)); // Avoid connecting to self
+    ].filter(id => !id.includes(this.uint8ArrayToHex(this.keypair))); // Avoid connecting to self
 
     if (knownPeerIds.length === 0) {
       console.warn('No known peers to connect to. Waiting for nodes to be discovered.');
