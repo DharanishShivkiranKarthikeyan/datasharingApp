@@ -783,11 +783,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
     buyHashButton: document.getElementById('buyHashButton'),
   };
-
-  const isOnIndexPage = Object.values(elements).some((el) => el !== null && el !== undefined);
-  console.log("isOnIndexPage: "+isOnIndexPage);
-  console.log("isOnIndexPage my way: "+!window.location.href.includes("signup"));
-  if (isOnIndexPage) {
+  if (!window.location.href.includes("signup")) {
     console.log('On index.html, setting up UI and event listeners');
 
     if (role === 'node' && nodeId) {
