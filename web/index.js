@@ -820,19 +820,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             showLoading(false);
             return;
           }
-        } else {
-          const nodeId = generateUUID();
-          localStorage.setItem('nodeId', nodeId);
-          localStorage.setItem('role', 'node');
-          const nodeRef = doc(db, 'nodes', nodeId);
-          await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
-
-          if (!currentPath.includes('node-instructions.html')) {
-            console.log('Redirecting to node-instructions.html for node role');
-            window.location.href = '/datasharingApp/node-instructions.html';
-            showLoading(false);
-            return;
-          }
         }
 
         await init(user.uid);
@@ -900,6 +887,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   } else {
     console.log('Not on index.html, skipping index.html-specific setup');
+
+    const nodeId = generateUUID();
+    console.log(nodeId+" NODE ID")
+    localStorage.setItem('nodeId', nodeId);
+    localStorage.setItem('role', 'node');
+    const nodeRef = doc(db, 'nodes', nodeId);
+    await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
+
+    if (!currentPath.includes('node-instructions.html')) {
+      console.log('Redirecting to node-instructions.html for node role');
+      window.location.href = '/datasharingApp/node-instructions.html';
+      showLoading(false);
+      return;
+    }
   }
 
   window.logout = signOutUser;
