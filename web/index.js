@@ -462,6 +462,7 @@ async function handleSignup() {
     console.log('Initiating signInWithPopup for signup');
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-up successful, user:', result.user);
+    window.location.href = '/datasharingApp/';
   } catch (error) {
     console.error('Signup failed:', error);
     showToast(`Sign-up failed: ${error.message}`, true);
