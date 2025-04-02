@@ -4,7 +4,6 @@ import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from '
 import { DHT } from './dht.js';
 
 // Import other JavaScript files to ensure they're included in the bundle
-import './signup.js';
 import './node-instructions.js';
 import './utils.js';
 

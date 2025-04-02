@@ -25,39 +25,14 @@ async function signUp() {
     console.log('Signed up user UID:', user.uid);
 
     // Check if the user wants to sign up as a node
-
-    if (isNode) {
-      // Register the user as a node in Firestore
-      const nodeRef = doc(db, 'nodes', user.uid);
-      await setDoc(nodeRef, {
-        uid: user.uid,
-        createdAt: Date.now(),
-        status: 'active'
-      });
-      console.log('User registered as a node');
-      showToast('Signed up as a node successfully!');
-      // Redirect to node instructions page
-      window.location.href = '/datasharingApp/node-instructions.html';
-    } else {
-      // Register the user as a regular user (optional: store user metadata)
-      const userRef = doc(db, 'users', user.uid);
-      await setDoc(userRef, {
-        uid: user.uid,
-        createdAt: Date.now(),
-        balance: 0
-      }, { merge: true });
-      console.log('User registered as a regular user');
-      showToast('Signed up successfully!');
-      // Redirect back to the dashboard
-      window.location.href = '/datasharingApp/index.html';
+      window.location.href = '/datasharingApp/';
     }
-  } catch (error) {
-    console.error('Sign-up failed:', error);
-    showToast(`Sign-up failed: ${error.message}`);
-  } finally {
-    showLoading(false);
-  }
+    finally{
+        showLoading(false)
+    }
+    
 }
+
 
 function showToast(message) {
   const toast = document.getElementById('toast');
