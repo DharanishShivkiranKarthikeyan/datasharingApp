@@ -143,7 +143,7 @@ export class DHT {
   async syncUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
-      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToBase64(this.keypair) });
+      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToBase64Url(this.keypair) });
       await this.updateBalance();
       if (this.activeNodes.size > 0) {
         await this.processOfflineQueue();
@@ -151,7 +151,7 @@ export class DHT {
       const userData = {
         type: 'userData',
         peerId: this.peerId,
-        keypair: this.uint8ArrayToBase64(this.keypair),
+        keypair: this.uint8ArrayToBase64Url(this.keypair),
         balance: await this.getBalance(this.keypair),
         timestamp: Date.now()
       };
@@ -166,7 +166,7 @@ export class DHT {
   async saveUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
-      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToBase64(this.keypair) });
+      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToBase64Url(this.keypair) });
       await this.updateBalance();
       console.log('User data saved to IndexedDB');
     } catch (error) {
@@ -177,7 +177,7 @@ export class DHT {
 
   async initSwarm() {
     try {
-      const basePeerId = this.uint8ArrayToBase64(this.keypair);
+      const basePeerId = this.uint8ArrayToBase64Url(this.keypair);
       this.peerId = this.isNode ? `node-${basePeerId}` : basePeerId;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
 
@@ -483,7 +483,7 @@ export class DHT {
 
       const contentBytes = getIpContent(ip);
       const ipHashBytes = await computeFullHash(contentBytes);
-      const ipHash = this.uint8ArrayToBase64(ipHashBytes);
+      const ipHash = this.uint8ArrayToBase64Url(ipHashBytes);
 
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
@@ -493,7 +493,7 @@ export class DHT {
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const chunkHashBytes = await getChunkHash(chunk);
-        const chunkHash = this.uint8ArrayToBase64(chunkHashBytes);
+        const chunkHash = this.uint8ArrayToBase64Url(chunkHashBytes);
         chunkHashes.push(chunkHash);
       }
 
@@ -671,7 +671,7 @@ export class DHT {
 
     for (const nodePeerId of activeNodeList) {
       const base64Keypair = nodePeerId.replace('node-', '');
-      const nodeKeypair = this.base64ToUint8Array(base64Keypair);
+      const nodeKeypair = this.base64UrlToUint8Array(base64Keypair);
       const currentBalance = await this.getBalance(nodeKeypair);
       const newBalance = currentBalance + commissionPerNode;
       await this.putBalance(nodeKeypair, newBalance);
@@ -691,7 +691,7 @@ export class DHT {
 
   async getBalance(keypair) {
     if (!this.db) throw new Error('IndexedDB not initialized');
-    const balance = await this.dbGet('store', 'balance_' + this.uint8ArrayToBase64(keypair));
+    const balance = await this.dbGet('store', 'balance_' + this.uint8ArrayToBase64Url(keypair));
     return balance && balance.value ? parseFloat(balance.value) : 0;
   }
 
@@ -700,12 +700,12 @@ export class DHT {
     if (typeof amount !== 'number' || amount < 0) {
       throw new Error('Invalid balance amount');
     }
-    await this.dbPut('store', { id: 'balance_' + this.uint8ArrayToBase64(keypair), value: amount.toString() });
+    await this.dbPut('store', { id: 'balance_' + this.uint8ArrayToBase64Url(keypair), value: amount.toString() });
     if (this.activeNodes.size > 0) {
       this.broadcast({
         type: 'userData',
         peerId: this.peerId,
-        keypair: this.uint8ArrayToBase64(this.keypair),
+        keypair: this.uint8ArrayToBase64Url(this.keypair),
         balance: amount,
         timestamp: Date.now()
       });
@@ -762,7 +762,7 @@ export class DHT {
     try {
       const base64 = await this.dbGet('store', 'dcrypt_identity');
       if (base64 && base64.value && typeof base64.value === 'string') {
-        this.keypair = this.base64ToUint8Array(base64.value);
+        this.keypair = this.base64UrlToUint8Array(base64.value);
         console.log('Loaded identity from IndexedDB');
       }
     } catch (error) {
@@ -846,13 +846,17 @@ export class DHT {
     });
   }
 
-  uint8ArrayToBase64(uint8Array) {
+  uint8ArrayToBase64Url(uint8Array) {
     const binaryString = String.fromCharCode(...uint8Array);
-    return btoa(binaryString);
+    const base64 = btoa(binaryString);
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
-
-  base64ToUint8Array(base64String) {
-    const binaryString = atob(base64String);
+  base64UrlToUint8Array(base64UrlString) {
+    let base64 = base64UrlString.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    const binaryString = atob(base64);
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
@@ -860,7 +864,6 @@ export class DHT {
     }
     return bytes;
   }
-
   destroy() {
     if (this.peer && !this.peer.destroyed) {
       this.peer.destroy();

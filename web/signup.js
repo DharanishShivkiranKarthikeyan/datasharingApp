@@ -25,8 +25,6 @@ async function signUp() {
     console.log('Signed up user UID:', user.uid);
 
     // Check if the user wants to sign up as a node
-    const role = document.querySelector('input[name="role"]:checked').value;
-    const isNode = role === 'node';
 
     if (isNode) {
       // Register the user as a node in Firestore
