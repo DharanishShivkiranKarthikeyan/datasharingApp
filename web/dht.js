@@ -23,7 +23,7 @@ export class DHT {
     this.chunkToPeerMap = new Map();
     this.pendingRequests = new Map();
     this.db = null;
-    this.keypair = keypair;
+    this.keypair = keypair; // Uint8Array
     this.activeNodes = new Set();
     this.nodes = new Set();
     this.offlineQueue = [];
@@ -36,11 +36,6 @@ export class DHT {
     this.averageLatency = 0;
 
     this.initializeKnownNodes();
-  }
-
-  // Utility to generate a random suffix for peerId
-  generateRandomSuffix() {
-    return Math.random().toString(36).substring(2, 8); // Generates a 6-character random string
   }
 
   async initializeKnownNodes() {
@@ -100,7 +95,7 @@ export class DHT {
       console.log('Starting DHT database initialization...');
       const request = indexedDB.open('dcrypt_db', TARGET_VERSION);
       let db;
-  
+
       request.onupgradeneeded = (event) => {
         console.log('Upgrading DHT database to version', TARGET_VERSION);
         db = request.result;
@@ -122,7 +117,7 @@ export class DHT {
         }
         console.log('DHT database upgrade completed');
       };
-  
+
       request.onsuccess = () => {
         db = request.result;
         console.log('DHT IndexedDB opened at version', db.version);
@@ -137,7 +132,7 @@ export class DHT {
           resolve();
         }
       };
-  
+
       request.onerror = (error) => {
         console.error('Failed to open DHT IndexedDB:', error.target.error);
         reject(new Error(`Failed to open IndexedDB: ${error.target.error.message}`));
@@ -145,11 +140,10 @@ export class DHT {
     });
   }
 
-
   async syncUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
-      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToHex(this.keypair) });
+      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToBase64(this.keypair) });
       await this.updateBalance();
       if (this.activeNodes.size > 0) {
         await this.processOfflineQueue();
@@ -157,7 +151,7 @@ export class DHT {
       const userData = {
         type: 'userData',
         peerId: this.peerId,
-        keypair: this.uint8ArrayToHex(this.keypair),
+        keypair: this.uint8ArrayToBase64(this.keypair),
         balance: await this.getBalance(this.keypair),
         timestamp: Date.now()
       };
@@ -172,7 +166,7 @@ export class DHT {
   async saveUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
-      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToHex(this.keypair) });
+      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToBase64(this.keypair) });
       await this.updateBalance();
       console.log('User data saved to IndexedDB');
     } catch (error) {
@@ -183,88 +177,59 @@ export class DHT {
 
   async initSwarm() {
     try {
-      console.log(this.keypair)
-      const basePeerId = this.uint8ArrayToHex(this.keypair);
-      console.log(basePeerId)
-      // Append a random suffix to ensure uniqueness across sessions
-      const suffix = this.generateRandomSuffix();
-      this.peerId = this.isNode ? `node-${basePeerId}-${suffix}` : `${basePeerId}-${suffix}`;
+      const basePeerId = this.uint8ArrayToBase64(this.keypair);
+      this.peerId = this.isNode ? `node-${basePeerId}` : basePeerId;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
 
-      const maxRetries = 3;
-      let attempt = 0;
+      this.peer = new Peer(this.peerId, {
+        host: '0.peerjs.com',
+        port: 443,
+        path: '/',
+        secure: true,
+        debug: 2
+      });
 
-      while (attempt < maxRetries) {
-        try {
-          this.peer = new Peer(this.peerId, {
-            host: '0.peerjs.com',
-            port: 443,
-            path: '/',
-            secure: true,
-            debug: 2
+      return await new Promise((resolve, reject) => {
+        this.peer.on('open', id => {
+          console.log(`PeerJS connection opened with ID: ${id}`);
+          this.activeNodes.add(this.peerId);
+
+          this.peer.on('connection', conn => {
+            this.handleConnection(conn);
           });
 
-          return await new Promise((resolve, reject) => {
-            this.peer.on('open', id => {
-              console.log(`PeerJS connection opened with ID: ${id}`);
-              this.activeNodes.add(this.peerId);
-
-              this.peer.on('connection', conn => {
-                this.handleConnection(conn);
-              });
-
-              this.peer.on('error', err => {
-                console.error('PeerJS error:', err.type, err.message);
-                if (err.type === 'peer-unavailable') {
-                  const peerId = err.message.match(/Peer (.+) is unavailable/)?.[1];
-                  if (peerId) {
-                    this.handlePeerDisconnect(peerId);
-                  }
-                }
-              });
-
-              this.peer.on('disconnected', () => {
-                console.log('PeerJS disconnected. Attempting to reconnect...');
-                this.peer.reconnect();
-              });
-
-              // Clean up PeerJS on page unload
-              window.addEventListener('beforeunload', () => {
-                if (this.peer && !this.peer.destroyed) {
-                  this.peer.destroy();
-                  console.log('PeerJS peer destroyed on page unload');
-                }
-              });
-
-              setInterval(() => this.discoverPeers(), 5000);
-              setInterval(() => this.measureLatency(), 60000);
-              resolve();
-            });
-
-            this.peer.on('error', err => {
-              console.error('PeerJS initialization error:', err);
-              reject(err);
-            });
-          });
-        } catch (error) {
-          if (error.message.includes('is taken')) {
-            console.warn(`Peer ID ${this.peerId} is taken. Retrying with a new ID... (Attempt ${attempt + 1}/${maxRetries})`);
-            attempt++;
-            if (attempt < maxRetries) {
-              const newSuffix = this.generateRandomSuffix();
-              this.peerId = this.isNode ? `node-${basePeerId}-${newSuffix}` : `${basePeerId}-${newSuffix}`;
-              console.log('Retrying with new Peer ID:', this.peerId);
-              if (this.peer && !this.peer.destroyed) {
-                this.peer.destroy();
+          this.peer.on('error', err => {
+            console.error('PeerJS error:', err.type, err.message);
+            if (err.type === 'peer-unavailable') {
+              const peerId = err.message.match(/Peer (.+) is unavailable/)?.[1];
+              if (peerId) {
+                this.handlePeerDisconnect(peerId);
               }
-              continue;
             }
-          }
-          throw error;
-        }
-      }
+          });
 
-      throw new Error(`Failed to initialize PeerJS after ${maxRetries} attempts: ID conflict`);
+          this.peer.on('disconnected', () => {
+            console.log('PeerJS disconnected. Attempting to reconnect...');
+            this.peer.reconnect();
+          });
+
+          window.addEventListener('beforeunload', () => {
+            if (this.peer && !this.peer.destroyed) {
+              this.peer.destroy();
+              console.log('PeerJS peer destroyed on page unload');
+            }
+          });
+
+          setInterval(() => this.discoverPeers(), 5000);
+          setInterval(() => this.measureLatency(), 60000);
+          resolve();
+        });
+
+        this.peer.on('error', err => {
+          console.error('PeerJS initialization error:', err);
+          reject(err);
+        });
+      });
     } catch (error) {
       console.error('initSwarm failed:', error);
       throw error;
@@ -277,7 +242,7 @@ export class DHT {
     console.log('Known peer IDs:', Array.from(this.nodes));
     const knownPeerIds = [
       ...Array.from(this.nodes)
-    ].filter(id => !id.includes(this.uint8ArrayToHex(this.keypair))); // Avoid connecting to self
+    ].filter(id => id !== this.peerId); // Avoid connecting to self
 
     if (knownPeerIds.length === 0) {
       console.warn('No known peers to connect to. Waiting for nodes to be discovered.');
@@ -518,7 +483,7 @@ export class DHT {
 
       const contentBytes = getIpContent(ip);
       const ipHashBytes = await computeFullHash(contentBytes);
-      const ipHash = this.uint8ArrayToHex(ipHashBytes);
+      const ipHash = this.uint8ArrayToBase64(ipHashBytes);
 
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
@@ -528,7 +493,7 @@ export class DHT {
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const chunkHashBytes = await getChunkHash(chunk);
-        const chunkHash = this.uint8ArrayToHex(chunkHashBytes);
+        const chunkHash = this.uint8ArrayToBase64(chunkHashBytes);
         chunkHashes.push(chunkHash);
       }
 
@@ -681,7 +646,7 @@ export class DHT {
     });
   }
 
-  handleChunkResponse(data) {
+  handleChunkResponse均匀(data) {
     const { requestId, chunkHash, chunkData } = data;
     const request = this.pendingRequests.get(requestId);
     if (request) {
@@ -705,7 +670,8 @@ export class DHT {
     console.log(`Distributing commission of ${commission} to ${activeNodeList.length} nodes (${commissionPerNode} per node)`);
 
     for (const nodePeerId of activeNodeList) {
-      const nodeKeypair = this.hexToUint8Array(nodePeerId.replace('node-', '').split('-')[0]); // Adjust for suffix
+      const base64Keypair = nodePeerId.replace('node-', '');
+      const nodeKeypair = this.base64ToUint8Array(base64Keypair);
       const currentBalance = await this.getBalance(nodeKeypair);
       const newBalance = currentBalance + commissionPerNode;
       await this.putBalance(nodeKeypair, newBalance);
@@ -725,7 +691,7 @@ export class DHT {
 
   async getBalance(keypair) {
     if (!this.db) throw new Error('IndexedDB not initialized');
-    const balance = await this.dbGet('store', 'balance_' + this.uint8ArrayToHex(keypair));
+    const balance = await this.dbGet('store', 'balance_' + this.uint8ArrayToBase64(keypair));
     return balance && balance.value ? parseFloat(balance.value) : 0;
   }
 
@@ -734,12 +700,12 @@ export class DHT {
     if (typeof amount !== 'number' || amount < 0) {
       throw new Error('Invalid balance amount');
     }
-    await this.dbPut('store', { id: 'balance_' + this.uint8ArrayToHex(keypair), value: amount.toString() });
+    await this.dbPut('store', { id: 'balance_' + this.uint8ArrayToBase64(keypair), value: amount.toString() });
     if (this.activeNodes.size > 0) {
       this.broadcast({
         type: 'userData',
         peerId: this.peerId,
-        keypair: this.uint8ArrayToHex(this.keypair),
+        keypair: this.uint8ArrayToBase64(this.keypair),
         balance: amount,
         timestamp: Date.now()
       });
@@ -794,9 +760,9 @@ export class DHT {
   async loadIdentity() {
     if (!this.db) return;
     try {
-      const hex = await this.dbGet('store', 'dcrypt_identity');
-      if (hex && hex.value && typeof hex.value === 'string') {
-        this.keypair = this.hexToUint8Array(hex.value);
+      const base64 = await this.dbGet('store', 'dcrypt_identity');
+      if (base64 && base64.value && typeof base64.value === 'string') {
+        this.keypair = this.base64ToUint8Array(base64.value);
         console.log('Loaded identity from IndexedDB');
       }
     } catch (error) {
@@ -880,19 +846,21 @@ export class DHT {
     });
   }
 
-  uint8ArrayToHex(uint8Array) {
-    return Array.from(uint8Array)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+  uint8ArrayToBase64(uint8Array) {
+    const binaryString = String.fromCharCode(...uint8Array);
+    return btoa(binaryString);
   }
 
-  hexToUint8Array(hexString) {
-    return new Uint8Array(
-      hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
-    );
+  base64ToUint8Array(base64String) {
+    const binaryString = atob(base64String);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
   }
 
-  // Method to clean up the peer when the DHT instance is destroyed
   destroy() {
     if (this.peer && !this.peer.destroyed) {
       this.peer.destroy();
