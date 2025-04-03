@@ -83,31 +83,33 @@ function showLoading(show,fadeIn) {
 }
 
 // Fade out function
-function fadeOut(element) {
-  var op = 1;  // initial opacity
+function fadeIn(element) {
+  var op = 0; // Initial opacity
+  element.style.opacity = op;
+  element.style.display = 'block';
   var timer = setInterval(function () {
-    if (op <= 0.1) {
+    op += 0.1;
+    if (op >= 1) {
+      op = 1;
       clearInterval(timer);
-      element.style.display = 'none';
     }
     element.style.opacity = op;
     element.style.filter = 'alpha(opacity=' + op * 100 + ")";
-    op -= op * 0.1;
   }, 50);
 }
 
-// Fade in function (used elsewhere, but not for #background-loading)
-function fadeIn(element) {
-  var op = 0;  // initial opacity
-  element.style.display = 'block';
+function fadeOut(element) {
+  var op = 1; // Initial opacity
   var timer = setInterval(function () {
-    if (op >= 1) {
+    op -= 0.1;
+    if (op <= 0) {
+      op = 0;
+      element.style.display = 'none';
       clearInterval(timer);
     }
     element.style.opacity = op;
     element.style.filter = 'alpha(opacity=' + op * 100 + ")";
-    op += op * 0.1;
-  }, 10);
+  }, 50);
 }
 
 // Update UI when user signs out
@@ -355,11 +357,12 @@ async function loadKeypair(indexedDB) {
       const request = store.get('dcrypt_identity');
 
       request.onsuccess = () => {
-        if (request.result?.value) {
-          console.log('Loaded keypair from IndexedDB:', request.result.value);
-          // Return the keypair as a string, to be encoded later when needed
-          resolve(request.result.value);
+        const value = request.result?.value;
+        if (value && typeof value === 'string') {
+          console.log('Loaded keypair from IndexedDB:', value);
+          resolve(value);
         } else {
+          console.log('Invalid keypair found in IndexedDB, treating as not found.');
           resolve(null);
         }
       };
@@ -524,17 +527,16 @@ async function signIn() {
     console.log('Auth state before signInWithPopup:', auth);
     const provider = new GoogleAuthProvider();
     console.log('Initiating signInWithPopup');
-    showLoading(true); // Show immediately
+    showLoading(true, true); // Fade in
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-in successful, user:', result.user);
   } catch (error) {
     console.error('Login failed:', error);
     showToast(`Login failed: ${error.message}`, true);
   } finally {
-    showLoading(false); // Fade out when done
+    showLoading(false); // Fade out
   }
 }
-
 // Sign out the user
 async function signOutUser() {
   console.log('signOutUser function called');
@@ -580,7 +582,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     return;
   }
 
-  showLoading(true); // Show immediately
+  showLoading(true,true); // Show immediately
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!title) throw new Error('Title is required');
@@ -646,7 +648,7 @@ async function buySnippet(hash) {
     return null;
   }
 
-  showLoading(true); // Show immediately
+  showLoading(true,true); // Show immediately
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
@@ -808,7 +810,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     showLoading(true);
 
     // Create a promise that resolves after 3 seconds
-    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 10000));
+    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3000));
 
     try {
       // Wait for both initialization and minimum loading time

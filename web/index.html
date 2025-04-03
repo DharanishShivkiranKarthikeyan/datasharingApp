@@ -146,28 +146,32 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js"></script>
       <script>
-      VANTA.TOPOLOGY({
+        const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3500));
+
+        minLoadingTime
+        VANTA.TOPOLOGY({
         el: "#background-default",
         mouseControls: true,
         touchControls: true,
         gyroControls: false,
-        minHeight: 200.00,
-        minWidth: 200.00,
-        scale: 5.00,
-        scaleMobile: 5.00,
+        minHeight: 400.00,
+        minWidth: 400.00,
+        scale: 8.00,
+        scaleMobile: 8.00,
         color: 0x7a00e8,
         backgroundColor: 0x000000,
         speed: 10.0
       })
+      
       </script>
   <script>
     VANTA.BIRDS({
       el: "#background-loading",
-      mouseControls: true,
-      touchControls: true,
+      mouseControls: false,
+      touchControls: false,
       gyroControls: false,
-      minHeight: 200.00,
-      minWidth: 200.00,
+      minHeight: 100.00,
+      minWidth: 100.00,
       scale: 1.00,
       scaleMobile: 1.00,
       backgroundColor: 0x00000,
