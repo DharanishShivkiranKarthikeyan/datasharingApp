@@ -23,7 +23,7 @@ export class DHT {
     this.chunkToPeerMap = new Map();
     this.pendingRequests = new Map();
     this.db = null;
-    this.keypair = keypair; // Uint8Array
+    this.keypair = keypair; // Now a string (e.g., Firebase UID)
     this.activeNodes = new Set();
     this.nodes = new Set();
     this.offlineQueue = [];
@@ -34,6 +34,10 @@ export class DHT {
     this.maxConnectionAttempts = 3;
     this.connectionRetryDelay = 5000;
     this.averageLatency = 0;
+
+    console.log('DHT initialized with keypair:', keypair);
+    console.log('Keypair length:', keypair.length);
+    console.log('Keypair suitability:', keypair.length <= 40 ? 'Good' : 'Warning (large keypair)');
 
     this.initializeKnownNodes();
   }
@@ -143,7 +147,7 @@ export class DHT {
   async syncUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
-      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToBase64Url(this.keypair) });
+      await this.dbPut('store', { id: 'dcrypt_identity', value: this.keypair }); // Store as string
       await this.updateBalance();
       if (this.activeNodes.size > 0) {
         await this.processOfflineQueue();
@@ -151,7 +155,7 @@ export class DHT {
       const userData = {
         type: 'userData',
         peerId: this.peerId,
-        keypair: this.uint8ArrayToBase64Url(this.keypair),
+        keypair: this.keypair, // Send as string
         balance: await this.getBalance(this.keypair),
         timestamp: Date.now()
       };
@@ -166,7 +170,7 @@ export class DHT {
   async saveUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
-      await this.dbPut('store', { id: 'dcrypt_identity', value: this.uint8ArrayToBase64Url(this.keypair) });
+      await this.dbPut('store', { id: 'dcrypt_identity', value: this.keypair }); // Store as string
       await this.updateBalance();
       console.log('User data saved to IndexedDB');
     } catch (error) {
@@ -177,8 +181,7 @@ export class DHT {
 
   async initSwarm() {
     try {
-      const basePeerId = this.uint8ArrayToBase64Url(this.keypair);
-      this.peerId = this.isNode ? `node-${basePeerId}` : basePeerId;
+      this.peerId = this.isNode ? `node-${this.keypair}` : this.keypair;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
 
       this.peer = new Peer(this.peerId, {
@@ -453,13 +456,7 @@ export class DHT {
 
     try {
       const tags = Array.isArray(metadata.tags)
-        ? metadata.tags.map(tag => {
-            if (typeof tag !== 'string') {
-              console.warn(`Invalid tag: ${tag}, converting to string`);
-              return String(tag);
-            }
-            return tag;
-          }).filter(tag => tag.trim() !== '')
+        ? metadata.tags.map(tag => String(tag).trim()).filter(tag => tag !== '')
         : [];
       console.log('Processed tags:', tags);
 
@@ -468,7 +465,7 @@ export class DHT {
 
       const contentArray = new Uint8Array(content);
       const contentType = metadata.content_type || '';
-      const creatorId = this.keypair instanceof Uint8Array ? this.keypair : new Uint8Array(this.keypair);
+      const creatorId = this.keypair; // Use string keypair directly
       const fileTypeSafe = fileType || 'text/plain';
 
       const ip = createIntellectualProperty(
@@ -588,7 +585,7 @@ export class DHT {
 
       const decryptedData = [];
       for (const { chunk } of sortedChunks) {
-        const decryptedChunk = await decryptChunk(chunk, Array.from(this.keypair));
+        const decryptedChunk = await decryptChunk(chunk, this.keypair.split(''));
         decryptedData.push(decryptedChunk);
       }
 
@@ -689,9 +686,10 @@ export class DHT {
     }
   }
 
+  
   async getBalance(keypair) {
     if (!this.db) throw new Error('IndexedDB not initialized');
-    const balance = await this.dbGet('store', 'balance_' + this.uint8ArrayToBase64Url(keypair));
+    const balance = await this.dbGet('store', 'balance_' + keypair); // Use string keypair
     return balance && balance.value ? parseFloat(balance.value) : 0;
   }
 
@@ -700,12 +698,12 @@ export class DHT {
     if (typeof amount !== 'number' || amount < 0) {
       throw new Error('Invalid balance amount');
     }
-    await this.dbPut('store', { id: 'balance_' + this.uint8ArrayToBase64Url(keypair), value: amount.toString() });
+    await this.dbPut('store', { id: 'balance_' + keypair, value: amount.toString() }); // Use string keypair
     if (this.activeNodes.size > 0) {
       this.broadcast({
         type: 'userData',
         peerId: this.peerId,
-        keypair: this.uint8ArrayToBase64Url(this.keypair),
+        keypair: this.keypair,
         balance: amount,
         timestamp: Date.now()
       });

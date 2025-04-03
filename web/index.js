@@ -74,7 +74,7 @@ function showLoading(show,fadeIn) {
     loading.style.opacity = 1;
   } 
   else if(show&&fadeIn){
-    fadeIn(loading)
+    fade(loading)
   }
   else {
     // Fade out when hiding
@@ -83,7 +83,7 @@ function showLoading(show,fadeIn) {
 }
 
 // Fade out function
-function fadeIn(element) {
+function fade(element) {
   var op = 0; // Initial opacity
   element.style.opacity = op;
   element.style.display = 'block';
@@ -349,6 +349,7 @@ async function initializeIndexedDB() {
 }
 
 // Load keypair from IndexedDB
+
 async function loadKeypair(indexedDB) {
   return new Promise((resolve, reject) => {
     try {
@@ -360,9 +361,11 @@ async function loadKeypair(indexedDB) {
         const value = request.result?.value;
         if (value && typeof value === 'string') {
           console.log('Loaded keypair from IndexedDB:', value);
+          console.log('Keypair length:', value.length);
+          console.log('Is valid UID:', /^[a-zA-Z0-9]{20,40}$/.test(value) ? 'Yes' : 'No (possibly invalid or oversized)');
           resolve(value);
         } else {
-          console.log('Invalid keypair found in IndexedDB, treating as not found.');
+          console.log('No valid keypair found in IndexedDB.');
           resolve(null);
         }
       };
@@ -382,13 +385,15 @@ async function loadKeypair(indexedDB) {
 async function storeKeypair(indexedDB, userId) {
   return new Promise((resolve, reject) => {
     try {
+      console.log('Storing keypair in IndexedDB:', userId);
+      console.log('Keypair length:', userId.length);
+      console.log('Production readiness:', userId.length <= 40 ? 'Good (compact UID)' : 'Warning (potentially too large)');
       const tx = indexedDB.transaction('store', 'readwrite');
       const store = tx.objectStore('store');
-      // Store the userId as a string directly
       const request = store.put({ id: 'dcrypt_identity', value: userId });
 
       request.onsuccess = () => {
-        console.log('Stored keypair in IndexedDB:', userId);
+        console.log('Successfully stored keypair in IndexedDB');
         resolve();
       };
 
@@ -403,7 +408,6 @@ async function storeKeypair(indexedDB, userId) {
   });
 }
 
-// Initialize the app
 async function init(userId) {
   if (isInitializing) {
     console.log('Initialization already in progress, skipping...');
@@ -416,21 +420,23 @@ async function init(userId) {
 
     let keypair = await loadKeypair(indexedDB);
     if (!keypair && userId) {
-      console.log('No keypair found, storing new keypair for userId:', userId);
+      console.log('No keypair found, using userId as keypair:', userId);
       await storeKeypair(indexedDB, userId);
-      keypair = userId; // Use the userId as the keypair (string)
-    }
-    if (!keypair) {
+      keypair = userId;
+    } else if (!keypair) {
       throw new Error('No keypair available and no userId provided to create one');
+    } else if (keypair.length > 40) {
+      console.warn('Existing keypair is unusually large:', keypair.length, 'characters. Overwriting with userId.');
+      keypair = userId;
+      await storeKeypair(indexedDB, userId);
     }
 
     isNode = await checkIfUserIsNode(userId);
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
     console.log('Initializing DHT with keypair:', keypair);
-    // Encode the keypair into a Uint8Array only when passing to DHT
-    const encodedKeypair = new TextEncoder().encode(keypair);
-    dht = new DHT(encodedKeypair, isNode);
+    console.log('Keypair length for DHT:', keypair.length);
+    dht = new DHT(keypair, isNode); // Pass the string directly
     window.dht = dht;
 
     await dht.initDB();
@@ -466,8 +472,9 @@ async function init(userId) {
     setupPremiumToggle();
     isInitializing = false;
   }
+  uploadUserDataToFirebase();
 }
-
+// Initialize the app
 // Check if the user is a node
 async function checkIfUserIsNode(userId) {
   try {
@@ -515,6 +522,35 @@ async function handleSignup() {
     }
   }
 }
+async function deposit(amount) {
+  if (!isAuthenticated()) {
+    showToast('Please sign in to deposit.');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    if (!dht) throw new Error('DHT not initialized');
+    if (!amount || amount <= 0) throw new Error('Invalid deposit amount');
+
+    const balance = await dht.getBalance(dht.keypair);
+    const newBalance = balance + amount;
+    await dht.putBalance(dht.keypair, newBalance);
+    await dht.dbAdd('transactions', { type: 'deposit', amount, timestamp: Date.now() });
+
+    showToast(`Deposited ${amount} DCT successfully!`);
+    await Promise.all([
+      updateTransactionHistory(),
+      updateBalanceDisplay(),
+      uploadUserDataToFirebase(),
+    ]);
+  } catch (error) {
+    console.error('deposit failed:', error);
+    showToast(`Deposit failed: ${error.message}`, true);
+  } finally {
+    showLoading(false);
+  }
+}
 
 // Trigger Google Sign-In
 async function signIn() {
@@ -537,7 +573,7 @@ async function signIn() {
     showLoading(false); // Fade out
   }
 }
-// Sign out the user
+// Sin out the user
 async function signOutUser() {
   console.log('signOutUser function called');
   try {
@@ -550,21 +586,25 @@ async function signOutUser() {
       showToast('Signed out successfully!');
     }
 
-    // Clean up DHT instance
     if (dht) {
       dht.destroy();
       dht = null;
       window.dht = null;
     }
 
-    // Clear IndexedDB keypair
     const indexedDB = await initializeIndexedDB();
     const tx = indexedDB.transaction('store', 'readwrite');
     const store = tx.objectStore('store');
     await new Promise((resolve, reject) => {
       const request = store.delete('dcrypt_identity');
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(new Error('Failed to delete keypair from IndexedDB'));
+      request.onsuccess = () => {
+        console.log('Successfully deleted keypair from IndexedDB');
+        resolve();
+      };
+      request.onerror = () => {
+        console.error('Failed to delete keypair from IndexedDB:', request.error);
+        reject(new Error('Failed to delete keypair from IndexedDB'));
+      };
     });
 
     userBalance = 0;
@@ -891,6 +931,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Logout button clicked');
       signOutUser();
     });
+    
 
     // Update UI based on auth state
     onAuthStateChanged(auth, (user) => {
@@ -929,4 +970,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.flagSnippet = flagSnippet;
   window.handleSignup = handleSignup;
   window.becomeNode = becomeNode;
+  window.deposit = deposit
 });
