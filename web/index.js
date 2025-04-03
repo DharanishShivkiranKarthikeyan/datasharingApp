@@ -62,9 +62,52 @@ function showToast(message, isError = false) {
 }
 
 // Show or hide loading spinner
-function showLoading(show) {
-  const loading = document.getElementById('loading');
-  if (loading) loading.style.display = show ? 'flex' : 'none';
+function showLoading(show,fadeIn) {
+  const loading = document.getElementById('background-loading');
+  if (!loading) {
+    console.error('Loading element #background-loading not found');
+    return;
+  }
+  if (show&&!fadeIn) {
+    // Show immediately without fade-in
+    loading.style.display = 'block';
+    loading.style.opacity = 1;
+  } 
+  else if(show&&fadeIn){
+    fadeIn(loading)
+  }
+  else {
+    // Fade out when hiding
+    fadeOut(loading);
+  }
+}
+
+// Fade out function
+function fadeOut(element) {
+  var op = 1;  // initial opacity
+  var timer = setInterval(function () {
+    if (op <= 0.1) {
+      clearInterval(timer);
+      element.style.display = 'none';
+    }
+    element.style.opacity = op;
+    element.style.filter = 'alpha(opacity=' + op * 100 + ")";
+    op -= op * 0.1;
+  }, 50);
+}
+
+// Fade in function (used elsewhere, but not for #background-loading)
+function fadeIn(element) {
+  var op = 0;  // initial opacity
+  element.style.display = 'block';
+  var timer = setInterval(function () {
+    if (op >= 1) {
+      clearInterval(timer);
+    }
+    element.style.opacity = op;
+    element.style.filter = 'alpha(opacity=' + op * 100 + ")";
+    op += op * 0.1;
+  }, 10);
 }
 
 // Update UI when user signs out
@@ -265,7 +308,6 @@ async function initializeIndexedDB() {
       openRequest.onupgradeneeded = (event) => {
         const db = openRequest.result;
         console.log('Upgrading database to version', TARGET_VERSION);
-        // Create all required object stores if they don’t exist
         if (!db.objectStoreNames.contains('store')) {
           db.createObjectStore('store', { keyPath: 'id' });
           console.log('Created object store: store');
@@ -315,7 +357,8 @@ async function loadKeypair(indexedDB) {
       request.onsuccess = () => {
         if (request.result?.value) {
           console.log('Loaded keypair from IndexedDB:', request.result.value);
-          resolve(new TextEncoder().encode(request.result.value));
+          // Return the keypair as a string, to be encoded later when needed
+          resolve(request.result.value);
         } else {
           resolve(null);
         }
@@ -338,6 +381,7 @@ async function storeKeypair(indexedDB, userId) {
     try {
       const tx = indexedDB.transaction('store', 'readwrite');
       const store = tx.objectStore('store');
+      // Store the userId as a string directly
       const request = store.put({ id: 'dcrypt_identity', value: userId });
 
       request.onsuccess = () => {
@@ -364,18 +408,14 @@ async function init(userId) {
   }
   isInitializing = true;
   console.log('Initializing app with userId:', userId);
-  showLoading(true);
   try {
     const indexedDB = await initializeIndexedDB();
 
     let keypair = await loadKeypair(indexedDB);
-    console.log(keypair)
-    console.log("on the index.js")
     if (!keypair && userId) {
-      console.log("got here");
+      console.log('No keypair found, storing new keypair for userId:', userId);
       await storeKeypair(indexedDB, userId);
-      keypair = new TextEncoder().encode(userId);
-      
+      keypair = userId; // Use the userId as the keypair (string)
     }
     if (!keypair) {
       throw new Error('No keypair available and no userId provided to create one');
@@ -384,8 +424,10 @@ async function init(userId) {
     isNode = await checkIfUserIsNode(userId);
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
-    console.log('Initializing DHT...');
-    dht = new DHT(keypair, isNode);
+    console.log('Initializing DHT with keypair:', keypair);
+    // Encode the keypair into a Uint8Array only when passing to DHT
+    const encodedKeypair = new TextEncoder().encode(keypair);
+    dht = new DHT(encodedKeypair, isNode);
     window.dht = dht;
 
     await dht.initDB();
@@ -418,7 +460,6 @@ async function init(userId) {
     userBalance = 0;
     updateUIForSignOut();
   } finally {
-    showLoading(false);
     setupPremiumToggle();
     isInitializing = false;
   }
@@ -452,8 +493,6 @@ async function handleSignup() {
     console.log('Signup button disabled and text updated');
   }
 
-  
-  console.log('Selected role:', "user");
   localStorage.setItem('pendingRole', "user");
 
   try {
@@ -485,13 +524,14 @@ async function signIn() {
     console.log('Auth state before signInWithPopup:', auth);
     const provider = new GoogleAuthProvider();
     console.log('Initiating signInWithPopup');
-    showLoading(true);
+    showLoading(true); // Show immediately
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-in successful, user:', result.user);
   } catch (error) {
     console.error('Login failed:', error);
     showToast(`Login failed: ${error.message}`, true);
-    showLoading(false);
+  } finally {
+    showLoading(false); // Fade out when done
   }
 }
 
@@ -540,7 +580,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     return;
   }
 
-  showLoading(true);
+  showLoading(true); // Show immediately
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!title) throw new Error('Title is required');
@@ -595,7 +635,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     console.error('publishSnippet failed:', error);
     showToast(`Publish failed: ${error.message}`, true);
   } finally {
-    showLoading(false);
+    showLoading(false); // Fade out when done
   }
 }
 
@@ -606,7 +646,7 @@ async function buySnippet(hash) {
     return null;
   }
 
-  showLoading(true);
+  showLoading(true); // Show immediately
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
@@ -659,7 +699,7 @@ async function buySnippet(hash) {
     showToast(`Purchase failed: ${error.message}`, true);
     return null;
   } finally {
-    showLoading(false);
+    showLoading(false); // Fade out when done
   }
 }
 
@@ -695,9 +735,10 @@ async function submitRating(ipHash, rating) {
   }
 }
 
-async function becomeNode(){
+// Become a node
+async function becomeNode() {
   const nodeId = generateUUID();
-  console.log(nodeId)
+  console.log(nodeId);
   localStorage.setItem('nodeId', nodeId);
   localStorage.setItem('role', 'node');
   const nodeRef = doc(db, 'nodes', nodeId);
@@ -740,7 +781,6 @@ async function flagSnippet(ipHash) {
 }
 
 // Main DOMContentLoaded event handler
-
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
@@ -756,10 +796,62 @@ document.addEventListener('DOMContentLoaded', async () => {
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
   const isIndexPage = window.location.pathname.includes('index.html') || window.location.pathname === '/' || window.location.pathname === '/datasharingApp/';
+
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
     window.location.href = '/datasharingApp/node-instructions.html';
     return;
+  }
+
+  if (isIndexPage) {
+    // Show loading immediately for initial load
+    showLoading(true);
+
+    // Create a promise that resolves after 3 seconds
+    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 10000));
+
+    try {
+      // Wait for both initialization and minimum loading time
+      await Promise.all([
+        new Promise((resolve) => {
+          onAuthStateChanged(auth, async (user) => {
+            console.log('onAuthStateChanged triggered');
+            if (user) {
+              console.log('User is signed in:', user.uid);
+              await init(user.uid);
+            } else {
+              console.log('No user is signed in. Checking IndexedDB for keypair...');
+              try {
+                const indexedDB = await initializeIndexedDB();
+                const keypair = await loadKeypair(indexedDB);
+                if (keypair) {
+                  console.log('Found keypair in IndexedDB, initializing app...');
+                  await init(keypair);
+                } else {
+                  console.log('No keypair found in IndexedDB.');
+                  updateUIForSignOut();
+                }
+              } catch (error) {
+                console.error('Failed to initialize IndexedDB or load keypair:', error);
+                updateUIForSignOut();
+              }
+            }
+            resolve();
+          }, (error) => {
+            console.error('onAuthStateChanged error:', error);
+            showToast('Failed to monitor authentication state.', true);
+            resolve();
+          });
+        }),
+        minLoadingTime
+      ]);
+    } catch (error) {
+      console.error('Initialization error:', error);
+      showToast('An error occurred during initialization.', true);
+    } finally {
+      // Fade out the loading div after both conditions are met
+      showLoading(false);
+    }
   }
 
   const elements = {
@@ -776,7 +868,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
     buyHashButton: document.getElementById('buyHashButton'),
   };
-  if (!(window.location.href.includes("signup")||window.location.href.includes("node"))) {
+
+  if (!(window.location.href.includes("signup") || window.location.href.includes("node"))) {
     console.log('On index.html, setting up UI and event listeners');
 
     if (role === 'node' && nodeId) {
@@ -784,89 +877,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Node detected, but should have been redirected already.');
     }
 
-    onAuthStateChanged(auth, async (user) => {
-      console.log('onAuthStateChanged triggered');
-      showLoading(true);
-      if (user) {
-        console.log('User is signed in:', user.uid);
-        elements.signupButton?.classList.add('hidden');
-        elements.loginButton?.classList.add('hidden');
-        elements.logoutButton?.classList.remove('hidden');
-        elements.publishButton.disabled = false;
-        elements.searchButton.disabled = false;
-        elements.depositButton.disabled = false;
-        elements.withdrawButton.disabled = false;
-        elements.toggleHistoryButton.disabled = false;
-        elements.buyHashButton.disabled = false;
-
-        const pendingRole = localStorage.getItem('pendingRole') || 'user';
-        localStorage.removeItem('pendingRole');
-
-        const currentPath = window.location.pathname;
-        if (pendingRole === 'user') {
-          const userRef = doc(db, 'users', user.uid);
-          await setDoc(userRef, { role: 'user', createdAt: Date.now(), balance: 0 }, { merge: true });
-
-          if (!currentPath.includes('index.html') && currentPath !== '/datasharingApp/') {
-            console.log('Redirecting to index.html for user role');
-            window.location.href = '/datasharingApp/index.html';
-            showLoading(false);
-            return;
-          }
-        }
-
-        await init(user.uid);
-      } else {
-        console.log('No user is signed in. Checking IndexedDB for keypair...');
-        try {
-          const indexedDB = await initializeIndexedDB();
-          const keypair = await loadKeypair(indexedDB);
-          if (keypair) {
-            console.log('Found keypair in IndexedDB, initializing app...');
-            elements.signupButton?.classList.add('hidden');
-            elements.loginButton?.classList.add('hidden');
-            elements.logoutButton?.classList.remove('hidden');
-            elements.publishButton.disabled = false;
-            elements.searchButton.disabled = false;
-            elements.depositButton.disabled = false;
-            elements.withdrawButton.disabled = false;
-            elements.toggleHistoryButton.disabled = false;
-            elements.buyHashButton.disabled = false;
-            await init(new TextDecoder().decode(keypair));
-          } else {
-            console.log('No keypair found in IndexedDB.');
-            elements.signupButton?.classList.remove('hidden');
-            elements.loginButton?.classList.remove('hidden');
-            elements.logoutButton?.classList.add('hidden');
-            elements.publishButton.disabled = true;
-            elements.searchButton.disabled = true;
-            elements.depositButton.disabled = true;
-            elements.withdrawButton.disabled = true;
-            elements.toggleHistoryButton.disabled = true;
-            elements.buyHashButton.disabled = true;
-            updateUIForSignOut();
-          }
-        } catch (error) {
-          console.error('Failed to initialize IndexedDB or load keypair:', error);
-          elements.signupButton?.classList.remove('hidden');
-          elements.loginButton?.classList.remove('hidden');
-          elements.logoutButton?.classList.add('hidden');
-          elements.publishButton.disabled = true;
-          elements.searchButton.disabled = true;
-          elements.depositButton.disabled = true;
-          elements.withdrawButton.disabled = true;
-          elements.toggleHistoryButton.disabled = true;
-          elements.buyHashButton.disabled = true;
-          updateUIForSignOut();
-        }
-      }
-      showLoading(false);
-    }, (error) => {
-      console.error('onAuthStateChanged error:', error);
-      showToast('Failed to monitor authentication state.', true);
-      showLoading(false);
-    });
-
+    // Event listeners
     elements.loginButton?.addEventListener('click', (event) => {
       event.preventDefault();
       console.log('Login button clicked');
@@ -878,10 +889,34 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Logout button clicked');
       signOutUser();
     });
+
+    // Update UI based on auth state
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        elements.signupButton?.classList.add('hidden');
+        elements.loginButton?.classList.add('hidden');
+        elements.logoutButton?.classList.remove('hidden');
+        elements.publishButton.disabled = false;
+        elements.searchButton.disabled = false;
+        elements.depositButton.disabled = false;
+        elements.withdrawButton.disabled = false;
+        elements.toggleHistoryButton.disabled = false;
+        elements.buyHashButton.disabled = false;
+      } else {
+        elements.signupButton?.classList.remove('hidden');
+        elements.loginButton?.classList.remove('hidden');
+        elements.logoutButton?.classList.add('hidden');
+        elements.publishButton.disabled = true;
+        elements.searchButton.disabled = true;
+        elements.depositButton.disabled = true;
+        elements.withdrawButton.disabled = true;
+        elements.toggleHistoryButton.disabled = true;
+        elements.buyHashButton.disabled = true;
+        updateUIForSignOut();
+      }
+    });
   } else {
     console.log('Not on index.html, skipping index.html-specific setup');
-
-   
   }
 
   window.logout = signOutUser;
@@ -892,4 +927,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.flagSnippet = flagSnippet;
   window.handleSignup = handleSignup;
   window.becomeNode = becomeNode;
-})
+});
