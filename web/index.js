@@ -823,7 +823,7 @@ async function becomeNode() {
 
   if (!window.location.pathname.includes('node-instructions.html')) {
     console.log('Redirecting to node-instructions.html for node role');
-    window.location.href = '/datasharingApp/node-instructions.html';
+    //window.location.href = '/datasharingApp/node-instructions.html';
     showLoading(false);
     return;
   }
@@ -876,7 +876,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
-    window.location.href = '/datasharingApp/node-instructions.html';
+    //window.location.href = '/datasharingApp/node-instructions.html';
     return;
   }
 
