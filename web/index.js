@@ -525,6 +525,7 @@ async function handleSignup() {
       signupButton.textContent = 'Sign Up with Google';
     }
   }
+  localStorage.removeItem('pendingRole')
 }
 async function deposit(amount) {
   if (!isAuthenticated()) {
