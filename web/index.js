@@ -5,7 +5,6 @@ import { DHT } from './dht.js';
 import { uint8ArrayToBase64Url } from './dht.js';
 
 // Import other JavaScript files to ensure they're included in the bundle
-import './node-instructions.js';
 import './utils.js';
 
 // Global state variables
