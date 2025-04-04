@@ -56,7 +56,7 @@ export async function chunkEncrypt(ip, key, minChunks) {
   const chunks = [];
   const keyBuffer = await subtle.importKey(
     'raw',
-    new Uint8Array(key.slice(0, 32)), // Use first 32 bytes for AES-256
+    new Uint8Array(key.slice(0, 128)), // Use first 32 bytes for AES-256
     { name: 'AES-GCM' },
     false,
     ['encrypt']

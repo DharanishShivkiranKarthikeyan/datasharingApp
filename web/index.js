@@ -2,6 +2,7 @@
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
+import { uint8ArrayToBase64Url } from './dht.js';
 
 // Import other JavaScript files to ensure they're included in the bundle
 import './node-instructions.js';
@@ -419,6 +420,10 @@ async function init(userId) {
     const indexedDB = await initializeIndexedDB();
 
     let keypair = await loadKeypair(indexedDB);
+    if(keypair instanceof Uint8Array){
+      keypair = uint8ArrayToBase64Url(keypair)
+      console.log("GOT HERE: KEYPAIR: "+keypair)
+    }
     if (!keypair && userId) {
       console.log('No keypair found, using userId as keypair:', userId);
       await storeKeypair(indexedDB, userId);
@@ -547,6 +552,36 @@ async function deposit(amount) {
   } catch (error) {
     console.error('deposit failed:', error);
     showToast(`Deposit failed: ${error.message}`, true);
+  } finally {
+    showLoading(false);
+  }
+}
+async function withdraw(amount) {
+  if (!isAuthenticated()) {
+    showToast('Please sign in to withdraw.');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    if (!dht) throw new Error('DHT not initialized');
+    if (!amount || amount <= 0) throw new Error('Invalid withdrawal amount');
+
+    const balance = await dht.getBalance(dht.keypair);
+    if (balance < amount) throw new Error('Insufficient balance');
+
+    await dht.putBalance(dht.keypair, balance - amount);
+    await dht.dbAdd('transactions', { type: 'withdraw', amount, timestamp: Date.now() });
+
+    showToast(`Withdrew ${amount} DCT successfully!`);
+    await Promise.all([
+      updateTransactionHistory(),
+      updateBalanceDisplay(),
+      uploadUserDataToFirebase(),
+    ]);
+  } catch (error) {
+    console.error('withdraw failed:', error);
+    showToast(`Withdrawal failed: ${error.message}`, true);
   } finally {
     showLoading(false);
   }
@@ -847,7 +882,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (isIndexPage) {
     // Show loading immediately for initial load
-    showLoading(true);
+    showLoading(true,true);
 
     // Create a promise that resolves after 3 seconds
     const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3000));
@@ -970,5 +1005,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.flagSnippet = flagSnippet;
   window.handleSignup = handleSignup;
   window.becomeNode = becomeNode;
-  window.deposit = deposit
+  window.deposit = deposit;
+  window.withdraw = withdraw;
 });

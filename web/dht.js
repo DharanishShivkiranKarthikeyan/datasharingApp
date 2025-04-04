@@ -759,9 +759,11 @@ export class DHT {
     if (!this.db) return;
     try {
       const base64 = await this.dbGet('store', 'dcrypt_identity');
+      console.log(base64+" HEYYYYY")
       if (base64 && base64.value && typeof base64.value === 'string') {
         this.keypair = this.base64UrlToUint8Array(base64.value);
         console.log('Loaded identity from IndexedDB');
+        console.log(this.keypair);
       }
     } catch (error) {
       console.error('Failed to load identity:', error);
@@ -871,4 +873,10 @@ export class DHT {
     this.activeNodes.clear();
     this.pendingRequests.clear();
   }
+}
+
+export function uint8ArrayToBase64Url(uint8Array) {
+  const binaryString = String.fromCharCode(...uint8Array);
+  const base64 = btoa(binaryString);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }

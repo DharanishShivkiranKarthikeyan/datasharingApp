@@ -18,11 +18,9 @@ if (window.location.pathname === '/datasharingApp/node-instructions.html' || win
         return;
       }
 
-      const encoder = new TextEncoder();
-      const keypair = encoder.encode(nodeId);
 
       // Initialize DHT
-      dht = new DHT(keypair, true); // isNode = true since this is a node
+      dht = new DHT(nodeId, true); // isNode = true since this is a node
       await dht.initDB();
       await dht.initSwarm();
       await dht.syncUserData();
