@@ -870,6 +870,46 @@ async function flagSnippet(ipHash) {
     showToast(`Failed to flag snippet: ${error.message}`, true);
   }
 }
+async function initNode(){
+  try {
+    // Check if the user is a node using localStorage
+    const nodeId = localStorage.getItem('nodeId');
+    const role = localStorage.getItem('role');
+    
+    localStorage.removeItem('nodeId');
+    localStorage.removeItem('role');
+    sessionStorage.setItem('nodeId',nodeId);
+    sessionStorage.setItem('role',role)
+    console.log("Moved to session storage")
+    if (role !== 'node' || !nodeId) {
+      showToast('You must be signed in as a node to view this page.');
+      window.location.href = '/datasharingApp/signup.html';
+      return;
+    }
+
+
+    // Initialize DHT
+    dht = new DHT(nodeId, true); // isNode = true since this is a node
+    await dht.initDB();
+    await dht.initSwarm();
+    await dht.syncUserData();
+
+    // Calculate total earnings from commissions
+    const transactions = await dht.dbGetAll('transactions');
+    const commissionEarnings = transactions
+      .filter(tx => tx.type === 'commission')
+      .reduce((total, tx) => total + (tx.amount || 0), 0);
+
+    const nodeEarningsElement = document.getElementById('nodeEarnings');
+    if (nodeEarningsElement) {
+      nodeEarningsElement.textContent = `Total Earnings: ${commissionEarnings.toFixed(2)} DCT`;
+    }
+  } catch (error) {
+    console.error('Error initializing node instructions:', error);
+    showToast(`Initialization failed: ${error.message}`);
+  }
+}
+
 
 // Main DOMContentLoaded event handler
 document.addEventListener('DOMContentLoaded', async () => {
