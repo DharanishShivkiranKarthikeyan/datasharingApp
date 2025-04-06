@@ -1,4 +1,5 @@
 // web/node-instructions.js
+import { l } from 'vite/dist/node/types.d-aGj9QkWt.js';
 import { DHT } from './dht.js';
 
 // Only run this code if we're on node-instructions.html
@@ -11,6 +12,11 @@ if (window.location.pathname === '/datasharingApp/node-instructions.html' || win
       // Check if the user is a node using localStorage
       const nodeId = localStorage.getItem('nodeId');
       const role = localStorage.getItem('role');
+      
+      localStorage.removeItem('nodeId');
+      localStorage.removeItem('role');
+      sessionStorage.setItem('nodeId',nodeId);
+      sessionStorage.setItem('role',role)
 
       if (role !== 'node' || !nodeId) {
         showToast('You must be signed in as a node to view this page.');

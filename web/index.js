@@ -4,6 +4,12 @@ import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from '
 import { DHT } from './dht.js';
 import { uint8ArrayToBase64Url } from './dht.js';
 
+import "https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"
+import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js"
+import "https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"
+import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js"
+  
+
 // Import other JavaScript files to ensure they're included in the bundle
 import './utils.js';
 
@@ -85,6 +91,8 @@ function showLoading(show,fadeIn) {
 // Fade out function
 function fade(element) {
   var op = 0; // Initial opacity
+  var loadText = document.getElementById("loadingTextBox")
+  loadText.style.opacity = op;
   element.style.opacity = op;
   element.style.display = 'block';
   var timer = setInterval(function () {
@@ -94,11 +102,14 @@ function fade(element) {
       clearInterval(timer);
     }
     element.style.opacity = op;
+    loadText.style.opacity = op;
     element.style.filter = 'alpha(opacity=' + op * 100 + ")";
+    loadText.style.filter = 'alpha(opacity=' + op * 100 + ")";
   }, 50);
 }
 
 function fadeOut(element) {
+  var loadText = document.getElementById("loadingTextBox");
   var op = 1; // Initial opacity
   var timer = setInterval(function () {
     op -= 0.1;
@@ -108,7 +119,9 @@ function fadeOut(element) {
       clearInterval(timer);
     }
     element.style.opacity = op;
+    loadText.style.opacity = op;
     element.style.filter = 'alpha(opacity=' + op * 100 + ")";
+    loadText.style.filter = 'alpha(opacity=' + op * 100 + ")";
   }, 50);
 }
 
@@ -882,7 +895,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (isIndexPage) {
     // Show loading immediately for initial load
-    showLoading(true,true);
+    showLoading(true);
 
     // Create a promise that resolves after 3 seconds
     const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3000));
