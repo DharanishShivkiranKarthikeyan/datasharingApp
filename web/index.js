@@ -887,8 +887,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
-  const isIndexPage = !window.location.pathname.includes("node") && !window.location.pathname.includes("signup.html");
-
+  const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html"));
+  
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
     showLoading(false,true)
@@ -962,7 +962,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     buyHashButton: document.getElementById('buyHashButton'),
   };
 
-  if (!(window.location.href.includes("signup") || !window.location.href.includes("node"))) {
+  if (window.location.href.includes("signup") || window.location.href.includes("node")) {
     console.log('On index.html, setting up UI and event listeners');
 
     if (role === 'node' && nodeId) {
