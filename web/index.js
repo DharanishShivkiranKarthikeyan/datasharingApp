@@ -3,7 +3,6 @@ import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPe
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 import { uint8ArrayToBase64Url } from './dht.js';
-
 import "https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"
 import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js"
 import "https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"
@@ -826,7 +825,7 @@ async function submitRating(ipHash, rating) {
 }
 
 // Become a node
-async function registerNode() {
+async function becomeNode() {
   const nodeId = generateUUID();
   console.log(nodeId);
   localStorage.setItem('nodeId', nodeId);
@@ -869,46 +868,6 @@ async function flagSnippet(ipHash) {
     showToast(`Failed to flag snippet: ${error.message}`, true);
   }
 }
-async function initNode(){
-  try {
-    // Check if the user is a node using localStorage
-    const nodeId = localStorage.getItem('nodeId');
-    const role = localStorage.getItem('role');
-    
-    localStorage.removeItem('nodeId');
-    localStorage.removeItem('role');
-    sessionStorage.setItem('nodeId',nodeId);
-    sessionStorage.setItem('role',role)
-    console.log("Moved to session storage")
-    if (role !== 'node' || !nodeId) {
-      showToast('You must be signed in as a node to view this page.');
-      window.location.href = '/datasharingApp/signup.html';
-      return;
-    }
-
-
-    // Initialize DHT
-    dht = new DHT(nodeId, true); // isNode = true since this is a node
-    await dht.initDB();
-    await dht.initSwarm();
-    await dht.syncUserData();
-
-    // Calculate total earnings from commissions
-    const transactions = await dht.dbGetAll('transactions');
-    const commissionEarnings = transactions
-      .filter(tx => tx.type === 'commission')
-      .reduce((total, tx) => total + (tx.amount || 0), 0);
-
-    const nodeEarningsElement = document.getElementById('nodeEarnings');
-    if (nodeEarningsElement) {
-      nodeEarningsElement.textContent = `Total Earnings: ${commissionEarnings.toFixed(2)} DCT`;
-    }
-  } catch (error) {
-    console.error('Error initializing node instructions:', error);
-    showToast(`Initialization failed: ${error.message}`);
-  }
-}
-
 
 // Main DOMContentLoaded event handler
 document.addEventListener('DOMContentLoaded', async () => {
@@ -917,9 +876,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   if(window.location.pathname.includes("signup")){
     showLoading(false,false);
     return
-  }
-  if(window.location.pathname.includes("node")){
-    initNode();
   }
   try {
     await initializeFirebase();
@@ -1065,7 +1021,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.toggleTransactionHistory = toggleTransactionHistory;
   window.flagSnippet = flagSnippet;
   window.handleSignup = handleSignup;
-  window.registerNode = registerNode;
+  window.becomeNode = becomeNode;
   window.deposit = deposit;
   window.withdraw = withdraw;
 });
