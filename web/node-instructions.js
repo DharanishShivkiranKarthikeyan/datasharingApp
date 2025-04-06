@@ -2,12 +2,8 @@
 import { l } from 'vite/dist/node/types.d-aGj9QkWt.js';
 import { DHT } from './dht.js';
 
-// Only run this code if we're on node-instructions.html
-if (window.location.pathname === '/datasharingApp/node-instructions.html' || window.location.pathname === '/node-instructions.html') {
-  let dht;
-
-  document.addEventListener('DOMContentLoaded', async () => {
-    showLoading(true);
+export async function initNode(){
+  showLoading(true);
     try {
       // Check if the user is a node using localStorage
       const nodeId = localStorage.getItem('nodeId');
@@ -47,9 +43,7 @@ if (window.location.pathname === '/datasharingApp/node-instructions.html' || win
     } finally {
       showLoading(false);
     }
-  });
 }
-
 function showToast(message) {
   const toast = document.getElementById('toast');
   if (!toast) return;
@@ -64,4 +58,3 @@ function showToast(message) {
 function showLoading(show) {
   const loading = document.getElementById('loading');
   if (loading) loading.style.display = show ? 'flex' : 'none';
-}

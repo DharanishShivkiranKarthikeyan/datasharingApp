@@ -3,6 +3,7 @@ import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPe
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { DHT } from './dht.js';
 import { uint8ArrayToBase64Url } from './dht.js';
+import { initNode } from './node-instructions.js';
 
 import "https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"
 import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js"
@@ -876,6 +877,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('Current pathname:', window.location.pathname);
   if(window.location.pathname.includes("signup")){
     showLoading(false,false);
+    return
+  }
+  if(window.location.pathname.includes("node")){
+    initNode();
   }
   try {
     await initializeFirebase();
