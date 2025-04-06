@@ -888,7 +888,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
   const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html"));
-  
+  console.log("isIndexPageL: NEFQOGN NIGGER: "+isIndexPage)
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
     showLoading(false,true)
