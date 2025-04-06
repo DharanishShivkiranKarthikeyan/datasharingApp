@@ -962,7 +962,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     buyHashButton: document.getElementById('buyHashButton'),
   };
 
-  if (window.location.href.includes("signup") || window.location.href.includes("node")) {
+  if (isIndexPage) {
     console.log('On index.html, setting up UI and event listeners');
 
     if (role === 'node' && nodeId) {
