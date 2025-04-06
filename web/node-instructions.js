@@ -17,7 +17,7 @@ if (window.location.pathname === '/datasharingApp/node-instructions.html' || win
       localStorage.removeItem('role');
       sessionStorage.setItem('nodeId',nodeId);
       sessionStorage.setItem('role',role)
-
+      console.log("Moved to session storage")
       if (role !== 'node' || !nodeId) {
         showToast('You must be signed in as a node to view this page.');
         window.location.href = '/datasharingApp/signup.html';
