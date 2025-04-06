@@ -889,7 +889,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
-    //window.location.href = '/datasharingApp/node-instructions.html';
+    showLoading(false,true)
+    window.location.href = '/datasharingApp/node-instructions.html';
     return;
   }
 
