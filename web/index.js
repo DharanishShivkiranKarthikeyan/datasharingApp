@@ -826,7 +826,7 @@ async function submitRating(ipHash, rating) {
 }
 
 // Become a node
-async function becomeNode() {
+async function registerNode() {
   const nodeId = generateUUID();
   console.log(nodeId);
   localStorage.setItem('nodeId', nodeId);
@@ -1065,7 +1065,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.toggleTransactionHistory = toggleTransactionHistory;
   window.flagSnippet = flagSnippet;
   window.handleSignup = handleSignup;
-  window.becomeNode = becomeNode;
+  window.registerNode = registerNode;
   window.deposit = deposit;
   window.withdraw = withdraw;
 });
