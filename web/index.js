@@ -885,7 +885,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
-  const isIndexPage = !window.location.pathname.includes("node-instructions.html") || !window.location.pathname.includes("signup.html");
+  const isIndexPage = !window.location.pathname.includes("node") && !window.location.pathname.includes("signup.html");
 
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
@@ -899,7 +899,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     showLoading(true);
 
     // Create a promise that resolves after 3 seconds
-    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3000));
+    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3500));
 
     try {
       // Wait for both initialization and minimum loading time
@@ -960,7 +960,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     buyHashButton: document.getElementById('buyHashButton'),
   };
 
-  if (!(window.location.href.includes("signup") || window.location.href.includes("node"))) {
+  if (!(window.location.href.includes("signup") || !window.location.href.includes("node"))) {
     console.log('On index.html, setting up UI and event listeners');
 
     if (role === 'node' && nodeId) {
@@ -981,7 +981,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       signOutUser();
     });
     
-
+    
     // Update UI based on auth state
     onAuthStateChanged(auth, (user) => {
       if (user) {
