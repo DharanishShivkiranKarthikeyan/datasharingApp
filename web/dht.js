@@ -485,7 +485,7 @@ export class DHT {
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
-      const chunks = await chunkEncrypt(ip,await globalThis.crypto.subtle.digest('SHA-256',Uint8Array(this.keypair)), minChunks);
+      const chunks = await chunkEncrypt(ip,await globalThis.crypto.subtle.digest('SHA-256',ArrayBuffer(this.keypair)), minChunks);
 
       const chunkHashes = [];
       for (let i = 0; i < chunks.length; i++) {
