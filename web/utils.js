@@ -54,6 +54,9 @@ export async function chunkEncrypt(ip, key, minChunks) {
   const content = ip.content;
   const chunkSize = Math.ceil(content.length / minChunks);
   const chunks = [];
+  console.log("TRYING TO MAEK SHA 256")
+  key = subtle.digest('SHA-256',key)
+  console.log("ERROR MAKING SHA 256 if u dont see this")
   const keyBuffer = await subtle.importKey(
     'raw',
     new Uint8Array(key.slice(0, 128)), // Use first 32 bytes for AES-256
