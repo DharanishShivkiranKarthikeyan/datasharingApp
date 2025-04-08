@@ -191,7 +191,9 @@ async function updateLiveFeed() {
 
   publishedItemsTableBody.innerHTML = '';
   try {
+    console.log("TS function was called")
     const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
+    console.log(snippetsSnapshot)
     const snippetsData = {};
     snippetsSnapshot.forEach((doc) => {
       snippetsData[doc.id] = doc.data();
@@ -206,6 +208,7 @@ async function updateLiveFeed() {
         const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
         const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
         const row = document.createElement('tr');
+        console.log("Got all the way here!")
         row.innerHTML = `
           <td class="py-2 px-4">${value.metadata.content_type}</td>
           <td class="py-2 px-4">${value.metadata.description || 'No description'}</td>
@@ -217,6 +220,7 @@ async function updateLiveFeed() {
           </td>
         `;
         publishedItemsTableBody.appendChild(row);
+        console.log("published TS")
       });
     }
   } catch (error) {
