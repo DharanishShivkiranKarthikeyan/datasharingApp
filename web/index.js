@@ -196,18 +196,13 @@ async function updateLiveFeed() {
     console.log(snippetsSnapshot)
     const snippetsData = {};
     snippetsSnapshot.forEach((doc) => {
-      
-      try{console.log(doc.data())}
-      catch{}
       snippetsData[doc.id] = doc.data();
     });
-
+    console.log("DHT ",dht.knownObjects);
     if (dht) {
       dht.knownObjects.forEach((value, key) => {
-        const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
-        if (snippetInfo.reviewStatus !== 'active') return;
-
-        const isPremium = value.metadata.isPremium || false;
+        const snippetInfo = snippetsData[key]
+        const isPremium = value.metadata.isPremium;
         const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
         const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
         const row = document.createElement('tr');
