@@ -193,16 +193,12 @@ async function updateLiveFeed() {
   try {
     console.log("TS function was called")
     const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
-    console.log(snippetsSnapshot)
     const snippetsData = [];
-    let c= 0;
-    snippetsSnapshot.every((doc) => {
+    snippetsSnapshot.forEach((doc) => {
       snippetsData.push(doc.data());
-      c++;
-      if(c==10) return false;
-      else return true;
+      console.log(snippetsData);
+      console.log(doc.data());
     });
-    console.log(snippetsData, "IQHEGWIGNIGNQRON");
     if (dht) {
       snippetsData.forEach((value, key) => {
         const snippetInfo = snippetsData[key]
