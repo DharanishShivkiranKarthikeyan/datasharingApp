@@ -194,10 +194,9 @@ async function updateLiveFeed() {
     console.log("TS function was called")
     const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
     console.log(snippetsSnapshot)
-    console.log(snippetsSnapshot.json());
-    console.log(nippetsSnapshot.json().docs)
     const snippetsData = {};
     snippetsSnapshot.forEach((doc) => {
+      console.log(doc)
       snippetsData[doc.id] = doc.data();
     });
 
@@ -222,7 +221,7 @@ async function updateLiveFeed() {
           </td>
         `;
         publishedItemsTableBody.appendChild(row);
-        console.log("published TS")
+        console.log("published")
       });
     }
   } catch (error) {
