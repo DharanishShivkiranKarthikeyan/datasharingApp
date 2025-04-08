@@ -192,8 +192,10 @@ async function updateLiveFeed() {
   publishedItemsTableBody.innerHTML = '';
   try {
     console.log("TS function was called")
-    const snippetsSnapshot = await getDocs(collection(db, 'snippets')).docs;
+    const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
     console.log(snippetsSnapshot)
+    console.log(snippetsSnapshot.json());
+    console.log(nippetsSnapshot.json().docs)
     const snippetsData = {};
     snippetsSnapshot.forEach((doc) => {
       snippetsData[doc.id] = doc.data();
