@@ -196,7 +196,7 @@ async function updateLiveFeed() {
     console.log(snippetsSnapshot)
     const snippetsData = {};
     snippetsSnapshot.forEach((doc) => {
-      try{console.log(doc.data)}
+      try{console.log(doc.data+"EGAJOOHQAGIQING")}
       catch{}
       snippetsData[doc.id] = doc.data();
     });
