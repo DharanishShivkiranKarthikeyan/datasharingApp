@@ -194,13 +194,15 @@ async function updateLiveFeed() {
     console.log("TS function was called")
     const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
     console.log(snippetsSnapshot)
-    const snippetsData = {};
-    snippetsSnapshot.forEach((doc) => {
-      snippetsData[doc.id] = doc.data();
-    });
-    console.log("DHT ",dht.knownObjects);
+    const snippetsData = [];
+    for(let i = 0; i<10;i++){
+      let doc = snippetsSnapshot[i];
+      snippetsData.push(doc.data());
+      console.log(snippetsData);
+    };
+
     if (dht) {
-      dht.knownObjects.forEach((value, key) => {
+      snippetsData.forEach((value, key) => {
         const snippetInfo = snippetsData[key]
         const isPremium = value.metadata.isPremium;
         const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
