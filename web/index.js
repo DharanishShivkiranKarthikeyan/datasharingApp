@@ -191,22 +191,21 @@ async function updateLiveFeed() {
 
   publishedItemsTableBody.innerHTML = '';
   try {
-    console.log("TS function was called")
     const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
-    const snippetsData = [];
+    const snippetsData = {};
     snippetsSnapshot.forEach((doc) => {
-      snippetsData.push(doc.data());
-      console.log(snippetsData);
-      console.log(doc.data());
+      snippetsData[doc.id] = doc.data();
     });
+
     if (dht) {
-      snippetsData.forEach((value, key) => {
-        const snippetInfo = snippetsData[key]
-        const isPremium = value.metadata.isPremium;
+      dht.knownObjects.forEach((value, key) => {
+        const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
+        if (snippetInfo.reviewStatus !== 'active') return;
+
+        const isPremium = value.metadata.isPremium || false;
         const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
         const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
         const row = document.createElement('tr');
-        console.log("Got all the way here!")
         row.innerHTML = `
           <td class="py-2 px-4">${value.metadata.content_type}</td>
           <td class="py-2 px-4">${value.metadata.description || 'No description'}</td>
@@ -218,7 +217,6 @@ async function updateLiveFeed() {
           </td>
         `;
         publishedItemsTableBody.appendChild(row);
-        console.log("published")
       });
     }
   } catch (error) {
