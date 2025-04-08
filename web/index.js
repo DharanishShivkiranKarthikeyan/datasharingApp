@@ -195,12 +195,14 @@ async function updateLiveFeed() {
     const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
     console.log(snippetsSnapshot)
     const snippetsData = [];
-    for(let i = 0; i<10;i++){
-      let doc = snippetsSnapshot[i];
+    let c= 0;
+    snippetsSnapshot.every((doc) => {
       snippetsData.push(doc.data());
-      console.log(snippetsData);
-    };
-
+      c++;
+      if(c==10) return false;
+      else return true;
+    });
+    console.log(snippetsData, "IQHEGWIGNIGNQRON");
     if (dht) {
       snippetsData.forEach((value, key) => {
         const snippetInfo = snippetsData[key]
