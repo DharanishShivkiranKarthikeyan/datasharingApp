@@ -66,8 +66,13 @@ function showToast(message, isError = false) {
   }, 3000);
 }
 
+function redirectToPublish(){
+  fadeOut(this.getElementById("body"));
+  window.location.href == "/datasharingApp/publish.html";
+}
+
 // Show or hide loading spinner
-function showLoading(show,fadeIn) {
+function showLoading(show,fadeIn,body) {
   const loading = document.getElementById('background-loading');
   if (!loading) {
     console.error('Loading element #background-loading not found');
@@ -1066,4 +1071,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.becomeNode = becomeNode;
   window.deposit = deposit;
   window.withdraw = withdraw;
+  window.redirectToPublish = redirectToPublish;
 });
