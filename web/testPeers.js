@@ -27,7 +27,7 @@ export async function createTestPeers() {
     const peerPromise = new Promise((resolve, reject) => {
       peer.on('open', () => {
         console.log(`Test peer ${peerId} opened`);
-        peers.push({ peer, peerId });
+        peers.push([peer, peerId]);
         resolve();
       });
 
