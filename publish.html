@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Publish a Snippet - Dcrypt</title>
+  <!-- Tailwind CSS CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <!-- Font Awesome CDN for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <!-- Google Fonts for modern typography -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    .loader {
+      width: fit-content;
+      font-weight: bold;
+      font-family: monospace;
+      white-space: pre;
+      font-size: 30px;
+      line-height: 1.2em;
+      height:1.2em;
+      overflow: hidden;
+      z-index: 2;
+    }
+    
+    .loader:before {
+      content:"Loading...\A⌰oading...\A⌰⍜ading...\A⌰⍜⏃ding...\A⌰⍜⏃⎅ing...\A⌰⍜⏃⎅⟟ng...\A⌰⍜⏃⎅⟟⋏g...\A⌰⍜⏃⎅⟟⋏☌...\A⌰⍜⏃⎅⟟⋏☌⟒..\A⌰⍜⏃⎅⟟⋏☌⟒⏁.\A⌰⍜⏃⎅⟟⋏☌⟒⏁⋔"; 
+      white-space: pre;
+      display: inline-block;
+      animation: l39 1s infinite steps(11) alternate;
+    }
+
+    @keyframes l39 {
+      100%{transform: translateY(-100%)}
+    }
+    .publish-card {
+      background: rgba(31, 41, 55, 0.9); /* Dark semi-transparent background */
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .input-field {
+      background: rgba(55, 65, 81, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      transition: all 0.3s ease;
+    }
+    .input-field:focus {
+      border-color: #7a00e8;
+      box-shadow: 0 0 0 3px rgba(122, 0, 232, 0.2);
+    }
+    .publish-btn {
+      background: #7a00e8;
+      transition: background 0.3s ease;
+    }
+    .publish-btn:hover {
+      background: #5b00b3;
+    }
+    #background-default {
+      position: absolute; /* or fixed, depending on your needs */
+      top: 0;
+      left: 0;
+      width: 100%;
+      min-height: 100vh !important;
+      z-index: -1; /* Places it behind other elements */
+      display: flex;
+    }
+    #loadingTextBox{
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      -webkit-transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%);
+      flex-direction: column;
+    }
+</style>
+<body>
+    <div id="loadingTextBox">
+        <h1 style="font-family: Optima; font-size: 10vh;">Dcrypt</h1>
+        <div id="loader" class="loader"></div>
+    </div>
+    <div id="background-default"></div>
+    <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div class="publish-card max-w-2xl w-full space-y-8 p-8">
+          <div>
+            <h2 class="text-3xl font-bold text-center">Publish a Snippet</h2>
+            <p class="mt-2 text-center text-sm text-gray-400">
+              Share your code, ideas, or creations with the Dcrypt community.
+            </p>
+          </div>
+          <form class="space-y-6">
+            <!-- Title -->
+            <div>
+              <label for="title" class="block text-sm font-medium text-gray-300">Title</label>
+              <input id="title" name="title" type="text" required
+                     class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
+                     placeholder="Enter the title of your snippet">
+            </div>
+    
+            <!-- Description -->
+            <div>
+              <label for="description" class="block text-sm font-medium text-gray-300">Description</label>
+              <textarea id="description" name="description" rows="4" required
+                        class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
+                        placeholder="Describe your snippet"></textarea>
+            </div>
+    
+            <!-- Tags -->
+            <div>
+              <label for="tags" class="block text-sm font-medium text-gray-300">Tags (comma-separated)</label>
+              <input id="tags" name="tags" type="text"
+                     class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
+                     placeholder="e.g., javascript, python, css">
+            </div>
+    
+            <!-- File Upload -->
+            <div>
+              <label for="file-upload" class="block text-sm font-medium text-gray-300">Choose File</label>
+              <div class="mt-1 flex items-center">
+                <label class="input-field px-4 py-3 rounded-lg cursor-pointer flex items-center">
+                  <span id="file-label" class="text-gray-500">No file chosen</span>
+                  <input id="file-upload" name="file-upload" type="file" class="hidden"
+                         onchange="document.getElementById('file-label').textContent = this.files[0]?.name || 'No file chosen'">
+                  <span class="ml-3 text-gray-400"><i class="fas fa-upload"></i></span>
+                </label>
+              </div>
+            </div>
+    
+            <!-- Premium Toggle -->
+            <div class="flex items-center">
+              <input id="premium" name="premium" type="checkbox"
+                     class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+              <label for="premium" class="ml-2 block text-sm text-gray-300">Premium</label>
+            </div>
+    
+            <!-- Publish Button -->
+            <div>
+              <button type="submit"
+                      class="publish-btn w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white focus:outline-none">
+                Publish
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js"></script>
+    <script>
+        minLoadingTime
+        VANTA.TOPOLOGY({
+        el: "#background-default",
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 800.00,
+        minWidth: 400.00,
+        scale: 1.00,
+        scaleMobile: 1.00,
+        color: 0x7a00e8,
+        backgroundColor: 0x00000,
+        speed: 10.0
+      })
+      </script>
+</body>
