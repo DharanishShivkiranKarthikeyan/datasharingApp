@@ -17,28 +17,6 @@
       padding: 0;
       overflow-x: hidden;
     }
-    .loader {
-      width: fit-content;
-      font-weight: bold;
-      font-family: monospace;
-      white-space: pre;
-      font-size: 30px;
-      line-height: 1.2em;
-      height:1.2em;
-      overflow: hidden;
-      z-index: 2;
-    }
-    
-    .loader:before {
-      content:"Loading...\A⌰oading...\A⌰⍜ading...\A⌰⍜⏃ding...\A⌰⍜⏃⎅ing...\A⌰⍜⏃⎅⟟ng...\A⌰⍜⏃⎅⟟⋏g...\A⌰⍜⏃⎅⟟⋏☌...\A⌰⍜⏃⎅⟟⋏☌⟒..\A⌰⍜⏃⎅⟟⋏☌⟒⏁.\A⌰⍜⏃⎅⟟⋏☌⟒⏁⋔"; 
-      white-space: pre;
-      display: inline-block;
-      animation: l39 1s infinite steps(11) alternate;
-    }
-
-    @keyframes l39 {
-      100%{transform: translateY(-100%)}
-    }
     .publish-card {
       background: rgba(31, 41, 55, 0.9); /* Dark semi-transparent background */
       backdrop-filter: blur(10px);
@@ -72,24 +50,8 @@
       z-index: -1; /* Places it behind other elements */
       display: flex;
     }
-    #loadingTextBox{
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 2;
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      -webkit-transform: translate(-50%, -50%);
-      transform: translate(-50%, -50%);
-      flex-direction: column;
-    }
 </style>
-<body>
-    <div id="loadingTextBox">
-        <h1 style="font-family: Optima; font-size: 10vh;">Dcrypt</h1>
-        <div id="loader" class="loader"></div>
-    </div>
+<body id="body">
     <div id="background-default"></div>
     <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div class="publish-card max-w-2xl w-full space-y-8 p-8">
@@ -157,7 +119,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js"></script>
     <script>
-        minLoadingTime
         VANTA.TOPOLOGY({
         el: "#background-default",
         mouseControls: true,
@@ -171,5 +132,5 @@
         backgroundColor: 0x00000,
         speed: 10.0
       })
-      </script>
+    </script>
 </body>
