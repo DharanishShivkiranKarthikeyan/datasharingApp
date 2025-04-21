@@ -967,7 +967,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.location.href = '/datasharingApp/node-instructions.html';
   }
 
-  if (isIndexPage) {
+  if (isIndexPage || window.location.pathname.includes("publish")) {
     // Show loading immediately for initial load
     showLoading(true);
 
@@ -993,11 +993,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                   await init(keypair);
                 } else {
                   console.log('No keypair found in IndexedDB.');
-                  updateUIForSignOut();
+                  if(isIndexPage){
+                    updateUIForSignOut();
+                  }
+                  
                 }
               } catch (error) {
                 console.error('Failed to initialize IndexedDB or load keypair:', error);
-                updateUIForSignOut();
+                if(isIndexPage){
+                  updateUIForSignOut();
+                }
+                
               }
             }
             resolve();
@@ -1017,23 +1023,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       showLoading(false);
     }
   }
-
-  const elements = {
-    signupButton: document.getElementById('signupButton'),
-    loginButton: document.getElementById('loginButton'),
-    logoutButton: document.getElementById('logoutButton'),
-    userBalanceElement: document.getElementById('userBalance'),
-    publishButton: document.getElementById('publishButton'),
-    searchButton: document.getElementById('searchButton'),
-    depositButton: document.getElementById('depositButton'),
-    withdrawButton: document.getElementById('withdrawButton'),
-    toggleHistoryButton: document.getElementById('toggleHistoryButton'),
-    transactionHistory: document.getElementById('transactionHistory'),
-    publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
-    buyHashButton: document.getElementById('buyHashButton'),
-  };
-
+  
   if (isIndexPage) {
+    const elements = {
+      signupButton: document.getElementById('signupButton'),
+      loginButton: document.getElementById('loginButton'),
+      logoutButton: document.getElementById('logoutButton'),
+      userBalanceElement: document.getElementById('userBalance'),
+      publishButton: document.getElementById('publishButton'),
+      searchButton: document.getElementById('searchButton'),
+      depositButton: document.getElementById('depositButton'),
+      withdrawButton: document.getElementById('withdrawButton'),
+      toggleHistoryButton: document.getElementById('toggleHistoryButton'),
+      transactionHistory: document.getElementById('transactionHistory'),
+      publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
+      buyHashButton: document.getElementById('buyHashButton'),
+    };
+  
     console.log('On index.html, setting up UI and event listeners');
 
     if (role === 'node' && nodeId) {
@@ -1054,32 +1060,32 @@ document.addEventListener('DOMContentLoaded', async () => {
       signOutUser();
     });
     
-    if (isIndexPage) {
-      onAuthStateChanged(auth, (user) => {
-        if (user) {
-          elements.signupButton?.classList.add('hidden');
-          elements.loginButton?.classList.add('hidden');
-          elements.logoutButton?.classList.remove('hidden');
-          elements.publishButton.disabled = false;
-          elements.searchButton.disabled = false;
-          elements.depositButton.disabled = false;
-          elements.withdrawButton.disabled = false;
-          elements.toggleHistoryButton.disabled = false;
-          elements.buyHashButton.disabled = false;
-        } else {
-          elements.signupButton?.classList.remove('hidden');
-          elements.loginButton?.classList.remove('hidden');
-          elements.logoutButton?.classList.add('hidden');
-          elements.publishButton.disabled = true;
-          elements.searchButton.disabled = true;
-          elements.depositButton.disabled = true;
-          elements.withdrawButton.disabled = true;
-          elements.toggleHistoryButton.disabled = true;
-          elements.buyHashButton.disabled = true;
-          updateUIForSignOut();
-        }
-      });
-    }
+    
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        elements.signupButton?.classList.add('hidden');
+        elements.loginButton?.classList.add('hidden');
+        elements.logoutButton?.classList.remove('hidden');
+        elements.publishButton.disabled = false;
+        elements.searchButton.disabled = false;
+        elements.depositButton.disabled = false;
+        elements.withdrawButton.disabled = false;
+        elements.toggleHistoryButton.disabled = false;
+        elements.buyHashButton.disabled = false;
+      } else {
+        elements.signupButton?.classList.remove('hidden');
+        elements.loginButton?.classList.remove('hidden');
+        elements.logoutButton?.classList.add('hidden');
+        elements.publishButton.disabled = true;
+        elements.searchButton.disabled = true;
+        elements.depositButton.disabled = true;
+        elements.withdrawButton.disabled = true;
+        elements.toggleHistoryButton.disabled = true;
+        elements.buyHashButton.disabled = true;
+        updateUIForSignOut();
+      }
+    });
+    
     // Update UI based on auth state
   } else {
     console.log('Not on index.html, skipping index.html-specific setup');
