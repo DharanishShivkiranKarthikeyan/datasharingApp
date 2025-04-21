@@ -12,6 +12,9 @@
       overflow: hidden;
       background-color: #1E2A44;
     }
+    #AllItems{
+      display: none;
+    }
     #background-default {
       position: absolute; /* or fixed, depending on your needs */
       top: 0;
@@ -174,12 +177,10 @@
   </style>
 </head>
 <script>
-  document.onload(()=>{
-    document.getElementById("body").style.visibility = "hidden";
-    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 2750));
-
-    minLoadingTime
-  })
+  
+  setTimeout(() => {
+        document.getElementById('AllItems').style.display = 'block';
+      }, 1000); // show second after 1 second
 
 </script>
 <div id="loadingTextBox">
@@ -209,7 +210,7 @@
   
   </script>
   <div class="toast" id="toast"></div>
-  <div class="container">
+  <div class="container" id="AllItems">
     <!-- Title and Buttons Section with .card class -->
     <div class="card flex justify-between items-center mb-6">
       <h1 class="text-3xl font-bold">Dcrypt - Decentralized Data Sharing</h1>
