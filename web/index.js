@@ -1065,7 +1065,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     
     onAuthStateChanged(auth, (user) => {
-      if (user) {
+      if (user && window.location.pathname=="/datasharingApp/") {
         elements.signupButton?.classList.add('hidden');
         elements.loginButton?.classList.add('hidden');
         elements.logoutButton?.classList.remove('hidden');
