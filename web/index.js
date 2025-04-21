@@ -462,7 +462,6 @@ async function init(userId) {
     let keypair = await loadKeypair(indexedDB);
     if (keypair instanceof Uint8Array) {
       keypair = uint8ArrayToBase64Url(keypair);
-      console.log("GOT HERE: KEYPAIR: " + keypair);
     }
     if (!keypair && userId) {
       console.log('No keypair found, using userId as keypair:', userId);
@@ -969,8 +968,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (isIndexPage || window.location.pathname.includes("publish")) {
     // Show loading immediately for initial load
-    showLoading(true);
-
+    if(isIndexPage){
+      showLoading(true);
+    }
     // Create a promise that resolves after 3 seconds
     const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3500));
 
@@ -1020,7 +1020,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       showToast('An error occurred during initialization.', true);
     } finally {
       // Fade out the loading div after both conditions are met
-      showLoading(false);
+      if(isIndexPage){
+        showLoading(false);
+      }
+      
     }
   }
   
