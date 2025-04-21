@@ -57,7 +57,7 @@
       max-height: 100vh;
       z-index: 1;
       overflow: auto;
-      margin-right: 2% !important;
+      margin-right: 1% !important;
     }
     .toast {
       position: fixed;
@@ -173,6 +173,16 @@
     }
   </style>
 </head>
+<script>
+  document.onload(()=>{
+    document.getElementById("body").style.visibility = "hidden";
+    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 2750));
+
+    minLoadingTime
+    document.getElementById("body").style.visibility = "visible";
+  })
+
+</script>
 <div id="loadingTextBox">
   <h1 style="font-family: Optima; font-size: 10vh;">Dcrypt</h1>
   <div id="loader" class="loader"></div>
