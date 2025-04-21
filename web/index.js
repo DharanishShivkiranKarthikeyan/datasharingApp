@@ -7,7 +7,6 @@ import "https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"
 import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js"
 import "https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"
 import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js"
-  
 
 // Import other JavaScript files to ensure they're included in the bundle
 import './utils.js';
@@ -66,25 +65,45 @@ function showToast(message, isError = false) {
   }, 3000);
 }
 
-function redirectToPublish(){
-  window.location.href = "/datasharingApp/publish.html";
-  console.log("redirected")
+// Modified redirectToPublish to persist state in localStorage before redirecting
+function redirectToPublish() {
+  // Check if the user is authenticated and DHT is initialized
+  if (!isAuthenticated() || !dht) {
+    showToast('Please sign in and ensure the app is initialized before publishing.', true);
+    return;
+  }
+
+  try {
+    // Store key user state in localStorage for persistence across pages
+    const keypair = dht.keypair; // The keypair used for DHT
+    const peerId = keypair; // PeerJS ID is the same as the keypair in this case
+    localStorage.setItem('userKeypair', keypair);
+    localStorage.setItem('peerId', peerId);
+    localStorage.setItem('dhtInitialized', 'true');
+    console.log('Persisted user state to localStorage:', { keypair, peerId });
+
+    // Redirect to publish.html
+    window.location.href = "/datasharingApp/publish.html";
+  } catch (error) {
+    console.error('Failed to persist state before redirecting:', error);
+    showToast('Failed to prepare for publishing. Please try again.', true);
+  }
 }
 
 // Show or hide loading spinner
-function showLoading(show,fadeIn,body) {
+function showLoading(show, fadeIn, body) {
   const loading = document.getElementById('background-loading');
   if (!loading) {
     console.error('Loading element #background-loading not found');
     return;
   }
-  if (show&&!fadeIn) {
+  if (show && !fadeIn) {
     // Show immediately without fade-in
     loading.style.display = 'block';
     loading.style.opacity = 1;
   } 
-  else if(show&&fadeIn){
-    fade(loading)
+  else if (show && fadeIn) {
+    fade(loading);
   }
   else {
     // Fade out when hiding
@@ -95,7 +114,7 @@ function showLoading(show,fadeIn,body) {
 // Fade out function
 function fade(element) {
   var op = 0; // Initial opacity
-  var loadText = document.getElementById("loadingTextBox")
+  var loadText = document.getElementById("loadingTextBox");
   loadText.style.opacity = op;
   element.style.opacity = op;
   element.style.display = 'block';
@@ -141,6 +160,12 @@ function updateUIForSignOut() {
   if (elements.transactionList) elements.transactionList.innerHTML = 'No transactions yet.';
   if (elements.userBalanceElement) elements.userBalanceElement.textContent = 'Balance: 0 DCT';
   userBalance = 0;
+
+  // Clear persisted state in localStorage on sign-out
+  localStorage.removeItem('userKeypair');
+  localStorage.removeItem('peerId');
+  localStorage.removeItem('dhtInitialized');
+  console.log('Cleared persisted state from localStorage on sign-out');
 }
 
 // Update balance display
@@ -366,7 +391,6 @@ async function initializeIndexedDB() {
 }
 
 // Load keypair from IndexedDB
-
 async function loadKeypair(indexedDB) {
   return new Promise((resolve, reject) => {
     try {
@@ -436,9 +460,9 @@ async function init(userId) {
     const indexedDB = await initializeIndexedDB();
 
     let keypair = await loadKeypair(indexedDB);
-    if(keypair instanceof Uint8Array){
-      keypair = uint8ArrayToBase64Url(keypair)
-      console.log("GOT HERE: KEYPAIR: "+keypair)
+    if (keypair instanceof Uint8Array) {
+      keypair = uint8ArrayToBase64Url(keypair);
+      console.log("GOT HERE: KEYPAIR: " + keypair);
     }
     if (!keypair && userId) {
       console.log('No keypair found, using userId as keypair:', userId);
@@ -495,7 +519,7 @@ async function init(userId) {
   }
   uploadUserDataToFirebase();
 }
-// Initialize the app
+
 // Check if the user is a node
 async function checkIfUserIsNode(userId) {
   try {
@@ -542,8 +566,9 @@ async function handleSignup() {
       signupButton.textContent = 'Sign Up with Google';
     }
   }
-  localStorage.removeItem('pendingRole')
+  localStorage.removeItem('pendingRole');
 }
+
 async function deposit(amount) {
   if (!isAuthenticated()) {
     showToast('Please sign in to deposit.');
@@ -573,6 +598,7 @@ async function deposit(amount) {
     showLoading(false);
   }
 }
+
 async function withdraw(amount) {
   if (!isAuthenticated()) {
     showToast('Please sign in to withdraw.');
@@ -625,7 +651,8 @@ async function signIn() {
     showLoading(false); // Fade out
   }
 }
-// Sin out the user
+
+// Sign out the user
 async function signOutUser() {
   console.log('signOutUser function called');
   try {
@@ -674,7 +701,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     return;
   }
 
-  showLoading(true,true); // Show immediately
+  showLoading(true, true); // Show immediately
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!title) throw new Error('Title is required');
@@ -740,7 +767,7 @@ async function buySnippet(hash) {
     return null;
   }
 
-  showLoading(true,true); // Show immediately
+  showLoading(true, true); // Show immediately
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
@@ -856,6 +883,7 @@ async function flagSnippet(ipHash) {
     showToast(`Failed to flag snippet: ${error.message}`, true);
   }
 }
+
 // Become a node
 async function becomeNode() {
   const nodeId = generateUUID();
@@ -872,7 +900,8 @@ async function becomeNode() {
     return;
   }
 }
-async function initNode(){
+
+async function initNode() {
   try {
     // Check if the user is a node using localStorage
     const nodeId = localStorage.getItem('nodeId');
@@ -880,17 +909,14 @@ async function initNode(){
    
     localStorage.removeItem('nodeId');
     localStorage.removeItem('role');
-    sessionStorage.setItem('nodeId',nodeId);
-    sessionStorage.setItem('role',role)
-    console.log("Moved to session storage")
+    sessionStorage.setItem('nodeId', nodeId);
+    sessionStorage.setItem('role', role);
+    console.log("Moved to session storage");
     if (role !== 'node' || !nodeId) {
       showToast('You must be signed in as a node to view this page.');
       window.location.href = '/datasharingApp/signup.html';
       return;
     }
-
-
-
 
     // Initialize DHT
     dht = new DHT(nodeId, true); // isNode = true since this is a node
@@ -898,13 +924,11 @@ async function initNode(){
     await dht.initSwarm();
     await dht.syncUserData();
 
-
     // Calculate total earnings from commissions
     const transactions = await dht.dbGetAll('transactions');
     const commissionEarnings = transactions
       .filter(tx => tx.type === 'commission')
       .reduce((total, tx) => total + (tx.amount || 0), 0);
-
 
     const nodeEarningsElement = document.getElementById('nodeEarnings');
     if (nodeEarningsElement) {
@@ -920,10 +944,10 @@ async function initNode(){
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
-  if(window.location.pathname.includes("signup")){
-    showLoading(false,false);
+  if (window.location.pathname.includes("signup")) {
+    showLoading(false, false);
   }
-  if(window.location.pathname.includes("node")){
+  if (window.location.pathname.includes("node")) {
     initNode();
   }
   try {
@@ -939,7 +963,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html"));
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
-    showLoading(false,true)
+    showLoading(false, true);
     window.location.href = '/datasharingApp/node-instructions.html';
   }
 
@@ -1030,7 +1054,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       signOutUser();
     });
     
-    if(isIndexPage){
+    if (isIndexPage) {
       onAuthStateChanged(auth, (user) => {
         if (user) {
           elements.signupButton?.classList.add('hidden');

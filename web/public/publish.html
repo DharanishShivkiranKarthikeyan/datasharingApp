@@ -1,139 +1,435 @@
 <!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Publish a Snippet - Dcrypt</title>
-  <!-- Tailwind CSS CDN -->
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <!-- Font Awesome CDN for icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-  <!-- Google Fonts for modern typography -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Publish a Snippet - Dcrypt</title>
+    <!-- Tailwind CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Font Awesome CDN for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Google Fonts for modern typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js"></script>
 </head>
 <style>
-    h2{
-      color: aliceblue;
+    h2 {
+        color: #E5E7EB; /* Soft White */
     }
     body {
-      font-family: 'Inter', sans-serif;
-      margin: 0;
-      padding: 0;
-      overflow-x: hidden;
+        font-family: 'Inter', sans-serif;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+        background: #1E2A44; /* Dark Blue background */
     }
     .publish-card {
-      background: rgba(31, 41, 55, 0.9); /* Dark semi-transparent background */
-      backdrop-filter: blur(10px);
-      border-radius: 16px;
-      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(30, 42, 68, 0.9); /* Dark Blue semi-transparent */
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
     .input-field {
-      background: rgba(55, 65, 81, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: white;
-      transition: all 0.3s ease;
+        background: rgba(55, 65, 81, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #E5E7EB; /* Soft White text */
+        transition: all 0.3s ease;
     }
     .input-field:focus {
-      border-color: #7a00e8;
-      box-shadow: 0 0 0 3px rgba(122, 0, 232, 0.2);
+        border-color: #00DDEB; /* Neon Cyan */
+        box-shadow: 0 0 0 3px rgba(0, 221, 235, 0.2); /* Neon Cyan glow */
     }
     .publish-btn {
-      background: #7a00e8;
-      transition: background 0.3s ease;
+        background: #00DDEB; /* Neon Cyan */
+        transition: background 0.3s ease;
     }
     .publish-btn:hover {
-      background: #5b00b3;
+        background: #66E0EA; /* Light Cyan on hover */
     }
     #background-default {
-      position: absolute; /* or fixed, depending on your needs */
-      top: 0;
-      left: 0;
-      width: 100%;
-      min-height: 100vh !important;
-      z-index: -1; /* Places it behind other elements */
-      display: flex;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        min-height: 100vh !important;
+        z-index: -1;
+        display: flex;
+    }
+    /* Toast styles */
+    .toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #1E2A44; /* Dark Blue */
+        color: #E5E7EB; /* Soft White */
+        padding: 10px 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+        display: none;
+    }
+    .error-toast {
+        background: #FF6B6B; /* Coral Red for errors */
+        color: white;
     }
 </style>
 <body id="body">
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Vanta Background -->
     <div id="background-default"></div>
+
+    <!-- Main Content -->
     <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div class="publish-card max-w-2xl w-full space-y-8 p-8">
-          <div>
-            <h2 class="text-3xl font-bold text-center">Publish a Snippet</h2>
-            <p class="mt-2 text-center text-sm text-gray-400">
-              Share your code, ideas, or creations with the Dcrypt community.
-            </p>
-          </div>
-          <form class="space-y-6">
-            <!-- Title -->
             <div>
-              <label for="title" class="block text-sm font-medium text-gray-300">Title</label>
-              <input id="title" name="title" type="text" required
-                     class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
-                     placeholder="Enter the title of your snippet">
+                <h2 class="text-3xl font-bold text-center">Publish a Snippet</h2>
+                <p class="mt-2 text-center text-sm text-gray-400">
+                    Share your code, ideas, or creations with the Dcrypt community.
+                </p>
             </div>
+            <form id="publishForm" class="space-y-6">
+                <!-- Title -->
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-300">Title</label>
+                    <input id="titleInput" name="title" type="text" required
+                           class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
+                           placeholder="Enter the title of your snippet">
+                </div>
     
-            <!-- Description -->
-            <div>
-              <label for="description" class="block text-sm font-medium text-gray-300">Description</label>
-              <textarea id="description" name="description" rows="4" required
-                        class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
-                        placeholder="Describe your snippet"></textarea>
-            </div>
+                <!-- Description -->
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-300">Description</label>
+                    <textarea id="descriptionInput" name="description" rows="4" required
+                              class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
+                              placeholder="Describe your snippet"></textarea>
+                </div>
     
-            <!-- Tags -->
-            <div>
-              <label for="tags" class="block text-sm font-medium text-gray-300">Tags (comma-separated)</label>
-              <input id="tags" name="tags" type="text"
-                     class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
-                     placeholder="e.g., javascript, python, css">
-            </div>
+                <!-- Tags -->
+                <div>
+                    <label for="tags" class="block text-sm font-medium text-gray-300">Tags (comma-separated)</label>
+                    <input id="tagsInput" name="tags" type="text"
+                           class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
+                           placeholder="e.g., javascript, python, css">
+                </div>
+                <!-- Content Upload-->
+                <div>
+                    <label for="content" class="block text-sm font-medium text-gray-300">Content</label>
+                    <textarea id="contentInput" name="content" rows="4"
+                              class="input-field mt-1 block w-full px-4 py-3 rounded-lg focus:outline-none placeholder-gray-500"
+                              placeholder="Type Your Content (Or Upload File)"></textarea>
+                </div>
+                <!-- File Upload -->
+                <div>
+                    <label for="file-upload" class="block text-sm font-medium text-gray-300">Choose File</label>
+                    <div class="mt-1 flex items-center">
+                        <label class="input-field px-4 py-3 rounded-lg cursor-pointer flex items-center">
+                            <span id="file-label" class="text-gray-500">No file chosen</span>
+                            <input id="fileInput" name="file-upload" type="file" class="hidden"
+                                   onchange="document.getElementById('file-label').textContent = this.files[0]?.name || 'No file chosen'">
+                            <span class="ml-3 text-gray-400"><i class="fas fa-upload"></i></span>
+                        </label>
+                    </div>
+                </div>
     
-            <!-- File Upload -->
-            <div>
-              <label for="file-upload" class="block text-sm font-medium text-gray-300">Choose File</label>
-              <div class="mt-1 flex items-center">
-                <label class="input-field px-4 py-3 rounded-lg cursor-pointer flex items-center">
-                  <span id="file-label" class="text-gray-500">No file chosen</span>
-                  <input id="file-upload" name="file-upload" type="file" class="hidden"
-                         onchange="document.getElementById('file-label').textContent = this.files[0]?.name || 'No file chosen'">
-                  <span class="ml-3 text-gray-400"><i class="fas fa-upload"></i></span>
-                </label>
-              </div>
-            </div>
+                <!-- Premium Toggle -->
+                <div class="flex items-center">
+                    <input id="premium" name="premium" type="checkbox"
+                           class="h-4 w-4 text-cyan-500 focus:ring-cyan-400 border-gray-300 rounded">
+                    <label for="premium" class="ml-2 block text-sm text-gray-300">Premium</label>
+                </div>
     
-            <!-- Premium Toggle -->
-            <div class="flex items-center">
-              <input id="premium" name="premium" type="checkbox"
-                     class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
-              <label for="premium" class="ml-2 block text-sm text-gray-300">Premium</label>
-            </div>
-    
-            <!-- Publish Button -->
-            <div>
-              <button type="submit"
-                      class="publish-btn w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white focus:outline-none">
-                Publish
-              </button>
-            </div>
-          </form>
+                <!-- Publish Button -->
+                <div>
+                    <button type="submit"
+                            class="publish-btn w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white focus:outline-none">
+                        Publish
+                    </button>
+                </div>
+            </form>
         </div>
-      </div>
+    </div>
+
+    <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js"></script>
-    <script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanta@0.5.21/dist/vanta.topology.min.js"></script>
+    <script type="module">
+        // Import Firebase Auth and Firestore methods
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+        import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+        import { DHT } from './dht.js';
+        import { uint8ArrayToBase64Url } from './dht.js';
+
+        // Firebase configuration (replace with your actual config)
+        const firebaseConfig = {
+            // Replace with your Firebase config object
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Global variables
+        let dht = null;
+
+        // Show toast notification
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            if (!toast) return;
+            toast.textContent = message;
+            toast.className = 'toast';
+            if (isError) toast.classList.add('error-toast');
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+
+        // Initialize IndexedDB
+        async function initializeIndexedDB() {
+            const TARGET_VERSION = 5;
+            return new Promise((resolve, reject) => {
+                const checkRequest = indexedDB.open('dcrypt_db');
+                checkRequest.onsuccess = () => {
+                    const db = checkRequest.result;
+                    const currentVersion = db.version;
+                    db.close();
+                    const openRequest = indexedDB.open('dcrypt_db', Math.max(currentVersion, TARGET_VERSION));
+                    openRequest.onupgradeneeded = (event) => {
+                        const db = openRequest.result;
+                        if (!db.objectStoreNames.contains('store')) {
+                            db.createObjectStore('store', { keyPath: 'id' });
+                        }
+                        if (!db.objectStoreNames.contains('transactions')) {
+                            db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
+                        }
+                        if (!db.objectStoreNames.contains('offlineQueue')) {
+                            db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
+                        }
+                        if (!db.objectStoreNames.contains('chunkCache')) {
+                            db.createObjectStore('chunkCache', { keyPath: 'id' });
+                        }
+                    };
+                    openRequest.onsuccess = () => {
+                        const db = openRequest.result;
+                        resolve(db);
+                    };
+                    openRequest.onerror = () => {
+                        reject(new Error(`Failed to open IndexedDB: ${openRequest.error.message}`));
+                    };
+                };
+                checkRequest.onerror = () => {
+                    reject(new Error(`Failed to check IndexedDB version: ${checkRequest.error.message}`));
+                };
+            });
+        }
+
+        // Load keypair from IndexedDB
+        async function loadKeypair(indexedDB) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const tx = indexedDB.transaction('store', 'readonly');
+                    const store = tx.objectStore('store');
+                    const request = store.get('dcrypt_identity');
+                    request.onsuccess = () => {
+                        const value = request.result?.value;
+                        if (value && typeof value === 'string') {
+                            resolve(value);
+                        } else {
+                            resolve(null);
+                        }
+                    };
+                    request.onerror = () => {
+                        reject(new Error('Failed to load keypair from IndexedDB'));
+                    };
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+
+        // Initialize the app with persisted state
+        async function init(userId) {
+            try {
+                const indexedDB = await initializeIndexedDB();
+
+                // Check for persisted state in localStorage
+                const keypair = localStorage.getItem('userKeypair');
+                const peerId = localStorage.getItem('peerId');
+                const dhtInitialized = localStorage.getItem('dhtInitialized') === 'true';
+
+                let finalKeypair = keypair;
+                if (!keypair) {
+                    // If no keypair in localStorage, try to load from IndexedDB
+                    finalKeypair = await loadKeypair(indexedDB);
+                    if (!finalKeypair && userId) {
+                        finalKeypair = userId;
+                    } else if (!finalKeypair) {
+                        throw new Error('No keypair available to initialize the app');
+                    }
+                }
+
+                const isNode = await checkIfUserIsNode(userId);
+                console.log(`User is ${isNode ? '' : 'not '}a node.`);
+
+                // Initialize DHT
+                dht = new DHT(finalKeypair, isNode);
+                window.dht = dht;
+
+                if (dhtInitialized) {
+                    // If DHT was already initialized, just reconnect to the swarm
+                    await dht.initSwarm();
+                    console.log('Reconnected to DHT swarm using persisted state.');
+                } else {
+                    // Full initialization if state wasn't persisted
+                    await dht.initDB();
+                    await dht.initSwarm();
+                    await dht.syncUserData();
+                    console.log('Performed full DHT initialization.');
+                }
+            } catch (error) {
+                console.error('Error initializing application:', error);
+                showToast('Failed to initialize the app. Please return to the dashboard and try again.', true);
+                dht = null;
+                window.dht = null;
+                setTimeout(() => {
+                    window.location.href = '/datasharingApp/';
+                }, 3000);
+            }
+        }
+
+        // Check if the user is a node
+        async function checkIfUserIsNode(userId) {
+            try {
+                const nodeRef = doc(db, 'nodes', userId);
+                const nodeSnap = await getDoc(nodeRef);
+                return nodeSnap.exists();
+            } catch (error) {
+                console.error('Failed to check node status:', error);
+                return false;
+            }
+        }
+
+        // Publish a snippet
+        async function publishSnippet(title, description, tags, content, fileInput) {
+            if (!auth.currentUser) {
+                showToast('Please sign in to publish.', true);
+                setTimeout(() => {
+                    window.location.href = '/datasharingApp/';
+                }, 2000);
+                return;
+            }
+
+            try {
+                if (!dht) throw new Error('DHT not initialized');
+                if (!title) throw new Error('Title is required');
+
+                let finalContent = content || '';
+                let fileType = 'text/plain';
+                if (fileInput?.files?.length) {
+                    const file = fileInput.files[0];
+                    fileType = file.type || 'application/octet-stream';
+                    finalContent = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(new Uint8Array(e.target.result));
+                        reader.onerror = () => reject(new Error('Failed to read file'));
+                        reader.readAsArrayBuffer(file);
+                    });
+                } else {
+                    finalContent = new TextEncoder().encode(finalContent);
+                }
+
+                const isPremium = document.getElementById('premium').checked;
+                const metadata = {
+                    content_type: title,
+                    description: description || '',
+                    tags: tags ? tags.split(',').map((t) => t.trim()) : [],
+                    isPremium,
+                    priceUsd: isPremium ? 0 : 0, // Price input not implemented in this form
+                };
+
+                const ipHash = await dht.publishIP(metadata, finalContent, fileType);
+                const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
+                const snippetRef = doc(db, 'snippets', ipHash);
+                await setDoc(snippetRef, {
+                    ipHash,
+                    flagCount: 0,
+                    averageRating: 0,
+                    reviewStatus: 'active',
+                    createdAt: Date.now(),
+                    creatorId: userId,
+                }, { merge: true });
+
+                showToast('Snippet published successfully!');
+                // Redirect back to dashboard after publishing
+                setTimeout(() => {
+                    window.location.href = '/datasharingApp/';
+                }, 2000);
+            } catch (error) {
+                console.error('publishSnippet failed:', error);
+                showToast(`Publish failed: ${error.message}`, true);
+            }
+        }
+
+        // Initialize on DOM load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check auth state and initialize
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    console.log('User is signed in:', user.uid);
+                    init(user.uid);
+                } else {
+                    console.log('No user is signed in.');
+                    showToast('Please sign in to access this page.', true);
+                    setTimeout(() => {
+                        window.location.href = '/datasharingApp/';
+                    }, 2000);
+                }
+            });
+
+            // Form submission handler
+            const publishForm = document.getElementById('publishForm');
+            publishForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const title = document.getElementById('titleInput').value;
+                const description = document.getElementById('descriptionInput').value;
+                const tags = document.getElementById('tagsInput').value;
+                const content = document.getElementById('contentInput').value;
+                const fileInput = document.getElementById('fileInput');
+                window.publishSnippet(title, description, tags, content, fileInput);
+            });
+        });
+
+        // Expose publishSnippet to global scope
+        window.publishSnippet = publishSnippet;
+
+        // Initialize Vanta.js with updated colors
         VANTA.TOPOLOGY({
-        el: "#background-default",
-        mouseControls: true,
-        touchControls: true,
-        gyroControls: false,
-        minHeight: 800.00,
-        minWidth: 400.00,
-        scale: 1.00,
-        scaleMobile: 1.00,
-        color: 0x7a00e8,
-        backgroundColor: 0x00000,
-        speed: 10.0
-      })
+            el: "#background-default",
+            mouseControls: true,
+            touchControls: true,
+            gyroControls: false,
+            minHeight: 800.00,
+            minWidth: 400.00,
+            scale: 1.00,
+            scaleMobile: 1.00,
+            color: 0x00DDEB, /* Neon Cyan */
+            backgroundColor: 0x1E2A44, /* Dark Blue */
+            speed: 10.0
+        });
     </script>
 </body>
+</html>
