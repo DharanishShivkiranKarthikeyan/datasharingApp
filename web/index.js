@@ -67,7 +67,7 @@ function showToast(message, isError = false) {
 }
 
 function redirectToPublish(){
-  fadeOut(this.getElementById("body"));
+  fadeOut(document.getElementById("body"));
   window.location.href == "/datasharingApp/publish.html";
 }
 
