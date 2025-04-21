@@ -57,6 +57,7 @@
       max-height: 100vh;
       z-index: 1;
       overflow: auto;
+      margin-right: 2% !important;
     }
     .toast {
       position: fixed;
@@ -172,13 +173,12 @@
     }
   </style>
 </head>
+<div id="loadingTextBox">
+  <h1 style="font-family: Optima; font-size: 10vh;">Dcrypt</h1>
+  <div id="loader" class="loader"></div>
+</div>
+<div id="background-loading"></div>
 <body>
-  <div id="loadingTextBox">
-    <h1 style="font-family: Optima; font-size: 10vh;">Dcrypt</h1>
-    <div id="loader" class="loader"></div>
-  </div>
-  
-  <div id="background-loading"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"></script>
@@ -200,7 +200,7 @@
   
   </script>
   <div class="toast" id="toast"></div>
-  <div class="container trans">
+  <div class="container">
     <!-- Title and Buttons Section with .card class -->
     <div class="card flex justify-between items-center mb-6">
       <h1 class="text-3xl font-bold">Dcrypt - Decentralized Data Sharing</h1>
