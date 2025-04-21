@@ -67,8 +67,8 @@ function showToast(message, isError = false) {
 }
 
 function redirectToPublish(){
-  fadeOut(document.getElementById("body"));
   window.location.href = "/datasharingApp/publish.html/";
+  console.log("redirected")
 }
 
 // Show or hide loading spinner
