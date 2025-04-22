@@ -7,19 +7,6 @@ if (!subtle) {
   throw new Error('Web Crypto API is not available in this environment');
 }
 
-// Helper to convert ArrayBuffer to hex string
-function arrayBufferToHex(buffer) {
-  return Array.from(new Uint8Array(buffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-// Helper to convert hex string to ArrayBuffer
-function hexToArrayBuffer(hex) {
-  const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-  return bytes.buffer;
-}
-
 // Helper to generate a static nonce (for simplicity; in production, store this with the chunk)
 function generateNonce() {
   const nonce = new Uint8Array(12); // 96-bit nonce for AES-GCM
@@ -49,12 +36,12 @@ export async function computeFullHash(content) {
   const buffer = await subtle.digest('SHA-256', content);
   return new Uint8Array(buffer);
 }
+/*
 
 export async function chunkEncrypt(ip, key, minChunks) {
   const content = ip.content;
   const chunkSize = Math.ceil(content.length / minChunks);
   const chunks = [];
-  console.log("TRYING TO MAEK SHA 256")
   key = await subtle.digest('SHA-256',new ArrayBuffer(key))
   console.log("ERROR MAKING SHA 256 if u dont see this" + key)
   const keyBuffer = await subtle.importKey(
@@ -87,7 +74,7 @@ export async function chunkEncrypt(ip, key, minChunks) {
   }
 
   return chunks;
-}
+*/
 export function getChunkHash(chunk) {
     // Convert chunk.index (a number) to a Uint8Array
     const indexBytes = new Uint8Array(new Int32Array([chunk.index]).buffer);
@@ -110,10 +97,66 @@ export function getChunkIndex(chunk) {
   return chunk.index;
 }
 
-export async function decryptChunk(chunk, key) {
+function stringToArrayBuffer(str) {
+  const encoder = new TextEncoder();
+  return encoder.encode(str).buffer;
+}
+
+export async function chunkEncrypt(ip, key, minChunks) {
+  const content = ip.content;
+  const chunkSize = Math.ceil(content.length / minChunks);
+  const chunks = [];
+
+  // Ensure key is a string, not an array
+  if (Array.isArray(key)) {
+    key = key.join(''); // Convert array of characters back to string if needed
+  }
+
+  // Hash the key string to get a 256-bit (32-byte) key
+  const keyData = await subtle.digest('SHA-256', stringToArrayBuffer(key));
   const keyBuffer = await subtle.importKey(
     'raw',
-    new Uint8Array(key.slice(0, 32)), // Use first 32 bytes for AES-256
+    keyData, // This is now a 32-byte ArrayBuffer
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt']
+  );
+
+  for (let i = 0; i < minChunks; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, content.length);
+    const chunkData = content.slice(start, end);
+
+    const nonce = generateNonce();
+    const encrypted = await subtle.encrypt(
+      { name: 'AES-GCM', iv: nonce },
+      keyBuffer,
+      chunkData
+    );
+
+    const chunk = {
+      data: new Uint8Array(encrypted),
+      nonce: nonce,
+      index: i,
+      file_type: ip.file_type,
+    };
+    chunks.push(chunk);
+  }
+
+  return chunks;
+}
+
+export async function decryptChunk(chunk, key) {
+  // Ensure key is a string, not an array
+  if (Array.isArray(key)) {
+    key = key.join(''); // Convert array of characters back to string if needed
+  }
+
+  // Hash the key string to get a 256-bit (32-byte) key
+  const keyData = await subtle.digest('SHA-256', stringToArrayBuffer(key));
+  const keyBuffer = await subtle.importKey(
+    'raw',
+    keyData, // This is now a 32-byte ArrayBuffer
     { name: 'AES-GCM' },
     false,
     ['decrypt']
@@ -127,7 +170,6 @@ export async function decryptChunk(chunk, key) {
 
   return new Uint8Array(decrypted);
 }
-
 export function getChunkFileType(chunk) {
   return chunk.file_type;
 }

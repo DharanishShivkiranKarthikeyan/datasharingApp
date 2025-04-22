@@ -453,21 +453,21 @@ export class DHT {
   async publishIP(metadata, content, fileType) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     if (!this.keypair) throw new Error('Keypair not initialized');
-
+  
     try {
       const tags = Array.isArray(metadata.tags)
         ? metadata.tags.map(tag => String(tag).trim()).filter(tag => tag !== '')
         : [];
       console.log('Processed tags:', tags);
-
+  
       const isPremium = !!metadata.isPremium;
       const priceUsd = isPremium ? (metadata.priceUsd || 30) : 0;
-
+  
       const contentArray = new Uint8Array(content);
       const contentType = metadata.content_type || '';
       const creatorId = this.keypair; // Use string keypair directly
       const fileTypeSafe = fileType || 'text/plain';
-
+  
       const ip = createIntellectualProperty(
         contentArray,
         contentType,
@@ -477,15 +477,15 @@ export class DHT {
         creatorId,
         fileTypeSafe
       );
-
+  
       const contentBytes = getIpContent(ip);
       const ipHashBytes = await computeFullHash(contentBytes);
       const ipHash = this.uint8ArrayToBase64Url(ipHashBytes);
-
+  
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
-      const chunks = await chunkEncrypt(ip, Array.from(this.keypair), minChunks);
-
+      const chunks = await chunkEncrypt(ip, this.keypair, minChunks); // Pass the string directly
+  
       const chunkHashes = [];
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
@@ -493,30 +493,30 @@ export class DHT {
         const chunkHash = this.uint8ArrayToBase64Url(chunkHashBytes);
         chunkHashes.push(chunkHash);
       }
-
+  
       const updatedMetadata = {
         ...metadata,
         chunk_count: chunks.length,
         isPremium,
         priceUsd: isPremium ? priceUsd : 0,
       };
-
+  
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
       this.knownObjects.set(ipHash, ipObject);
       await this.dbPut('store', { id: ipHash, value: JSON.stringify(ipObject) });
-
+  
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const chunkHash = chunkHashes[i];
         await this.publishChunk(chunkHash, chunk, i, chunks.length);
       }
-
+  
       if (this.activeNodes.size > 0) {
         this.broadcastIP(ipHash, updatedMetadata, chunkHashes);
       } else {
         await this.queueOfflineOperation({ type: 'publishIP', ipHash, metadata: updatedMetadata, chunkHashes });
       }
-
+  
       return ipHash;
     } catch (error) {
       console.error('publishIP failed:', error);
@@ -534,10 +534,10 @@ export class DHT {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
       if (!ipHash || typeof ipHash !== 'string') throw new Error('Invalid IP hash');
-
+  
       const ipObject = this.knownObjects.get(ipHash);
       if (!ipObject) throw new Error('IP not found');
-
+  
       const chunks = [];
       for (const chunkHash of ipObject.chunks) {
         const cachedChunk = await this.dbGet('chunkCache', chunkHash);
@@ -545,15 +545,15 @@ export class DHT {
           chunks.push({ chunk: cachedChunk.value, hash: chunkHash });
           continue;
         }
-
+  
         const peersWithChunk = this.chunkToPeerMap.get(chunkHash);
         if (!peersWithChunk || peersWithChunk.size === 0) {
           throw new Error(`No peers found with chunk ${chunkHash}`);
         }
-
+  
         const nodePeers = Array.from(peersWithChunk).filter(peerId => peerId.startsWith('node-'));
         const regularPeers = Array.from(peersWithChunk).filter(peerId => !peerId.startsWith('node-'));
-
+  
         let chunkFetched = false;
         let lastError = null;
         for (const peerId of [...nodePeers, ...regularPeers]) {
@@ -571,58 +571,37 @@ export class DHT {
             }
           }
         }
-
+  
         if (!chunkFetched) {
           throw lastError || new Error(`No available peer for chunk ${chunkHash}`);
         }
       }
-
+  
       const sortedChunks = chunks.sort((a, b) => {
         const indexA = getChunkIndex(a.chunk);
         const indexB = getChunkIndex(b.chunk);
         return indexA - indexB;
       });
-
+  
       const decryptedData = [];
       for (const { chunk } of sortedChunks) {
-        const decryptedChunk = await decryptChunk(chunk, this.keypair.split(''));
+        const decryptedChunk = await decryptChunk(chunk, this.keypair); // Pass the string directly
         decryptedData.push(decryptedChunk);
       }
-
+  
       const fullData = new Uint8Array(decryptedData.reduce((acc, chunk) => acc + chunk.length, 0));
       let offset = 0;
       for (const chunk of decryptedData) {
         fullData.set(chunk, offset);
         offset += chunk.length;
       }
-
+  
       const fileType = getChunkFileType(sortedChunks[0].chunk);
       return { data: fullData, fileType };
     } catch (error) {
       console.error('requestData failed:', error);
       throw error;
     }
-  }
-
-  async fetchChunkFromPeer(peerId, hash) {
-    const peer = this.peers.get(peerId);
-    if (!peer || !peer.connected || !peer.conn) {
-      throw new Error(`Peer ${peerId} is not connected`);
-    }
-
-    const requestId = `${peerId}-${hash}-${Date.now()}`;
-    const message = { type: 'chunkRequest', requestId, chunkHash: hash, peerId: this.peerId };
-    peer.conn.send(message);
-
-    return new Promise((resolve, reject) => {
-      this.pendingRequests.set(requestId, { resolve, reject, hash });
-      setTimeout(() => {
-        if (this.pendingRequests.has(requestId)) {
-          this.pendingRequests.delete(requestId);
-          reject(new Error(`Request for chunk ${hash} from peer ${peerId} timed out`));
-        }
-      }, 10000);
-    });
   }
 
   handleChunkRequest(data, peerId) {
