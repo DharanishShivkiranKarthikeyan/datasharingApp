@@ -959,7 +959,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
-  const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html"));
+  const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html")|| window.location.pathname.includes("publish"));
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
     showLoading(false, true);
@@ -1065,7 +1065,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     
     onAuthStateChanged(auth, (user) => {
-      if (user && window.location.pathname=="/datasharingApp/") {
+      if (user) {
         elements.signupButton?.classList.add('hidden');
         elements.loginButton?.classList.add('hidden');
         elements.logoutButton?.classList.remove('hidden');
