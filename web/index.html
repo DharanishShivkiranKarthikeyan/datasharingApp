@@ -240,17 +240,21 @@
   <!-- Header -->
   <div class="header">
     <h1 class="text-2xl font-semibold">Dcrypt - Decentralized Data Sharing</h1>
-    <button id="logoutButton" class="btn btn-danger hidden" onclick="window.logout()">Logout</button>
+    <div class="space-x-2">
+      <button id="signupButton" class="btn btn-primary" onclick="window.location.href='/datasharingApp/signup.html'">Sign Up</button>
+      <button id="loginButton" class="btn btn-primary">Login</button>
+      <button id="logoutButton" class="btn btn-danger hidden" onclick="window.logout()">Logout</button>
+    </div>
   </div>
   <!-- Layout -->
   <div class="layout">
     <!-- Sidebar -->
     <div class="sidebar">
-      <!-- User Profile (Suggested Addition) -->
+      <!-- User Profile -->
       <div class="sidebar-section">
         <h3>User Profile</h3>
         <div class="flex items-center space-x-3">
-          <div class="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center">
+          <div class="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center user-avatar">
             <i class="fas fa-user text-lg"></i>
           </div>
           <div>
@@ -286,7 +290,7 @@
           <div id="transactionList">No transactions yet.</div>
         </div>
       </div>
-      <!-- Dark/Light Mode Toggle (Suggested Addition) -->
+      <!-- Dark/Light Mode Toggle -->
       <div class="sidebar-section">
         <h3>Theme</h3>
         <button id="themeToggle" class="btn btn-primary">Switch to Light Mode</button>
@@ -308,7 +312,7 @@
       <!-- Live Feed -->
       <div class="card">
         <h2 class="text-xl font-semibold mb-4">Live Feed</h2>
-        <!-- Filter Options (Suggested Addition) -->
+        <!-- Filter Options -->
         <div class="filter-group">
           <select id="sortBy" class="filter-select">
             <option value="rating-desc">Sort by Rating (High to Low)</option>
@@ -441,7 +445,7 @@
         });
       }
 
-      // Theme Toggle (Suggested Addition)
+      // Theme Toggle
       const themeToggle = document.getElementById('themeToggle');
       if (themeToggle) {
         themeToggle.addEventListener('click', () => {

@@ -1,12 +1,13 @@
-// Import Firebase Auth and Firestore methods
+// Import Firebase Auth, Firestore, and Storage methods
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js';
 import { DHT } from './dht.js';
 import { uint8ArrayToBase64Url } from './dht.js';
-import "https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"
-import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js"
-import "https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"
-import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js"
+import "https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js";
+import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js";
+import "https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js";
+import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js";
 
 // Import other JavaScript files to ensure they're included in the bundle
 import './utils.js';
@@ -14,6 +15,7 @@ import './utils.js';
 // Global state variables
 let auth = null;
 let db = null;
+let storage = null; // Add Firebase Storage
 let dht = null;
 let isNode = false;
 let userBalance = 0;
@@ -27,9 +29,11 @@ async function initializeFirebase() {
     const firebaseModule = await import('./firebase.js');
     auth = firebaseModule.auth;
     db = firebaseModule.db;
+    storage = getStorage(); // Initialize Firebase Storage
     await setPersistence(auth, browserLocalPersistence);
     console.log('Firebase services initialized successfully with local persistence');
     console.log('Auth object:', auth);
+    console.log('Storage object:', storage);
     console.log('Current Firebase user on init:', auth.currentUser);
   } catch (error) {
     console.error('Failed to initialize Firebase services:', error);
@@ -144,11 +148,19 @@ function updateUIForSignOut() {
     publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
     transactionList: document.getElementById('transactionList'),
     userBalanceElement: document.getElementById('userBalance'),
+    userNameElement: document.getElementById('userName'),
+    userAvatarElement: document.querySelector('.user-avatar'),
+    snippetsPostedElement: document.getElementById('snippetsPosted'),
   };
 
   if (elements.publishedItemsTableBody) elements.publishedItemsTableBody.innerHTML = '';
   if (elements.transactionList) elements.transactionList.innerHTML = 'No transactions yet.';
   if (elements.userBalanceElement) elements.userBalanceElement.textContent = 'Balance: 0 DCT';
+  if (elements.userNameElement) elements.userNameElement.textContent = 'Guest User';
+  if (elements.userAvatarElement) {
+    elements.userAvatarElement.innerHTML = '<i class="fas fa-user text-lg"></i>';
+  }
+  if (elements.snippetsPostedElement) elements.snippetsPostedElement.textContent = '0';
   userBalance = 0;
 
   localStorage.removeItem('userKeypair');
@@ -474,6 +486,9 @@ async function init(userId) {
       updateTransactionHistory(),
     ]);
     console.log('UI updated.');
+
+    // Fetch and update user profile data
+    await updateUserProfile(userId);
   } catch (error) {
     console.error('Error initializing application:', error);
     if (error.message.includes('ID conflict')) {
@@ -506,6 +521,22 @@ async function checkIfUserIsNode(userId) {
   }
 }
 
+// Helper function to upload profile image to Firebase Storage
+async function uploadProfileImage(userId, file) {
+  if (!file) return null;
+  try {
+    const storageRef = ref(storage, `profile_images/${userId}/${file.name}`);
+    await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(storageRef);
+    console.log('Profile image uploaded:', downloadURL);
+    return downloadURL;
+  } catch (error) {
+    console.error('Failed to upload profile image:', error);
+    showToast('Failed to upload profile image.', true);
+    return null;
+  }
+}
+
 // Handle signup process
 async function handleSignup() {
   console.log('handleSignup function called');
@@ -530,6 +561,26 @@ async function handleSignup() {
     console.log('Initiating signInWithPopup for signup');
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-up successful, user:', result.user);
+
+    // Collect user data from the modal
+    const username = document.getElementById('usernameInput').value;
+    const profileImageInput = document.getElementById('profileImageInput');
+    const profileImageFile = profileImageInput.files[0];
+
+    // Upload profile image to Firebase Storage if provided
+    const profileImageUrl = profileImageFile ? await uploadProfileImage(result.user.uid, profileImageFile) : null;
+
+    // Store user data in Firestore
+    const userRef = doc(db, 'users', result.user.uid);
+    await setDoc(userRef, {
+      username: username || result.user.displayName || 'Anonymous User',
+      profileImageUrl: profileImageUrl || null,
+      createdAt: Date.now(),
+      snippetsPosted: 0, // Initialize snippets posted count
+    }, { merge: true });
+
+    console.log('User profile saved to Firestore');
+    showToast('Sign-up successful! Redirecting to dashboard...');
     window.location.href = '/datasharingApp/';
   } catch (error) {
     console.error('Signup failed:', error);
@@ -539,8 +590,9 @@ async function handleSignup() {
       signupButton.disabled = false;
       signupButton.textContent = 'Sign Up with Google';
     }
+  } finally {
+    localStorage.removeItem('pendingRole');
   }
-  localStorage.removeItem('pendingRole');
 }
 
 async function deposit(amount) {
@@ -719,6 +771,12 @@ async function publishSnippet(title, description, tags, content, fileInput) {
       creatorId: userId,
     }, { merge: true });
 
+    // Increment user's snippetsPosted count
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      snippetsPosted: increment(1)
+    });
+
     showToast('Snippet published successfully!');
     window.closePublishModal();
     await Promise.all([
@@ -726,6 +784,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
       updateTransactionHistory(),
       updateBalanceDisplay(),
       uploadUserDataToFirebase(),
+      updateUserProfile(userId), // Update profile to reflect new snippetsPosted count
     ]);
   } catch (error) {
     console.error('publishSnippet failed:', error);
@@ -912,12 +971,54 @@ async function initNode() {
   }
 }
 
+// Function to fetch and update user profile data
+async function updateUserProfile(userId) {
+  if (!userId) return;
+
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      const userNameElement = document.getElementById('userName');
+      const userAvatarElement = document.querySelector('.user-avatar');
+      const snippetsPostedElement = document.getElementById('snippetsPosted');
+
+      if (userNameElement) {
+        userNameElement.textContent = userData.username || 'Anonymous User';
+      }
+      if (userAvatarElement) {
+        if (userData.profileImageUrl) {
+          userAvatarElement.innerHTML = `<img src="${userData.profileImageUrl}" alt="Profile Image" class="w-12 h-12 rounded-full object-cover">`;
+        } else {
+          userAvatarElement.innerHTML = '<i class="fas fa-user text-lg"></i>';
+        }
+      }
+      if (snippetsPostedElement) {
+        snippetsPostedElement.textContent = userData.snippetsPosted || 0;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to fetch user profile:', error);
+    showToast('Failed to load user profile.', true);
+  }
+}
+
 // Main DOMContentLoaded event handler
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
   if (window.location.pathname.includes("signup")) {
     showLoading(false, false);
+
+    // Setup user signup form submission
+    const userSignupForm = document.getElementById('userSignupForm');
+    if (userSignupForm) {
+      userSignupForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await window.handleSignup();
+      });
+    }
   }
   if (window.location.pathname.includes("node")) {
     initNode();
