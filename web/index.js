@@ -67,26 +67,19 @@ function showToast(message, isError = false) {
 
 // Modified redirectToPublish to persist state in localStorage before redirecting
 function redirectToPublish() {
-  // Check if the user is authenticated and DHT is initialized
   if (!isAuthenticated() || !dht) {
     showToast('Please sign in and ensure the app is initialized before publishing.', true);
     return;
   }
 
   try {
-    // Store key user state in localStorage for persistence across pages
-    const keypair = dht.keypair; // The keypair used for DHT
-    const peerId = keypair; // PeerJS ID is the same as the keypair in this case
-    localStorage.setItem('userKeypair', keypair);
-    localStorage.setItem('peerId', peerId);
-    localStorage.setItem('dhtInitialized', 'true');
-    console.log('Persisted user state to localStorage:', { keypair, peerId });
-
-    // Redirect to publish.html
-    window.location.href = "/datasharingApp/publish.html";
+    // Show the publish modal
+    const modal = document.getElementById('publishModal');
+    modal.classList.add('active');
+    console.log('Opened publish modal');
   } catch (error) {
-    console.error('Failed to persist state before redirecting:', error);
-    showToast('Failed to prepare for publishing. Please try again.', true);
+    console.error('Failed to open publish modal:', error);
+    showToast('Failed to open publish modal. Please try again.', true);
   }
 }
 
@@ -745,6 +738,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     }, { merge: true });
 
     showToast('Snippet published successfully!');
+    closePublishModal();
     await Promise.all([
       updateLiveFeed(),
       updateTransactionHistory(),

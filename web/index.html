@@ -78,7 +78,7 @@
     .input-field {
       padding: 0.5rem;
       background-color: #2d3748;
-      color: #e2e8f0;
+      color: #E5E7EB; /* Soft White */
       border: 1px solid #4a5568;
       border-radius: 0.25rem;
       width: 100%;
@@ -86,8 +86,8 @@
     }
     .input-field:focus {
       outline: none;
-      border-color: #63b3ed;
-      box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.3);
+      border-color: #00DDEB; /* Neon Cyan */
+      box-shadow: 0 0 0 2px rgba(0, 221, 235, 0.3);
     }
     .btn {
       padding: 0.5rem 1rem;
@@ -96,18 +96,18 @@
       transition: background-color 0.2s;
     }
     .btn-primary {
-      background-color: #3b82f6;
-      color: white;
+      background-color: #00DDEB; /* Neon Cyan */
+      color: #1E2A44; /* Dark Blue text */
     }
     .btn-primary:hover {
-      background-color: #2563eb;
+      background-color: #66E0EA; /* Light Cyan */
     }
     .btn-secondary {
-      background-color: #6b7280;
-      color: white;
+      background-color: #00DDEB; /* Neon Cyan */
+      color: #1E2A44;
     }
     .btn-secondary:hover {
-      background-color: #4b5563;
+      background-color: #66E0EA; /* Light Cyan */
     }
     .btn-success {
       background-color: #10b981;
@@ -117,7 +117,7 @@
       background-color: #059669;
     }
     .btn-danger {
-      background-color: #ef4444;
+      background-color: #FF6B6B; /* Coral Red */
       color: white;
     }
     .btn-danger:hover {
@@ -128,7 +128,56 @@
       padding: 1.5rem;
       border-radius: 0.5rem;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-      filter: opacity(0.9)
+      filter: opacity(0.9);
+    }
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      visibility: hidden;
+      opacity: 0;
+      transition: all 0.3s ease;
+    }
+    .modal-overlay.active {
+      visibility: visible;
+      opacity: 1;
+    }
+    .modal-overlay.active ~ .container {
+      filter: blur(5px);
+    }
+    .publish-card {
+      background: rgba(30, 42, 68, 0.9);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      max-width: 600px;
+      width: 100%;
+      padding: 20px;
+      position: relative;
+    }
+    .close-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: #E5E7EB; /* Soft White */
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+    .publish-btn {
+      background: #00DDEB; /* Neon Cyan */
+      color: #1E2A44; /* Dark Blue text */
+      transition: background 0.3s ease;
+    }
+    .publish-btn:hover {
+      background: #66E0EA; /* Light Cyan */
     }
     table {
       width: 100%;
@@ -209,28 +258,92 @@
   })
   
   </script>
+  <!-- Publish Modal -->
+  <div id="publishModal" class="modal-overlay">
+    <div class="publish-card space-y-8">
+      <span class="close-btn" onclick="closePublishModal()">×</span>
+      <div>
+        <h2 class="text-3xl font-bold text-center">Publish a Snippet</h2>
+        <p class="mt-2 text-center text-sm text-gray-400">
+          Share your code, ideas, or creations with the Dcrypt community.
+        </p>
+      </div>
+      <form id="publishForm" class="space-y-6">
+        <!-- Title -->
+        <div>
+          <label for="modalTitleInput" class="block text-sm font-medium text-gray-300">Title</label>
+          <input id="modalTitleInput" name="title" type="text" required
+                 class="input-field mt-1 block w-full px-4 py-3 rounded-lg placeholder-gray-500">
+        </div>
+        <!-- Description -->
+        <div>
+          <label for="modalDescriptionInput" class="block text-sm font-medium text-gray-300">Description</label>
+          <textarea id="modalDescriptionInput" name="description" rows="4" required
+                    class="input-field mt-1 block w-full px-4 py-3 rounded-lg placeholder-gray-500"
+                    placeholder="Describe your snippet"></textarea>
+        </div>
+        <!-- Tags -->
+        <div>
+          <label for="modalTagsInput" class="block text-sm font-medium text-gray-300">Tags (comma-separated)</label>
+          <input id="modalTagsInput" name="tags" type="text"
+                 class="input-field mt-1 block w-full px-4 py-3 rounded-lg placeholder-gray-500"
+                 placeholder="e.g., javascript, python, css">
+        </div>
+        <!-- Content Upload -->
+        <div>
+          <label for="modalContentInput" class="block text-sm font-medium text-gray-300">Content</label>
+          <textarea id="modalContentInput" name="content" rows="4"
+                    class="input-field mt-1 block w-full px-4 py-3 rounded-lg placeholder-gray-500"
+                    placeholder="Type Your Content (Or Upload File)"></textarea>
+        </div>
+        <!-- File Upload -->
+        <div>
+          <label for="modalFileInput" class="block text-sm font-medium text-gray-300">Choose File</label>
+          <div class="mt-1 flex items-center">
+            <label class="input-field px-4 py-3 rounded-lg cursor-pointer flex items-center">
+              <span id="modalFileLabel" class="text-gray-500">No file chosen</span>
+              <input id="modalFileInput" name="file-upload" type="file" class="hidden"
+                     onchange="document.getElementById('modalFileLabel').textContent = this.files[0]?.name || 'No file chosen'">
+              <span class="ml-3 text-gray-400"><i class="fas fa-upload"></i></span>
+            </label>
+          </div>
+        </div>
+        <!-- Premium Toggle -->
+        <div class="flex items-center">
+          <input id="modalPremium" name="premium" type="checkbox"
+                 class="h-4 w-4 text-cyan-500 focus:ring-cyan-400 border-gray-300 rounded">
+          <label for="modalPremium" class="ml-2 block text-sm text-gray-300">Premium</label>
+        </div>
+        <!-- Publish Button -->
+        <div>
+          <button type="submit"
+                  class="publish-btn w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium focus:outline-none">
+            Publish
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
   <div class="toast" id="toast"></div>
   <div class="container" id="AllItems">
-    <!-- Title and Buttons Section with .card class -->
+    <!-- Title and Buttons Section -->
     <div class="card flex justify-between items-center mb-6">
       <h1 class="text-3xl font-bold">Dcrypt - Decentralized Data Sharing</h1>
-      <div class="space-x-2">
+      <div class="flex items-center space-x-2">
         <button id="signupButton" class="btn btn-primary">
           <a href="/datasharingApp/signup.html" class="text-white no-underline">Sign Up</a>
         </button>
         <button id="loginButton" class="btn btn-primary">Login</button>
         <button id="logoutButton" class="btn btn-danger hidden" onclick="window.logout()">Logout</button>
+        <button id="publish" class="btn btn-secondary" onclick="window.redirectToPublish()">
+          Post Something!
+        </button>
       </div>
-      <button id="publishgo" class="btn btn-secondary" onclick="window.redirectToPublish()">
-        Post Something!
-      </button>
     </div>
-
-    <!-- User Balance Section wrapped in .card -->
+    <!-- User Balance Section -->
     <div class="card mb-6">
       <p id="userBalance" class="text-lg font-medium">Balance: 0 DCT</p>
     </div>
-
     <div class="card mb-6">
       <h2 class="text-xl font-semibold mb-4">Publish a Snippet</h2>
       <div class="space-y-4">
@@ -249,7 +362,6 @@
         <button id="publishButton" class="btn btn-success" onclick="window.publishSnippet(document.getElementById('titleInput').value, document.getElementById('descriptionInput').value, document.getElementById('tagsInput').value, document.getElementById('contentInput').value, document.getElementById('fileInput'))" disabled>Publish</button>
       </div>
     </div>
-
     <div class="card mb-6">
       <h2 class="text-xl font-semibold mb-4">Search Snippets</h2>
       <div class="flex space-x-2">
@@ -257,7 +369,6 @@
         <button id="searchButton" class="btn btn-primary" onclick="window.searchSnippets(document.getElementById('searchInput').value)" disabled>Search</button>
       </div>
     </div>
-
     <div class="card mb-6">
       <h2 class="text-xl font-semibold mb-4">Buy Snippet by Hash</h2>
       <div class="flex space-x-2">
@@ -265,6 +376,7 @@
         <button id="buyHashButton" class="btn btn-primary" onclick="window.buySnippetByHash()" disabled>Buy</button>
       </div>
     </div>
+    
 
     <div class="card mb-6">
       <h2 class="text-xl font-semibold mb-4">Live Feed</h2>
@@ -282,34 +394,46 @@
       </table>
     </div>
 
+    <!-- Snippet Display -->
     <div class="card mb-6" id="snippetDisplay">
       <!-- Purchased snippet content will be displayed here -->
     </div>
 
-    <div class="card mb-6">
-      <h2 class="text-xl font-semibold mb-4">Manage Balance</h2>
-      <div class="flex space-x-4 mb-4">
-        <div class="flex-1">
-          <input id="depositInput" type="number" placeholder="Deposit Amount (DCT)" class="input-field w-full">
-        </div>
-        <button id="depositButton" class="btn btn-success" onclick="window.deposit(parseFloat(document.getElementById('depositInput').value))" disabled>Deposit</button>
+   <!-- Manage Balance -->
+   <div class="card mb-6">
+    <h2 class="text-xl font-semibold mb-4">Manage Balance</h2>
+    <div class="flex space-x-4 mb-4">
+      <div class="flex-1">
+        <input id="depositInput" type="number" placeholder="Deposit Amount (DCT)" class="input-field w-full">
       </div>
-      <div class="flex space-x-4">
-        <div class="flex-1">
-          <input id="withdrawInput" type="number" placeholder="Withdraw Amount (DCT)" class="input-field w-full">
-        </div>
-        <button id="withdrawButton" class="btn btn-danger" onclick="window.withdraw(parseFloat(document.getElementById('withdrawInput').value))" disabled>Withdraw</button>
-      </div>
+      <button id="depositButton" class="btn btn-success" onclick="window.deposit(parseFloat(document.getElementById('depositInput').value))" disabled>Deposit</button>
     </div>
-
-    <div class="card mb-6">
-      <button id="toggleHistoryButton" class="btn btn-secondary mb-4" onclick="window.toggleTransactionHistory()" disabled>Toggle Transaction History</button>
-      <div id="transactionHistory" class="mt-2" style="display: none;">
-        <h2 class="text-xl font-semibold mb-2">Transaction History</h2>
-        <div id="transactionList">No transactions yet.</div>
+    <div class="flex space-x-4">
+      <div class="flex-1">
+        <input id="withdrawInput" type="number" placeholder="Withdraw Amount (DCT)" class="input-field w-full">
       </div>
+      <button id="withdrawButton" class="btn btn-danger" onclick="window.withdraw(parseFloat(document.getElementById('withdrawInput').value))" disabled>Withdraw</button>
     </div>
   </div>
+
+    <div class="card mb-6">
+    <button id="toggleHistoryButton" class="btn btn-secondary mb-4" onclick="window.toggleTransactionHistory()" disabled>Toggle Transaction History</button>
+    <div id="transactionHistory" class="mt-2" style="display: none;">
+      <h2 class="text-xl font-semibold mb-2">Transaction History</h2>
+      <div id="transactionList">No transactions yet.</div>
+    </div>
+  </div>
+  </div>
   <script type="module" src="/index.js"></script>
+  <!-- Modal JavaScript -->
+  <script>
+    function closePublishModal() {
+      const modal = document.getElementById('publishModal');
+      modal.classList.remove('active');
+      // Clear form fields
+      document.getElementById('publishForm').reset();
+      document.getElementById('modalFileLabel').textContent = 'No file chosen';
+    }
+  </script>
 </body>
 </html>
