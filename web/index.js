@@ -86,24 +86,6 @@ function redirectToPublish() {
   }
 }
 
-// Show or hide loading spinner
-function showLoading(show, fadeIn, body) {
-  const loading = document.getElementById('background-loading');
-  if (!loading) {
-    console.error('Loading element #background-loading not found');
-    return;
-  }
-  if (show && !fadeIn) {
-    loading.style.display = 'block';
-    loading.style.opacity = 1;
-  } 
-  else if (show && fadeIn) {
-    fade(loading);
-  }
-  else {
-    fadeOut(loading);
-  }
-}
 
 // Fade out function
 function fade(element) {
@@ -601,7 +583,6 @@ async function deposit(amount) {
     return;
   }
 
-  showLoading(true);
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!amount || amount <= 0) throw new Error('Invalid deposit amount');
@@ -621,7 +602,6 @@ async function deposit(amount) {
     console.error('deposit failed:', error);
     showToast(`Deposit failed: ${error.message}`, true);
   } finally {
-    showLoading(false);
   }
 }
 
@@ -631,7 +611,6 @@ async function withdraw(amount) {
     return;
   }
 
-  showLoading(true);
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!amount || amount <= 0) throw new Error('Invalid withdrawal amount');
@@ -652,7 +631,6 @@ async function withdraw(amount) {
     console.error('withdraw failed:', error);
     showToast(`Withdrawal failed: ${error.message}`, true);
   } finally {
-    showLoading(false);
   }
 }
 
@@ -667,14 +645,11 @@ async function signIn() {
     console.log('Auth state before signInWithPopup:', auth);
     const provider = new GoogleAuthProvider();
     console.log('Initiating signInWithPopup');
-    showLoading(true, true);
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-in successful, user:', result.user);
   } catch (error) {
     console.error('Login failed:', error);
     showToast(`Login failed: ${error.message}`, true);
-  } finally {
-    showLoading(false);
   }
 }
 
@@ -727,7 +702,6 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     return;
   }
 
-  showLoading(true, true);
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!title) throw new Error('Title is required');
@@ -790,7 +764,6 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     console.error('publishSnippet failed:', error);
     showToast(`Publish failed: ${error.message}`, true);
   } finally {
-    showLoading(false);
   }
 }
 
@@ -801,7 +774,6 @@ async function buySnippet(hash) {
     return null;
   }
 
-  showLoading(true, true);
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
@@ -853,8 +825,6 @@ async function buySnippet(hash) {
     console.error('buySnippet failed:', error);
     showToast(`Purchase failed: ${error.message}`, true);
     return null;
-  } finally {
-    showLoading(false);
   }
 }
 
@@ -930,7 +900,6 @@ async function becomeNode() {
   if (!window.location.pathname.includes('node-instructions.html')) {
     console.log('Redirecting to node-instructions.html for node role');
     window.location.href = '/datasharingApp/node-instructions.html';
-    showLoading(false);
     return;
   }
 }
@@ -1009,7 +978,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
   if (window.location.pathname.includes("signup")) {
-    showLoading(false, false);
 
     // Setup user signup form submission
     const userSignupForm = document.getElementById('userSignupForm');
@@ -1036,14 +1004,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html") || window.location.pathname.includes("publish"));
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
-    showLoading(false, true);
     window.location.href = '/datasharingApp/node-instructions.html';
   }
 
   if (isIndexPage || window.location.pathname.includes("publish")) {
-    if (isIndexPage) {
-      showLoading(true);
-    }
     const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3500));
 
     try {
@@ -1087,10 +1051,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
       console.error('Initialization error:', error);
       showToast('An error occurred during initialization.', true);
-    } finally {
-      if (isIndexPage) {
-        showLoading(false);
-      }
     }
   }
   
