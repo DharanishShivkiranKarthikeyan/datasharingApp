@@ -65,7 +65,7 @@ function showToast(message, isError = false) {
   }, 3000);
 }
 
-// Modified redirectToPublish to persist state in localStorage before redirecting
+// Modified redirectToPublish to toggle the modal instead of redirecting
 function redirectToPublish() {
   if (!isAuthenticated() || !dht) {
     showToast('Please sign in and ensure the app is initialized before publishing.', true);
@@ -73,7 +73,6 @@ function redirectToPublish() {
   }
 
   try {
-    // Show the publish modal
     const modal = document.getElementById('publishModal');
     modal.classList.add('active');
     console.log('Opened publish modal');
@@ -91,7 +90,6 @@ function showLoading(show, fadeIn, body) {
     return;
   }
   if (show && !fadeIn) {
-    // Show immediately without fade-in
     loading.style.display = 'block';
     loading.style.opacity = 1;
   } 
@@ -99,14 +97,13 @@ function showLoading(show, fadeIn, body) {
     fade(loading);
   }
   else {
-    // Fade out when hiding
     fadeOut(loading);
   }
 }
 
 // Fade out function
 function fade(element) {
-  var op = 0; // Initial opacity
+  var op = 0;
   var loadText = document.getElementById("loadingTextBox");
   loadText.style.opacity = op;
   element.style.opacity = op;
@@ -126,7 +123,7 @@ function fade(element) {
 
 function fadeOut(element) {
   var loadText = document.getElementById("loadingTextBox");
-  var op = 1; // Initial opacity
+  var op = 1;
   var timer = setInterval(function () {
     op -= 0.1;
     if (op <= 0) {
@@ -154,7 +151,6 @@ function updateUIForSignOut() {
   if (elements.userBalanceElement) elements.userBalanceElement.textContent = 'Balance: 0 DCT';
   userBalance = 0;
 
-  // Clear persisted state in localStorage on sign-out
   localStorage.removeItem('userKeypair');
   localStorage.removeItem('peerId');
   localStorage.removeItem('dhtInitialized');
@@ -314,22 +310,9 @@ function displaySnippetContent(data, fileType, title) {
   snippetDisplay.appendChild(contentDiv);
 }
 
-// Set up premium toggle functionality
-function setupPremiumToggle() {
-  const premiumToggle = document.getElementById('isPremium');
-  const priceInput = document.getElementById('priceInput');
-  if (premiumToggle && priceInput) {
-    premiumToggle.addEventListener('change', (e) => {
-      console.log('Premium toggle:', e.target.checked);
-      priceInput.classList.toggle('hidden', !e.target.checked);
-      if (!e.target.checked) priceInput.value = '';
-    });
-  }
-}
-
 // Initialize IndexedDB with schema setup
 async function initializeIndexedDB() {
-  const TARGET_VERSION = 5; // Upgrade to version 5
+  const TARGET_VERSION = 5;
   return new Promise((resolve, reject) => {
     console.log('Starting IndexedDB initialization...');
     const checkRequest = indexedDB.open('dcrypt_db');
@@ -473,7 +456,7 @@ async function init(userId) {
 
     console.log('Initializing DHT with keypair:', keypair);
     console.log('Keypair length for DHT:', keypair.length);
-    dht = new DHT(keypair, isNode); // Pass the string directly
+    dht = new DHT(keypair, isNode);
     window.dht = dht;
 
     await dht.initDB();
@@ -506,7 +489,6 @@ async function init(userId) {
     userBalance = 0;
     updateUIForSignOut();
   } finally {
-    setupPremiumToggle();
     isInitializing = false;
   }
   uploadUserDataToFirebase();
@@ -633,14 +615,14 @@ async function signIn() {
     console.log('Auth state before signInWithPopup:', auth);
     const provider = new GoogleAuthProvider();
     console.log('Initiating signInWithPopup');
-    showLoading(true, true); // Fade in
+    showLoading(true, true);
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-in successful, user:', result.user);
   } catch (error) {
     console.error('Login failed:', error);
     showToast(`Login failed: ${error.message}`, true);
   } finally {
-    showLoading(false); // Fade out
+    showLoading(false);
   }
 }
 
@@ -693,7 +675,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     return;
   }
 
-  showLoading(true, true); // Show immediately
+  showLoading(true, true);
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!title) throw new Error('Title is required');
@@ -713,8 +695,8 @@ async function publishSnippet(title, description, tags, content, fileInput) {
       finalContent = new TextEncoder().encode(finalContent);
     }
 
-    const isPremium = document.getElementById('isPremium').checked;
-    const priceInput = document.getElementById('priceInput');
+    const isPremium = document.getElementById('modalPremium').checked;
+    const priceInput = document.getElementById('modalPriceInput');
     const priceUsd = isPremium && priceInput ? parseFloat(priceInput.value) || 0 : 0;
 
     const metadata = {
@@ -738,7 +720,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     }, { merge: true });
 
     showToast('Snippet published successfully!');
-    closePublishModal();
+    window.closePublishModal();
     await Promise.all([
       updateLiveFeed(),
       updateTransactionHistory(),
@@ -749,7 +731,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     console.error('publishSnippet failed:', error);
     showToast(`Publish failed: ${error.message}`, true);
   } finally {
-    showLoading(false); // Fade out when done
+    showLoading(false);
   }
 }
 
@@ -760,7 +742,7 @@ async function buySnippet(hash) {
     return null;
   }
 
-  showLoading(true, true); // Show immediately
+  showLoading(true, true);
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
@@ -813,7 +795,7 @@ async function buySnippet(hash) {
     showToast(`Purchase failed: ${error.message}`, true);
     return null;
   } finally {
-    showLoading(false); // Fade out when done
+    showLoading(false);
   }
 }
 
@@ -896,7 +878,6 @@ async function becomeNode() {
 
 async function initNode() {
   try {
-    // Check if the user is a node using localStorage
     const nodeId = localStorage.getItem('nodeId');
     const role = localStorage.getItem('role');
    
@@ -911,13 +892,11 @@ async function initNode() {
       return;
     }
 
-    // Initialize DHT
-    dht = new DHT(nodeId, true); // isNode = true since this is a node
+    dht = new DHT(nodeId, true);
     await dht.initDB();
     await dht.initSwarm();
     await dht.syncUserData();
 
-    // Calculate total earnings from commissions
     const transactions = await dht.dbGetAll('transactions');
     const commissionEarnings = transactions
       .filter(tx => tx.type === 'commission')
@@ -953,7 +932,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
-  const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html")|| window.location.pathname.includes("publish"));
+  const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html") || window.location.pathname.includes("publish"));
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
     showLoading(false, true);
@@ -961,15 +940,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (isIndexPage || window.location.pathname.includes("publish")) {
-    // Show loading immediately for initial load
-    if(isIndexPage){
+    if (isIndexPage) {
       showLoading(true);
     }
-    // Create a promise that resolves after 3 seconds
     const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3500));
 
     try {
-      // Wait for both initialization and minimum loading time
       await Promise.all([
         new Promise((resolve) => {
           onAuthStateChanged(auth, async (user) => {
@@ -987,17 +963,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                   await init(keypair);
                 } else {
                   console.log('No keypair found in IndexedDB.');
-                  if(isIndexPage){
+                  if (isIndexPage) {
                     updateUIForSignOut();
                   }
-                  
                 }
               } catch (error) {
                 console.error('Failed to initialize IndexedDB or load keypair:', error);
-                if(isIndexPage){
+                if (isIndexPage) {
                   updateUIForSignOut();
                 }
-                
               }
             }
             resolve();
@@ -1013,11 +987,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.error('Initialization error:', error);
       showToast('An error occurred during initialization.', true);
     } finally {
-      // Fade out the loading div after both conditions are met
-      if(isIndexPage){
+      if (isIndexPage) {
         showLoading(false);
       }
-      
     }
   }
   
@@ -1027,7 +999,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       loginButton: document.getElementById('loginButton'),
       logoutButton: document.getElementById('logoutButton'),
       userBalanceElement: document.getElementById('userBalance'),
-      publishButton: document.getElementById('publishButton'),
       searchButton: document.getElementById('searchButton'),
       depositButton: document.getElementById('depositButton'),
       withdrawButton: document.getElementById('withdrawButton'),
@@ -1044,7 +1015,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Node detected, but should have been redirected already.');
     }
 
-    // Event listeners
     elements.loginButton?.addEventListener('click', (event) => {
       event.preventDefault();
       console.log('Login button clicked');
@@ -1057,13 +1027,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       signOutUser();
     });
     
-    
     onAuthStateChanged(auth, (user) => {
       if (user) {
         elements.signupButton?.classList.add('hidden');
         elements.loginButton?.classList.add('hidden');
         elements.logoutButton?.classList.remove('hidden');
-        elements.publishButton.disabled = false;
         elements.searchButton.disabled = false;
         elements.depositButton.disabled = false;
         elements.withdrawButton.disabled = false;
@@ -1073,7 +1041,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         elements.signupButton?.classList.remove('hidden');
         elements.loginButton?.classList.remove('hidden');
         elements.logoutButton?.classList.add('hidden');
-        elements.publishButton.disabled = true;
         elements.searchButton.disabled = true;
         elements.depositButton.disabled = true;
         elements.withdrawButton.disabled = true;
@@ -1082,8 +1049,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateUIForSignOut();
       }
     });
-    
-    // Update UI based on auth state
+
+    // Setup publish form submission
+    const publishForm = document.getElementById('publishForm');
+    if (publishForm) {
+      publishForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = document.getElementById('modalTitleInput').value;
+        const description = document.getElementById('modalDescriptionInput').value;
+        const tags = document.getElementById('modalTagsInput').value;
+        const content = document.getElementById('modalContentInput').value;
+        const fileInput = document.getElementById('modalFileInput');
+        await window.publishSnippet(title, description, tags, content, fileInput);
+      });
+    }
   } else {
     console.log('Not on index.html, skipping index.html-specific setup');
   }
