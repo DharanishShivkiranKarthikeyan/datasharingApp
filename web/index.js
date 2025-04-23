@@ -1,4 +1,3 @@
-// Import Firebase Auth, Firestore, and Storage methods
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js';
@@ -9,27 +8,24 @@ import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js";
 import "https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js";
 import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js";
 
-// Import other JavaScript files to ensure they're included in the bundle
 import './utils.js';
 
-// Global state variables
 let auth = null;
 let db = null;
-let storage = null; // Add Firebase Storage
+let storage = null;
 let dht = null;
 let isNode = false;
 let userBalance = 0;
 let isSigningUp = false;
 let isInitializing = false;
 
-// Initialize Firebase services asynchronously
 async function initializeFirebase() {
   console.log('Starting Firebase initialization...');
   try {
     const firebaseModule = await import('./firebase.js');
     auth = firebaseModule.auth;
     db = firebaseModule.db;
-    storage = getStorage(); // Initialize Firebase Storage
+    storage = getStorage();
     await setPersistence(auth, browserLocalPersistence);
     console.log('Firebase services initialized successfully with local persistence');
     console.log('Auth object:', auth);
@@ -42,7 +38,6 @@ async function initializeFirebase() {
   }
 }
 
-// Utility function to generate a UUID
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = Math.random() * 16 | 0;
@@ -51,12 +46,10 @@ function generateUUID() {
   });
 }
 
-// Check if the user is authenticated
 function isAuthenticated() {
   return !!auth?.currentUser || localStorage.getItem('role') === 'node';
 }
 
-// Show toast notification
 function showToast(message, isError = false) {
   const toast = document.getElementById('toast');
   if (!toast) return;
@@ -69,7 +62,6 @@ function showToast(message, isError = false) {
   }, 3000);
 }
 
-// Modified redirectToPublish to toggle the modal instead of redirecting
 function redirectToPublish() {
   if (!isAuthenticated() || !dht) {
     showToast('Please sign in and ensure the app is initialized before publishing.', true);
@@ -86,8 +78,6 @@ function redirectToPublish() {
   }
 }
 
-
-// Fade out function
 function fade(element) {
   var op = 0;
   var loadText = document.getElementById("loadingTextBox");
@@ -124,7 +114,6 @@ function fadeOut(element) {
   }, 50);
 }
 
-// Update UI when user signs out
 function updateUIForSignOut() {
   const elements = {
     publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
@@ -151,7 +140,6 @@ function updateUIForSignOut() {
   console.log('Cleared persisted state from localStorage on sign-out');
 }
 
-// Update balance display
 async function updateBalanceDisplay() {
   const userBalanceElement = document.getElementById('userBalance');
   if (!userBalanceElement) return;
@@ -172,7 +160,6 @@ async function updateBalanceDisplay() {
   }
 }
 
-// Update transaction history display
 async function updateTransactionHistory() {
   const transactionList = document.getElementById('transactionList');
   if (!transactionList) return;
@@ -197,7 +184,6 @@ async function updateTransactionHistory() {
   }
 }
 
-// Update the live feed of snippets
 async function updateLiveFeed() {
   const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
   if (!publishedItemsTableBody) return;
@@ -212,7 +198,7 @@ async function updateLiveFeed() {
 
     if (dht) {
       dht.knownObjects.forEach((value, key) => {
-        const snippetInfo = snippetsData[key] || { averageRating: 0, reviewStatus: 'active' };
+        const snippetInfo = snippetsData[key] || { likes: 0, dislikes: 0, reviewStatus: 'active' };
         if (snippetInfo.reviewStatus !== 'active') return;
 
         const isPremium = value.metadata.isPremium || false;
@@ -223,7 +209,8 @@ async function updateLiveFeed() {
           <td class="py-2 px-4">${value.metadata.content_type}</td>
           <td class="py-2 px-4">${value.metadata.description || 'No description'}</td>
           <td class="py-2 px-4">${value.metadata.tags.join(', ') || 'No tags'}</td>
-          <td class="py-2 px-4">${snippetInfo.averageRating} / 5</td>
+          <td class="py-2 px-4">${snippetInfo.likes}</td>
+          <td class="py-2 px-4">${snippetInfo.dislikes}</td>
           <td class="py-2 px-4">
             <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
             <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
@@ -238,7 +225,6 @@ async function updateLiveFeed() {
   }
 }
 
-// Upload user data to Firebase
 async function uploadUserDataToFirebase() {
   const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
   if (!userId) return;
@@ -253,7 +239,6 @@ async function uploadUserDataToFirebase() {
   }
 }
 
-// Toggle transaction history visibility
 function toggleTransactionHistory() {
   const transactionHistory = document.getElementById('transactionHistory');
   if (transactionHistory) {
@@ -261,7 +246,6 @@ function toggleTransactionHistory() {
   }
 }
 
-// Display snippet content after purchase
 function displaySnippetContent(data, fileType, title) {
   const snippetDisplay = document.getElementById('snippetDisplay');
   if (!snippetDisplay) return;
@@ -304,7 +288,6 @@ function displaySnippetContent(data, fileType, title) {
   snippetDisplay.appendChild(contentDiv);
 }
 
-// Initialize IndexedDB with schema setup
 async function initializeIndexedDB() {
   const TARGET_VERSION = 5;
   return new Promise((resolve, reject) => {
@@ -360,7 +343,6 @@ async function initializeIndexedDB() {
   });
 }
 
-// Load keypair from IndexedDB
 async function loadKeypair(indexedDB) {
   return new Promise((resolve, reject) => {
     try {
@@ -392,7 +374,6 @@ async function loadKeypair(indexedDB) {
   });
 }
 
-// Store keypair in IndexedDB
 async function storeKeypair(indexedDB, userId) {
   return new Promise((resolve, reject) => {
     try {
@@ -469,7 +450,6 @@ async function init(userId) {
     ]);
     console.log('UI updated.');
 
-    // Fetch and update user profile data
     await updateUserProfile(userId);
   } catch (error) {
     console.error('Error initializing application:', error);
@@ -491,7 +471,6 @@ async function init(userId) {
   uploadUserDataToFirebase();
 }
 
-// Check if the user is a node
 async function checkIfUserIsNode(userId) {
   try {
     const nodeRef = doc(db, 'nodes', userId);
@@ -503,7 +482,6 @@ async function checkIfUserIsNode(userId) {
   }
 }
 
-// Helper function to upload profile image to Firebase Storage
 async function uploadProfileImage(userId, file) {
   if (!file) return null;
   try {
@@ -519,7 +497,6 @@ async function uploadProfileImage(userId, file) {
   }
 }
 
-// Handle signup process
 async function handleSignup() {
   console.log('handleSignup function called');
   if (isSigningUp) {
@@ -544,21 +521,18 @@ async function handleSignup() {
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-up successful, user:', result.user);
 
-    // Collect user data from the modal
     const username = document.getElementById('usernameInput').value;
     const profileImageInput = document.getElementById('profileImageInput');
     const profileImageFile = profileImageInput.files[0];
 
-    // Upload profile image to Firebase Storage if provided
     const profileImageUrl = profileImageFile ? await uploadProfileImage(result.user.uid, profileImageFile) : null;
 
-    // Store user data in Firestore
     const userRef = doc(db, 'users', result.user.uid);
     await setDoc(userRef, {
       username: username || result.user.displayName || 'Anonymous User',
       profileImageUrl: profileImageUrl || null,
       createdAt: Date.now(),
-      snippetsPosted: 0, // Initialize snippets posted count
+      snippetsPosted: 0,
     }, { merge: true });
 
     console.log('User profile saved to Firestore');
@@ -634,7 +608,6 @@ async function withdraw(amount) {
   }
 }
 
-// Trigger Google Sign-In
 async function signIn() {
   console.log('signIn function called');
   try {
@@ -653,7 +626,6 @@ async function signIn() {
   }
 }
 
-// Sign out the user
 async function signOutUser() {
   console.log('signOutUser function called');
   try {
@@ -695,7 +667,6 @@ async function signOutUser() {
   }
 }
 
-// Publish a snippet
 async function publishSnippet(title, description, tags, content, fileInput) {
   if (!isAuthenticated()) {
     showToast('Please sign in to publish.');
@@ -739,13 +710,13 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     await setDoc(snippetRef, {
       ipHash,
       flagCount: 0,
-      averageRating: 0,
+      likes: 0,
+      dislikes: 0,
       reviewStatus: 'active',
       createdAt: Date.now(),
       creatorId: userId,
     }, { merge: true });
 
-    // Increment user's snippetsPosted count
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
       snippetsPosted: increment(1)
@@ -758,7 +729,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
       updateTransactionHistory(),
       updateBalanceDisplay(),
       uploadUserDataToFirebase(),
-      updateUserProfile(userId), // Update profile to reflect new snippetsPosted count
+      updateUserProfile(userId),
     ]);
   } catch (error) {
     console.error('publishSnippet failed:', error);
@@ -767,7 +738,6 @@ async function publishSnippet(title, description, tags, content, fileInput) {
   }
 }
 
-// Buy a snippet by hash
 async function buySnippet(hash) {
   if (!isAuthenticated()) {
     showToast('Please sign in to buy.');
@@ -807,15 +777,15 @@ async function buySnippet(hash) {
       uploadUserDataToFirebase(),
     ]);
 
-    const rating = prompt('Please rate this snippet (1-5 stars):', '5');
-    if (rating !== null) {
-      const ratingValue = parseInt(rating);
-      if (ratingValue >= 1 && ratingValue <= 5) {
-        await submitRating(hash, ratingValue);
-        showToast(`Rated ${ratingValue} stars!`);
+    const feedback = prompt('Do you like this snippet? Type "like" or "dislike":');
+    if (feedback !== null) {
+      const action = feedback.trim().toLowerCase();
+      if (action === 'like' || action === 'dislike') {
+        await submitFeedback(hash, action);
+        showToast(`You ${action}d this snippet!`);
         await updateLiveFeed();
       } else {
-        showToast('Invalid rating. Please enter a number between 1 and 5.', true);
+        showToast('Invalid input. Please type "like" or "dislike".', true);
       }
     }
 
@@ -828,7 +798,6 @@ async function buySnippet(hash) {
   }
 }
 
-// Buy a snippet by hash input
 async function buySnippetByHash(hashInput) {
   const hash = hashInput || document.getElementById('buyHashInput')?.value.trim();
   if (!hash) {
@@ -839,28 +808,26 @@ async function buySnippetByHash(hashInput) {
   if (result) showToast('Snippet purchased and displayed below!');
 }
 
-// Submit a rating for a snippet
-async function submitRating(ipHash, rating) {
+async function submitFeedback(ipHash, action) {
   const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
   if (!userId) return;
 
   try {
-    const ratingRef = doc(db, 'snippets', ipHash, 'ratings', userId);
-    await setDoc(ratingRef, { rating, timestamp: Date.now() });
-
-    const ratingsSnapshot = await getDocs(collection(db, 'snippets', ipHash, 'ratings'));
-    const ratings = ratingsSnapshot.docs.map((doc) => doc.data().rating);
-    const averageRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
+    const feedbackRef = doc(db, 'snippets', ipHash, 'feedback', userId);
+    await setDoc(feedbackRef, { action, timestamp: Date.now() });
 
     const snippetRef = doc(db, 'snippets', ipHash);
-    await updateDoc(snippetRef, { averageRating: averageRating.toFixed(1) });
+    if (action === 'like') {
+      await updateDoc(snippetRef, { likes: increment(1) });
+    } else if (action === 'dislike') {
+      await updateDoc(snippetRef, { dislikes: increment(1) });
+    }
   } catch (error) {
-    console.error('Failed to submit rating:', error);
-    showToast(`Failed to submit rating: ${error.message}`, true);
+    console.error('Failed to submit feedback:', error);
+    showToast(`Failed to submit feedback: ${error.message}`, true);
   }
 }
 
-// Flag a snippet for moderation
 async function flagSnippet(ipHash) {
   const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
   if (!userId) {
@@ -888,7 +855,6 @@ async function flagSnippet(ipHash) {
   }
 }
 
-// Become a node
 async function becomeNode() {
   const nodeId = generateUUID();
   console.log(nodeId);
@@ -940,7 +906,6 @@ async function initNode() {
   }
 }
 
-// Function to fetch and update user profile data
 async function updateUserProfile(userId) {
   if (!userId) return;
 
@@ -973,13 +938,10 @@ async function updateUserProfile(userId) {
   }
 }
 
-// Main DOMContentLoaded event handler
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
   if (window.location.pathname.includes("signup")) {
-
-    // Setup user signup form submission
     const userSignupForm = document.getElementById('userSignupForm');
     if (userSignupForm) {
       userSignupForm.addEventListener('submit', async (e) => {
@@ -1111,7 +1073,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
 
-    // Setup publish form submission
     const publishForm = document.getElementById('publishForm');
     if (publishForm) {
       publishForm.addEventListener('submit', async (e) => {
