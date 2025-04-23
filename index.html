@@ -6,7 +6,6 @@
   <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin-allow-popups">
   <title>Dcrypt - Decentralized Data Sharing</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Font Awesome for Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <style>
     html {
@@ -23,7 +22,6 @@
       font-family: 'Inter', sans-serif;
       min-height: 100vh !important;
     }
-    /* Header */
     .header {
       background-color: #252B3A;
       padding: 1rem 2rem;
@@ -32,12 +30,10 @@
       align-items: center;
       border-bottom: 1px solid #4B5563;
     }
-    /* Layout */
     .layout {
       display: flex;
-      min-height: calc(100vh - 64px); /* Adjust for header height */
+      min-height: calc(100vh - 64px);
     }
-    /* Sidebar */
     .sidebar {
       width: 300px;
       background-color: #252B3A;
@@ -54,13 +50,11 @@
       margin-bottom: 0.75rem;
       color: #F59E0B;
     }
-    /* Main Content */
     .main-content {
       flex: 1;
       padding: 2rem;
       overflow-y: auto;
     }
-    /* Toast */
     .toast {
       position: fixed;
       top: 1rem;
@@ -77,7 +71,6 @@
       background-color: #EF4444;
       color: #FFF;
     }
-    /* Input Fields */
     .input-field {
       padding: 0.75rem;
       background-color: #2D3748;
@@ -92,7 +85,6 @@
       border-color: #3B82F6;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
     }
-    /* Buttons */
     .btn {
       padding: 0.5rem 1rem;
       border-radius: 0.25rem;
@@ -130,7 +122,6 @@
     .btn-danger:hover {
       background-color: #DC2626;
     }
-    /* Cards */
     .card {
       background-color: #252B3A;
       padding: 1.5rem;
@@ -139,7 +130,6 @@
       border: 1px solid #4B5563;
       margin-bottom: 1.5rem;
     }
-    /* Modal */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -190,7 +180,6 @@
       background: #D97706;
       transform: translateY(-1px);
     }
-    /* Table */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -207,7 +196,6 @@
     tr:hover {
       background-color: #2D3748;
     }
-    /* Filters */
     .filter-group {
       display: flex;
       gap: 1rem;
@@ -220,7 +208,6 @@
       border: 1px solid #4B5563;
       border-radius: 0.25rem;
     }
-    /* Responsive Design */
     @media (max-width: 768px) {
       .layout {
         flex-direction: column;
@@ -238,7 +225,6 @@
   <script type="module" crossorigin src="/datasharingApp/assets/app.js"></script>
 </head>
 <body id="body">
-  <!-- Header -->
   <div class="header">
     <h1 class="text-2xl font-semibold">Dcrypt - Decentralized Data Sharing</h1>
     <div class="space-x-2">
@@ -247,11 +233,8 @@
       <button id="logoutButton" class="btn btn-danger hidden" onclick="window.logout()">Logout</button>
     </div>
   </div>
-  <!-- Layout -->
   <div class="layout">
-    <!-- Sidebar -->
     <div class="sidebar">
-      <!-- User Profile -->
       <div class="sidebar-section">
         <h3>User Profile</h3>
         <div class="flex items-center space-x-3">
@@ -264,12 +247,10 @@
           </div>
         </div>
       </div>
-      <!-- Balance -->
       <div class="sidebar-section">
         <h3>Balance</h3>
         <p id="userBalance" class="text-lg font-medium">Balance: 0 DCT</p>
       </div>
-      <!-- Manage Balance -->
       <div class="sidebar-section">
         <h3>Manage Balance</h3>
         <div class="space-y-4">
@@ -283,7 +264,6 @@
           </div>
         </div>
       </div>
-      <!-- Transaction History -->
       <div class="sidebar-section">
         <h3>Transaction History</h3>
         <button id="toggleHistoryButton" class="btn btn-secondary mb-2" onclick="window.toggleTransactionHistory()" disabled>Toggle History</button>
@@ -291,15 +271,12 @@
           <div id="transactionList">No transactions yet.</div>
         </div>
       </div>
-      <!-- Dark/Light Mode Toggle -->
       <div class="sidebar-section">
         <h3>Theme</h3>
         <button id="themeToggle" class="btn btn-primary">Switch to Light Mode</button>
       </div>
     </div>
-    <!-- Main Content -->
     <div class="main-content">
-      <!-- Quick Actions -->
       <div class="card">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-xl font-semibold">Quick Actions</h2>
@@ -310,14 +287,14 @@
           <button id="searchButton" class="btn btn-primary" onclick="window.searchSnippets(document.getElementById('searchInput').value)" disabled>Search</button>
         </div>
       </div>
-      <!-- Live Feed -->
       <div class="card">
         <h2 class="text-xl font-semibold mb-4">Live Feed</h2>
-        <!-- Filter Options -->
         <div class="filter-group">
           <select id="sortBy" class="filter-select">
-            <option value="rating-desc">Sort by Rating (High to Low)</option>
-            <option value="rating-asc">Sort by Rating (Low to High)</option>
+            <option value="likes-desc">Sort by Likes (High to Low)</option>
+            <option value="likes-asc">Sort by Likes (Low to High)</option>
+            <option value="dislikes-desc">Sort by Dislikes (High to Low)</option>
+            <option value="dislikes-asc">Sort by Dislikes (Low to High)</option>
             <option value="date-desc">Sort by Date (Newest)</option>
             <option value="date-asc">Sort by Date (Oldest)</option>
           </select>
@@ -329,14 +306,14 @@
               <th>Title</th>
               <th>Description</th>
               <th>Tags</th>
-              <th>Rating</th>
+              <th>Likes</th>
+              <th>Dislikes</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
-      <!-- Buy Snippet by Hash -->
       <div class="card">
         <h2 class="text-xl font-semibold mb-4">Buy Snippet by Hash</h2>
         <div class="flex space-x-2">
@@ -344,13 +321,10 @@
           <button id="buyHashButton" class="btn btn-primary" onclick="window.buySnippetByHash()" disabled>Buy</button>
         </div>
       </div>
-      <!-- Snippet Display -->
       <div class="card" id="snippetDisplay">
-        <!-- Purchased snippet content will be displayed here -->
       </div>
     </div>
   </div>
-  <!-- Publish Modal -->
   <div id="publishModal" class="modal-overlay">
     <div class="publish-card space-y-6">
       <span class="close-btn" onclick="closePublishModal()">×</span>
@@ -361,34 +335,29 @@
         </p>
       </div>
       <form id="publishForm" class="space-y-6">
-        <!-- Title -->
         <div>
           <label for="modalTitleInput" class="block text-sm font-medium text-gray-300">Title</label>
           <input id="modalTitleInput" name="title" type="text" required
                  class="input-field mt-1 block w-full px-4 py-3 placeholder-gray-500">
         </div>
-        <!-- Description -->
         <div>
           <label for="modalDescriptionInput" class="block text-sm font-medium text-gray-300">Description</label>
           <textarea id="modalDescriptionInput" name="description" rows="4" required
                     class="input-field mt-1 block w-full px-4 py-3 placeholder-gray-500"
                     placeholder="Describe your snippet"></textarea>
         </div>
-        <!-- Tags -->
         <div>
           <label for="modalTagsInput" class="block text-sm font-medium text-gray-300">Tags (comma-separated)</label>
           <input id="modalTagsInput" name="tags" type="text"
                  class="input-field mt-1 block w-full px-4 py-3 placeholder-gray-500"
                  placeholder="e.g., javascript, python, css">
         </div>
-        <!-- Content Upload -->
         <div>
           <label for="modalContentInput" class="block text-sm font-medium text-gray-300">Content</label>
           <textarea id="modalContentInput" name="content" rows="4"
                     class="input-field mt-1 block w-full px-4 py-3 placeholder-gray-500"
                     placeholder="Type Your Content (Or Upload File)"></textarea>
         </div>
-        <!-- File Upload -->
         <div>
           <label for="modalFileInput" class="block text-sm font-medium text-gray-300">Choose File</label>
           <div class="mt-1 flex items-center">
@@ -400,7 +369,6 @@
             </label>
           </div>
         </div>
-        <!-- Premium Toggle with Price Input -->
         <div class="flex items-center space-x-4">
           <div class="flex items-center">
             <input id="modalPremium" name="premium" type="checkbox"
@@ -410,7 +378,6 @@
           <input id="modalPriceInput" type="number" placeholder="Price (DCT)" min="0" step="0.01"
                  class="input-field hidden max-w-[150px] px-3 py-2">
         </div>
-        <!-- Publish Button -->
         <div>
           <button type="submit"
                   class="publish-btn w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium focus:outline-none">
@@ -420,9 +387,7 @@
       </form>
     </div>
   </div>
-  <!-- Toast -->
   <div class="toast" id="toast"></div>
-  <!-- Modal JavaScript -->
   <script>
     function closePublishModal() {
       const modal = document.getElementById('publishModal');
@@ -434,7 +399,6 @@
       document.getElementById('modalPremium').checked = false;
     }
 
-    // Setup premium toggle for modal
     document.addEventListener('DOMContentLoaded', () => {
       const premiumToggle = document.getElementById('modalPremium');
       const priceInput = document.getElementById('modalPriceInput');
@@ -445,7 +409,6 @@
         });
       }
 
-      // Theme Toggle
       const themeToggle = document.getElementById('themeToggle');
       if (themeToggle) {
         themeToggle.addEventListener('click', () => {
@@ -455,7 +418,6 @@
       }
     });
   </script>
-  <!-- Light Mode Styles -->
   <style>
     .light-mode {
       background-color: #F3F4F6;
