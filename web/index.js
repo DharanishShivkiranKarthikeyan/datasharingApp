@@ -800,29 +800,34 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     const priceUsd = isPremium && priceInput ? parseFloat(priceInput.value) || 0 : 0;
 
     const metadata = {
-      content_type: title,
+      content_type: fileType, // Use fileType instead of title for content_type
+      title: title, // Explicitly include title in metadata
       description: description || '',
-      tags: tags ? tags.split(',').map((t) => t.trim()) : [],
-      isPremium,
-      priceUsd,
+      tags: tags ? tags.split(',').map((t) => t.trim()).filter((t) => t.length > 0) : [],
+      isPremium: isPremium,
+      priceUsd: priceUsd,
     };
 
     const ipHash = await dht.publishIP(metadata, finalContent, fileType);
     const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
     const snippetRef = doc(db, 'snippets', ipHash);
-    await setDoc(snippetRef, {
-      ipHash,
-      title,
+
+    const snippetData = {
+      ipHash: ipHash,
+      title: title,
       description: description || '',
       tags: metadata.tags,
-      isPremium,
-      priceUsd,
+      isPremium: isPremium,
+      priceUsd: priceUsd,
       flagCount: 0,
       likes: 0,
       dislikes: 0,
       createdAt: Date.now(),
       creatorId: userId,
-    }, { merge: true });
+    };
+    console.log('Saving snippet to Firestore:', snippetData); // Debug log to verify data
+
+    await setDoc(snippetRef, snippetData, { merge: true });
 
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
@@ -842,6 +847,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
   } catch (error) {
     console.error('publishSnippet failed:', error);
     showToast(`Publish failed: ${error.message}`, true);
+    throw error; // Rethrow to ensure errors are not silently ignored
   }
 }
 
