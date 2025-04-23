@@ -1,5 +1,5 @@
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js';
 import { DHT } from './dht.js';
 import { uint8ArrayToBase64Url } from './dht.js';
@@ -28,9 +28,6 @@ async function initializeFirebase() {
     storage = getStorage();
     await setPersistence(auth, browserLocalPersistence);
     console.log('Firebase services initialized successfully with local persistence');
-    console.log('Auth object:', auth);
-    console.log('Storage object:', storage);
-    console.log('Current Firebase user on init:', auth.currentUser);
   } catch (error) {
     console.error('Failed to initialize Firebase services:', error);
     showToast('Failed to initialize Firebase. Please try again later.', true);
@@ -117,6 +114,7 @@ function fadeOut(element) {
 function updateUIForSignOut() {
   const elements = {
     publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
+    mySnippetsTableBody: document.getElementById('mySnippets')?.querySelector('tbody'),
     transactionList: document.getElementById('transactionList'),
     userBalanceElement: document.getElementById('userBalance'),
     userNameElement: document.getElementById('userName'),
@@ -125,6 +123,7 @@ function updateUIForSignOut() {
   };
 
   if (elements.publishedItemsTableBody) elements.publishedItemsTableBody.innerHTML = '';
+  if (elements.mySnippetsTableBody) elements.mySnippetsTableBody.innerHTML = '';
   if (elements.transactionList) elements.transactionList.innerHTML = 'No transactions yet.';
   if (elements.userBalanceElement) elements.userBalanceElement.textContent = 'Balance: 0 DCT';
   if (elements.userNameElement) elements.userNameElement.textContent = 'Guest User';
@@ -190,16 +189,131 @@ async function updateLiveFeed() {
 
   publishedItemsTableBody.innerHTML = '';
   try {
-    const snippetsSnapshot = await getDocs(collection(db, 'snippets'));
+    // Use onSnapshot for real-time updates
+    const snippetsQuery = query(collection(db, 'snippets'), where('reviewStatus', '==', 'active'));
+    onSnapshot(snippetsQuery, async (snapshots) => {
+      const snippetsData = {};
+      snapshots.forEach((doc) => {
+        snippetsData[doc.id] = doc.data();
+      });
+
+      if (dht) {
+        // Synchronize dht.knownObjects with Firestore
+        dht.knownObjects.clear();
+        for (const [ipHash, data] of Object.entries(snippetsData)) {
+          const metadata = {
+            content_type: data.ipHash,
+            description: data.description || 'No description',
+            tags: data.tags || [],
+            isPremium: data.isPremium || false,
+            priceUsd: data.priceUsd || 0,
+          };
+          dht.knownObjects.set(ipHash, { metadata, chunks: data.chunks || [] });
+          await dht.broadcastIP(ipHash, metadata, data.chunks || []);
+        }
+
+        dht.knownObjects.forEach((value, key) => {
+          const snippetInfo = snippetsData[key] || { likes: 0, dislikes: 0, reviewStatus: 'active' };
+          if (snippetInfo.reviewStatus !== 'active') return;
+
+          const isPremium = value.metadata.isPremium || false;
+          const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
+          const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td class="py-2 px-4">${value.metadata.content_type}</td>
+            <td class="py-2 px-4">${value.metadata.description || 'No description'}</td>
+            <td class="py-2 px-4">${value.metadata.tags.join(', ') || 'No tags'}</td>
+            <td class="py-2 px-4">${snippetInfo.likes}</td>
+            <td class="py-2 px-4">${snippetInfo.dislikes}</td>
+            <td class="py-2 px-4">
+              <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+              <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
+            </td>
+          `;
+          publishedItemsTableBody.appendChild(row);
+        });
+      }
+    }, (error) => {
+      console.error('Live feed snapshot error:', error);
+      showToast('Failed to load live feed.', true);
+    });
+  } catch (error) {
+    console.error('Failed to update live feed:', error);
+    showToast('Failed to load live feed.', true);
+  }
+}
+
+async function updateMySnippets() {
+  const mySnippetsTableBody = document.getElementById('mySnippets')?.querySelector('tbody');
+  if (!mySnippetsTableBody) return;
+
+  mySnippetsTableBody.innerHTML = '';
+  try {
+    const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
+    if (!userId) return;
+
+    const snippetsQuery = query(collection(db, 'snippets'), where('creatorId', '==', userId));
+    const snippetsSnapshot = await getDocs(snippetsQuery);
+    snippetsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td class="py-2 px-4">${data.ipHash}</td>
+        <td class="py-2 px-4">${data.ipHash || 'No title'}</td>
+        <td class="py-2 px-4">
+          <button onclick="window.copyHash('${data.ipHash}')" class="bg-blue-500 text-white rounded hover:bg-blue-600 px-3 py-1">Copy Hash</button>
+        </td>
+      `;
+      mySnippetsTableBody.appendChild(row);
+    });
+  } catch (error) {
+    console.error('Failed to update my snippets:', error);
+    showToast('Failed to load your snippets.', true);
+  }
+}
+
+async function searchSnippets(searchTerm) {
+  const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
+  if (!publishedItemsTableBody) return;
+
+  publishedItemsTableBody.innerHTML = '';
+  try {
+    const searchTags = searchTerm.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag);
+    let snippetsSnapshot;
+
+    if (searchTags.length === 0) {
+      snippetsSnapshot = await getDocs(query(collection(db, 'snippets'), where('reviewStatus', '==', 'active')));
+    } else {
+      // Query Firestore for snippets with matching tags
+      snippetsSnapshot = await getDocs(query(collection(db, 'snippets'), where('reviewStatus', '==', 'active')));
+    }
+
     const snippetsData = {};
     snippetsSnapshot.forEach((doc) => {
       snippetsData[doc.id] = doc.data();
     });
 
     if (dht) {
+      // Update knownObjects with Firestore data
+      dht.knownObjects.clear();
+      for (const [ipHash, data] of Object.entries(snippetsData)) {
+        const metadata = {
+          content_type: data.ipHash,
+          description: data.description || 'No description',
+          tags: data.tags || [],
+          isPremium: data.isPremium || false,
+          priceUsd: data.priceUsd || 0,
+        };
+        dht.knownObjects.set(ipHash, { metadata, chunks: data.chunks || [] });
+      }
+
       dht.knownObjects.forEach((value, key) => {
         const snippetInfo = snippetsData[key] || { likes: 0, dislikes: 0, reviewStatus: 'active' };
         if (snippetInfo.reviewStatus !== 'active') return;
+
+        const tags = (value.metadata.tags || []).map(tag => tag.toLowerCase());
+        if (searchTags.length > 0 && !searchTags.some(tag => tags.includes(tag))) return;
 
         const isPremium = value.metadata.isPremium || false;
         const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
@@ -220,8 +334,8 @@ async function updateLiveFeed() {
       });
     }
   } catch (error) {
-    console.error('Failed to update live feed:', error);
-    showToast('Failed to load live feed.', true);
+    console.error('Failed to search snippets:', error);
+    showToast('Search failed.', true);
   }
 }
 
@@ -354,8 +468,6 @@ async function loadKeypair(indexedDB) {
         const value = request.result?.value;
         if (value && typeof value === 'string') {
           console.log('Loaded keypair from IndexedDB:', value);
-          console.log('Keypair length:', value.length);
-          console.log('Is valid UID:', /^[a-zA-Z0-9]{20,40}$/.test(value) ? 'Yes' : 'No (possibly invalid or oversized)');
           resolve(value);
         } else {
           console.log('No valid keypair found in IndexedDB.');
@@ -378,8 +490,6 @@ async function storeKeypair(indexedDB, userId) {
   return new Promise((resolve, reject) => {
     try {
       console.log('Storing keypair in IndexedDB:', userId);
-      console.log('Keypair length:', userId.length);
-      console.log('Production readiness:', userId.length <= 40 ? 'Good (compact UID)' : 'Warning (potentially too large)');
       const tx = indexedDB.transaction('store', 'readwrite');
       const store = tx.objectStore('store');
       const request = store.put({ id: 'dcrypt_identity', value: userId });
@@ -429,8 +539,6 @@ async function init(userId) {
     isNode = await checkIfUserIsNode(userId);
     console.log(`User is ${isNode ? '' : 'not '}a node.`);
 
-    console.log('Initializing DHT with keypair:', keypair);
-    console.log('Keypair length for DHT:', keypair.length);
     dht = new DHT(keypair, isNode);
     window.dht = dht;
 
@@ -445,6 +553,7 @@ async function init(userId) {
 
     await Promise.all([
       updateLiveFeed(),
+      updateMySnippets(),
       updateBalanceDisplay(),
       updateTransactionHistory(),
     ]);
@@ -515,9 +624,7 @@ async function handleSignup() {
   localStorage.setItem('pendingRole', "user");
 
   try {
-    console.log('Auth state before signInWithPopup in handleSignup:', auth);
     const provider = new GoogleAuthProvider();
-    console.log('Initiating signInWithPopup for signup');
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-up successful, user:', result.user);
 
@@ -575,7 +682,6 @@ async function deposit(amount) {
   } catch (error) {
     console.error('deposit failed:', error);
     showToast(`Deposit failed: ${error.message}`, true);
-  } finally {
   }
 }
 
@@ -604,7 +710,6 @@ async function withdraw(amount) {
   } catch (error) {
     console.error('withdraw failed:', error);
     showToast(`Withdrawal failed: ${error.message}`, true);
-  } finally {
   }
 }
 
@@ -615,9 +720,7 @@ async function signIn() {
       console.error('Firebase Auth is not initialized, initializing now...');
       await initializeFirebase();
     }
-    console.log('Auth state before signInWithPopup:', auth);
     const provider = new GoogleAuthProvider();
-    console.log('Initiating signInWithPopup');
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-in successful, user:', result.user);
   } catch (error) {
@@ -709,10 +812,14 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     const snippetRef = doc(db, 'snippets', ipHash);
     await setDoc(snippetRef, {
       ipHash,
+      title,
+      description: description || '',
+      tags: metadata.tags,
+      isPremium,
+      priceUsd,
       flagCount: 0,
       likes: 0,
       dislikes: 0,
-      reviewStatus: 'active',
       createdAt: Date.now(),
       creatorId: userId,
     }, { merge: true });
@@ -726,6 +833,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     window.closePublishModal();
     await Promise.all([
       updateLiveFeed(),
+      updateMySnippets(),
       updateTransactionHistory(),
       updateBalanceDisplay(),
       uploadUserDataToFirebase(),
@@ -734,7 +842,6 @@ async function publishSnippet(title, description, tags, content, fileInput) {
   } catch (error) {
     console.error('publishSnippet failed:', error);
     showToast(`Publish failed: ${error.message}`, true);
-  } finally {
   }
 }
 
@@ -748,8 +855,27 @@ async function buySnippet(hash) {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
 
-    const ipObject = dht.knownObjects.get(hash);
-    if (!ipObject) throw new Error('Snippet not found');
+    let ipObject = dht.knownObjects.get(hash);
+    if (!ipObject) {
+      // Fetch from Firestore if not in knownObjects
+      const snippetRef = doc(db, 'snippets', hash);
+      const snippetSnap = await getDoc(snippetRef);
+      if (!snippetSnap.exists()) throw new Error('Snippet not found');
+
+      const data = snippetSnap.data();
+      ipObject = {
+        metadata: {
+          content_type: data.ipHash,
+          description: data.description || 'No description',
+          tags: data.tags || [],
+          isPremium: data.isPremium || false,
+          priceUsd: data.priceUsd || 0,
+        },
+        chunks: data.chunks || [],
+      };
+      dht.knownObjects.set(hash, ipObject);
+      await dht.broadcastIP(hash, ipObject.metadata, ipObject.chunks);
+    }
 
     const isPremium = ipObject.metadata.isPremium || false;
     const priceUsd = isPremium ? (ipObject.metadata.priceUsd || 0) : 0;
@@ -775,6 +901,7 @@ async function buySnippet(hash) {
       updateTransactionHistory(),
       updateBalanceDisplay(),
       uploadUserDataToFirebase(),
+      updateMySnippets(),
     ]);
 
     const feedback = prompt('Do you like this snippet? Type "like" or "dislike":');
@@ -935,6 +1062,16 @@ async function updateUserProfile(userId) {
   } catch (error) {
     console.error('Failed to fetch user profile:', error);
     showToast('Failed to load user profile.', true);
+  }
+}
+
+async function copyHash(hash) {
+  try {
+    await navigator.clipboard.writeText(hash);
+    showToast('Hash copied to clipboard!');
+  } catch (error) {
+    console.error('Failed to copy hash:', error);
+    showToast('Failed to copy hash.', true);
   }
 }
 
@@ -1100,4 +1237,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.deposit = deposit;
   window.withdraw = withdraw;
   window.redirectToPublish = redirectToPublish;
+  window.searchSnippets = searchSnippets;
+  window.copyHash = copyHash;
 });
