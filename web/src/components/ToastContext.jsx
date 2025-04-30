@@ -3,23 +3,19 @@ import React, { createContext, useContext, useState } from 'react';
 const ToastContext = createContext();
 
 export const ToastProvider = ({ children }) => {
-  const [toast, setToast] = useState({ message: '', isError: false, visible: false });
+  const [toasts, setToasts] = useState([]);
 
-  const showToast = (message, isError = false) => {
-    setToast({ message, isError, visible: true });
+  const addToast = (message, type = 'info') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts([...toasts, { id, message, type }]);
     setTimeout(() => {
-      setToast({ message: '', isError: false, visible: false });
+      setToasts((currentToasts) => currentToasts.filter((toast) => toast.id !== id));
     }, 3000);
   };
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={{ addToast, toasts }}>
       {children}
-      {toast.visible && (
-        <div className={`toast ${toast.isError ? 'error-toast' : ''}`}>
-          {toast.message}
-        </div>
-      )}
     </ToastContext.Provider>
   );
 };
