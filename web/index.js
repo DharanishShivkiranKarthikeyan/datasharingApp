@@ -825,7 +825,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
       createdAt: Date.now(),
       creatorId: userId,
     };
-    console.log('Saving snippet to Firestore:', snippetData); // Debug log to verify data
+    console.log('Saving snippet to Firestore: ', snippetData); // Debug log to verify data
 
     await setDoc(snippetRef, snippetData, { merge: true });
 
