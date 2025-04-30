@@ -23,7 +23,7 @@ const App = () => {
       }
     };
     setupApp();
-  }, [user, init]);
+  }, [user, init ]);
 
   return (
     <ToastProvider>
