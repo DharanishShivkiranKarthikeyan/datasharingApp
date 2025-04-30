@@ -12,6 +12,7 @@ export default defineConfig({
       crypto: true,
     }),
   ],
+  base: '/datasharingApp/',
   build: {
     outDir: 'dist',
     rollupOptions: {

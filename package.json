@@ -23,6 +23,6 @@
     "start": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "vite build && gh-pages -d dist"
+    "deploy": "gh-pages -d ./web/dist"
   }
 }
