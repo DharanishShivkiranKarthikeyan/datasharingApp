@@ -31,16 +31,16 @@ const App = () => {
         <Route path="/" element={<Dashboard />} />
         <Route path="/signup" element={<Signup />} />
         <Route
-          path="/node-instructions"
+          path="/datasharingApp/node-instructions"
           element={
             role === 'node' && nodeId ? (
               <NodeInstructions />
             ) : (
-              <Navigate to="/signup" />
+              <Navigate to="/datasharingApp/signup" />
             )
           }
         />
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/datasharingApp/" />} />
       </Routes>
     </ToastProvider>
   );
