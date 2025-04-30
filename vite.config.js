@@ -1,28 +1,21 @@
 import { defineConfig } from 'vite';
-import { cpSync } from 'fs';
+import react from '@vitejs/plugin-react';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export default defineConfig({
-  root: './web',
+  plugins: [
+    react(),
+    nodePolyfills({
+      crypto: true, // Polyfill the crypto module for Web Crypto API
+    }),
+  ],
+  base: '/datasharingApp/',
   build: {
-    outDir: '../dist',
-    emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        // Bundle all JavaScript into a single file
-        manualChunks: undefined, // Disable chunk splitting
-        entryFileNames: 'assets/app.js', // Name the single bundle file "app.js"
-        chunkFileNames: 'assets/[name].js', // Fallback for any chunks (shouldn't be used)
-        assetFileNames: 'assets/[name].[ext]', // For other assets like CSS
-      },
-    },
+    outDir: 'dist',
   },
-  base: '/datasharingApp/', // Updated to match your repository name
-  server: {
-    open: '/index.html',
-    port: 3000,
-    https: {
-      key: './cert.key',
-      cert: './cert.pem'
-    }
+  resolve: {
+    alias: {
+      '@': '/src', // Makes imports like '@/lib/dht.js' cleaner
+    },
   },
 });

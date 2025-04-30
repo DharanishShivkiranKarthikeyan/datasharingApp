@@ -1,6 +1,5 @@
 // web/utils.js
-import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
-
+import CryptoJS from 'crypto-js';
 // Use the global crypto.subtle for Web Crypto API in the browser
 const subtle = globalThis.crypto?.subtle;
 if (!subtle) {
