@@ -1,8 +1,6 @@
 {
   "name": "dcrypt-app",
   "version": "1.0.0",
-  "private": true,
-  "homepage": "https://<your-username>.github.io/datasharingApp",
   "dependencies": {
     "crypto-js": "^4.2.0",
     "firebase": "^11.4.0",
@@ -22,7 +20,6 @@
   "scripts": {
     "start": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "gh-pages -d ./web/dist"
+    "preview": "vite preview"
   }
 }
