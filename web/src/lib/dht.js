@@ -1,7 +1,7 @@
 // web/dht.js
 import CryptoJS from 'crypto-js';
 import Peer from 'peerjs';
-import { db } from '@/firebase.js'; // Use @ alias
+import { db } from '../firebase.js'; // Use @ alias
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getIpMetadata, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 

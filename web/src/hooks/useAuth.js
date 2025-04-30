@@ -3,7 +3,7 @@ import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPe
 import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
-import { DHT, uint8ArrayToBase64Url } from '@/lib/dht.js'; // Import directly from src/lib/dht.js
+import { DHT, uint8ArrayToBase64Url } from '../lib/dht'; // Import directly from src/lib/dht.js
 import { auth } from '../firebase'; // Import initialized auth and provider
 
 let storage = null;
