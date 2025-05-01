@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
-import { DHT, uint8ArrayToBase64Url } from '../lib/dht'; // Import directly from src/lib/dht.js
-import { auth, db } from '../firebase'; // Import initialized auth and provider
+import { DHT, uint8ArrayToBase64Url } from '../lib/dht';
+import { auth, db } from '../firebase';
+import { initializeIndexedDB, loadKeypair, storeKeypair } from '../lib/utils.js';
 
 let storage = null;
 let isSigningUp = false;
@@ -13,8 +14,8 @@ export const useAuth = () => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(localStorage.getItem('role'));
   const [nodeId, setNodeId] = useState(localStorage.getItem('nodeId'));
-  const [isInitializing, setIsInitializing] = useState(false);
   const navigate = useNavigate();
+  const isInitializedRef = useRef(false); // Tracks initialization to prevent repeats
 
   const initializeFirebase = useCallback(async () => {
     try {
@@ -39,6 +40,7 @@ export const useAuth = () => {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       console.log('Sign-in successful, user:', result.user);
+      setUser(result.user); // Set user state after successful sign-in
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -67,6 +69,11 @@ export const useAuth = () => {
 
       setUser(null);
       updateUIForSignOut();
+      isInitializedRef.current = false; // Reset initialization flag for next sign-in
+      if (window.dht) {
+        window.dht.destroy(); // Clean up DHT instance
+        window.dht = null;
+      }
     } catch (error) {
       console.error('Sign-out failed:', error);
       throw error;
@@ -84,6 +91,7 @@ export const useAuth = () => {
       const result = await signInWithPopup(auth, provider);
       const profileImageUrl = profileImageFile ? await uploadProfileImage(result.user.uid, profileImageFile) : null;
 
+      if (!db) throw new Error('Firestore db is not initialized');
       const userRef = doc(db, 'users', result.user.uid);
       await setDoc(userRef, {
         username: username || result.user.displayName || 'Anonymous User',
@@ -102,6 +110,7 @@ export const useAuth = () => {
   const uploadProfileImage = async (userId, file) => {
     if (!file) return null;
     try {
+      if (!storage) throw new Error('Firebase Storage is not initialized');
       const storageRef = ref(storage, `profile_images/${userId}/${file.name}`);
       await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(storageRef);
@@ -118,6 +127,7 @@ export const useAuth = () => {
     localStorage.setItem('role', 'node');
     setNodeId(nodeId);
     setRole('node');
+    if (!db) throw new Error('Firestore db is not initialized');
     const nodeRef = doc(db, 'nodes', nodeId);
     await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
     navigate('/node-instructions');
@@ -142,6 +152,7 @@ export const useAuth = () => {
   const updateUserProfile = useCallback(async (userId) => {
     if (!userId) return;
     try {
+      if (!db) throw new Error('Firestore db is not initialized');
       const userRef = doc(db, 'users', userId);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
@@ -197,8 +208,12 @@ export const useAuth = () => {
   }, []);
 
   const init = useCallback(async (userId) => {
-    if (isInitializing) return;
-    setIsInitializing(true);
+    if (isInitializedRef.current) {
+      console.log('Already initialized, skipping.');
+      return;
+    }
+    console.log('Initializing application for userId:', userId);
+    isInitializedRef.current = true;
     try {
       const indexedDB = await initializeIndexedDB();
       let keypair = await loadKeypair(indexedDB);
@@ -215,37 +230,63 @@ export const useAuth = () => {
         await storeKeypair(indexedDB, userId);
       }
 
+      if (!db) throw new Error('Firestore db is not initialized');
       const isNode = await checkIfUserIsNode(userId);
-      window.dht = new DHT(keypair, isNode); // Use the imported DHT class
+      if (window.dht) {
+        window.dht.destroy(); // Clean up any existing DHT instance
+      }
+      window.dht = new DHT(keypair, isNode);
       await window.dht.initDB();
       await window.dht.initSwarm();
       await window.dht.syncUserData();
+      console.log('Application initialized successfully');
     } catch (error) {
       console.error('Error initializing application:', error);
+      isInitializedRef.current = false; // Allow retry on failure
       throw error;
-    } finally {
-      setIsInitializing(false);
     }
-  }, [isInitializing]);
+  }, []);
 
   const checkIfUserIsNode = async (userId) => {
     try {
+      if (!db) throw new Error('Firestore db is not initialized');
+      console.log('Checking node status for userId:', userId, 'with db:', db);
       const nodeRef = doc(db, 'nodes', userId);
       const nodeSnap = await getDoc(nodeRef);
       return nodeSnap.exists();
     } catch (error) {
-      console.error('Failed to check node status:', error);
+      console.error('Error in checkIfUserIsNode:', error);
       return false;
     }
   };
 
   useEffect(() => {
-    if (!auth) return;
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    if (!auth) {
+      console.warn('Auth is not initialized');
+      return;
+    }
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        await init(currentUser.uid);
+      } else {
+        // Handle guest user or load existing keypair
+        const indexedDB = await initializeIndexedDB();
+        const keypair = await loadKeypair(indexedDB);
+        if (keypair) {
+          await init(keypair);
+        } else {
+          console.log('No user or keypair available for initialization');
+          updateUIForSignOut();
+        }
+      }
     });
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      unsubscribe();
+      // Optional: Cleanup DHT on unmount if needed
+      // if (window.dht) window.dht.destroy();
+    };
+  }, [init]);
 
   return {
     user,
@@ -264,7 +305,7 @@ export const useAuth = () => {
   };
 };
 
-// Utility functions (moved from index.js)
+// Utility functions
 const generateUUID = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = Math.random() * 16 | 0;
