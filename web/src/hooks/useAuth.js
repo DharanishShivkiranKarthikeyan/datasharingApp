@@ -4,21 +4,18 @@ import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
 import { DHT, uint8ArrayToBase64Url } from '../lib/dht';
-import { initializeIndexedDB, loadKeypair} from '../lib/utils';
+import { initializeIndexedDB, loadKeypair } from '../lib/utils';
+import { auth, db } from '../firebase';
 
 let storage = null;
 let isSigningUp = false;
 
-
-export const useAuth = async () => {
-  const firebaseModule = await import('../firebase');
-  const auth = firebaseModule.auth;
-  const db = firebaseModule.db;
+export const useAuth = () => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(localStorage.getItem('role'));
   const [nodeId, setNodeId] = useState(localStorage.getItem('nodeId'));
   const navigate = useNavigate();
-  const isInitializedRef = useRef(false); // Tracks initialization to prevent repeats
+  const isInitializedRef = useRef(false);
 
   const initializeFirebase = useCallback(async () => {
     try {
@@ -43,7 +40,7 @@ export const useAuth = async () => {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       console.log('Sign-in successful, user:', result.user);
-      setUser(result.user); // Set user state after successful sign-in
+      setUser(result.user);
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -72,9 +69,9 @@ export const useAuth = async () => {
 
       setUser(null);
       updateUIForSignOut();
-      isInitializedRef.current = false; // Reset initialization flag for next sign-in
+      isInitializedRef.current = false;
       if (window.dht) {
-        window.dht.destroy(); // Clean up DHT instance
+        window.dht.destroy();
         window.dht = null;
       }
     } catch (error) {
@@ -236,7 +233,7 @@ export const useAuth = async () => {
       if (!db) throw new Error('Firestore db is not initialized');
       const isNode = await checkIfUserIsNode(userId);
       if (window.dht) {
-        window.dht.destroy(); // Clean up any existing DHT instance
+        window.dht.destroy();
       }
       window.dht = new DHT(keypair, isNode);
       await window.dht.initDB();
@@ -245,7 +242,7 @@ export const useAuth = async () => {
       console.log('Application initialized successfully');
     } catch (error) {
       console.error('Error initializing application:', error);
-      isInitializedRef.current = false; // Allow retry on failure
+      isInitializedRef.current = false;
       throw error;
     }
   }, []);
@@ -273,7 +270,6 @@ export const useAuth = async () => {
       if (currentUser) {
         await init(currentUser.uid);
       } else {
-        // Handle guest user or load existing keypair
         const indexedDB = await initializeIndexedDB();
         const keypair = await loadKeypair(indexedDB);
         if (keypair) {
@@ -286,8 +282,6 @@ export const useAuth = async () => {
     });
     return () => {
       unsubscribe();
-      // Optional: Cleanup DHT on unmount if needed
-      // if (window.dht) window.dht.destroy();
     };
   }, [init]);
 
@@ -308,7 +302,6 @@ export const useAuth = async () => {
   };
 };
 
-// Utility functions
 const generateUUID = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = Math.random() * 16 | 0;

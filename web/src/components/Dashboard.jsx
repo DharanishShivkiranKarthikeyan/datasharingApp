@@ -4,6 +4,7 @@ import { useDHT } from '../hooks/useDHT.js';
 import { useToast } from './ToastContext.jsx';
 import PublishModal from './PublishModal.jsx';
 
+
 const Dashboard = () => {
   const { user, signIn, signOutUser, updateUserProfile, updateUIForSignOut } = useAuth();
   const { dht, updateBalanceDisplay, updateTransactionHistory, updateLiveFeed, updateMySnippets, searchSnippets, deposit, withdraw, buySnippet, buySnippetByHash, flagSnippet, copyHash } = useDHT();
