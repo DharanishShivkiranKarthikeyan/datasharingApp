@@ -8,11 +8,12 @@ import { initializeIndexedDB, loadKeypair} from '../lib/utils';
 
 let storage = null;
 let isSigningUp = false;
-const firebaseModule = await import('../firebase');
-const auth = firebaseModule.auth;
-const db = firebaseModule.db;
 
-export const useAuth = () => {
+
+export const useAuth = async () => {
+  const firebaseModule = await import('../firebase');
+  const auth = firebaseModule.auth;
+  const db = firebaseModule.db;
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(localStorage.getItem('role'));
   const [nodeId, setNodeId] = useState(localStorage.getItem('nodeId'));
