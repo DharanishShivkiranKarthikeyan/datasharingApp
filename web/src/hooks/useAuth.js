@@ -199,9 +199,10 @@ export const useAuth = () => {
     }
     console.log('Initializing application for userId:', userId);
     console.log("NIGGGGGAAAAA "+isInitializedRef.current);
-    isInitializedRef.current = true;
 
     try {
+      isInitializedRef.current = true;
+      console.log("after "+ isInitializedRef.current)
       const indexedDB = await initializeIndexedDB();
       let keypair = await loadKeypair(indexedDB);
       if (keypair instanceof Uint8Array) keypair = uint8ArrayToBase64Url(keypair);
