@@ -5,7 +5,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
 import { DHT, uint8ArrayToBase64Url } from '../lib/dht';
 import { auth, db } from '../firebase';
-import { initializeIndexedDB, loadKeypair, storeKeypair } from '../lib/utils';
+import { initializeIndexedDB, loadKeypair} from '../lib/utils';
 
 let storage = null;
 let isSigningUp = false;
@@ -311,32 +311,6 @@ const generateUUID = () => {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
-  });
-};
-
-
-const loadKeypair = (indexedDB) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const tx = indexedDB.transaction('store', 'readonly');
-      const store = tx.objectStore('store');
-      const request = store.get('dcrypt_identity');
-
-      request.onsuccess = () => {
-        const value = request.result?.value;
-        if (value && typeof value === 'string') {
-          resolve(value);
-        } else {
-          resolve(null);
-        }
-      };
-
-      request.onerror = () => {
-        reject(new Error('Failed to load keypair from IndexedDB'));
-      };
-    } catch (error) {
-      reject(error);
-    }
   });
 };
 
