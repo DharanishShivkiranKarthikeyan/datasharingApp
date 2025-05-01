@@ -8,7 +8,7 @@ async function loadDB(){
 
 }
 export const useDHT = () => {
-  const db = loadDB();
+  const db = loadDB().then((r)=>{return r;});
   console.log(db)
   const { user, isAuthenticated } = useAuth();
   const [dht, setDht] = useState(window.dht);
