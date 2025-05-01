@@ -4,11 +4,13 @@ import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
 import { DHT, uint8ArrayToBase64Url } from '../lib/dht';
-import { auth, db } from '../firebase';
 import { initializeIndexedDB, loadKeypair} from '../lib/utils';
 
 let storage = null;
 let isSigningUp = false;
+const firebaseModule = await import('../firebase');
+const auth = firebaseModule.auth;
+const db = firebaseModule.db;
 
 export const useAuth = () => {
   const [user, setUser] = useState(null);
