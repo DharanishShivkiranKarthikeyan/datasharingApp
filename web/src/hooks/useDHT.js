@@ -5,7 +5,6 @@ import { db } from '../firebase.js';
 export const useDHT = () => {
   const { user, isAuthenticated } = useAuth();
   const [dht, setDht] = useState(window.dht);
-  window.db = db;
 
   const updateBalanceDisplay = useCallback(async () => {
     const userBalanceElement = document.getElementById('userBalance');
@@ -55,7 +54,7 @@ export const useDHT = () => {
 
     publishedItemsTableBody.innerHTML = '';
     try {
-      const snippetsQuery = query(collection(window.db, 'snippets'), where('reviewStatus', '==', 'active'));
+      const snippetsQuery = query(collection(db, 'snippets'), where('reviewStatus', '==', 'active'));
       onSnapshot(snippetsQuery, async (snapshots) => {
         const snippetsData = {};
         snapshots.forEach((doc) => {
@@ -114,7 +113,7 @@ export const useDHT = () => {
       const userId = user?.uid || localStorage.getItem('nodeId');
       if (!userId) return;
 
-      const snippetsQuery = query(collection(window.db, 'snippets'), where('creatorId', '==', userId));
+      const snippetsQuery = query(collection(db, 'snippets'), where('creatorId', '==', userId));
       const snippetsSnapshot = await getDocs(snippetsQuery);
       snippetsSnapshot.forEach((doc) => {
         const data = doc.data();
@@ -144,9 +143,9 @@ export const useDHT = () => {
       let snippetsSnapshot;
 
       if (searchTags.length === 0) {
-        snippetsSnapshot = await getDocs(query(collection(window.db, 'snippets'), where('reviewStatus', '==', 'active')));
+        snippetsSnapshot = await getDocs(query(collection(db, 'snippets'), where('reviewStatus', '==', 'active')));
       } else {
-        snippetsSnapshot = await getDocs(query(collection(window.db, 'snippets'), where('reviewStatus', '==', 'active')));
+        snippetsSnapshot = await getDocs(query(collection(db, 'snippets'), where('reviewStatus', '==', 'active')));
       }
 
       const snippetsData = {};
@@ -233,7 +232,7 @@ export const useDHT = () => {
 
     const ipHash = await dht.publishIP(metadata, finalContent, fileType);
     const userId = user?.uid || localStorage.getItem('nodeId');
-    const snippetRef = doc(window.db, 'snippets', ipHash);
+    const snippetRef = doc(db, 'snippets', ipHash);
 
     const snippetData = {
       ipHash: ipHash,
@@ -251,7 +250,7 @@ export const useDHT = () => {
 
     await setDoc(snippetRef, snippetData, { merge: true });
 
-    const userRef = doc(window.db, 'users', userId);
+    const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
       snippetsPosted: increment(1)
     });
@@ -273,7 +272,7 @@ export const useDHT = () => {
 
     let ipObject = dht.knownObjects.get(hash);
     if (!ipObject) {
-      const snippetRef = doc(window.db, 'snippets', hash);
+      const snippetRef = doc(db, 'snippets', hash);
       const snippetSnap = await getDoc(snippetRef);
       if (!snippetSnap.exists()) throw new Error('Snippet not found');
 
@@ -341,7 +340,7 @@ export const useDHT = () => {
     if (!userId) throw new Error('Please sign in to flag content.');
 
     try {
-      const snippetRef = doc(window.db, 'snippets', ipHash);
+      const snippetRef = doc(db, 'snippets', ipHash);
       await updateDoc(snippetRef, { flagCount: increment(1) });
 
       const snippetSnap = await getDoc(snippetRef);
@@ -448,7 +447,7 @@ export const useDHT = () => {
     if (!userId) return;
 
     try {
-      const userRef = doc(window.db, 'users', userId);
+      const userRef = doc(db, 'users', userId);
       const balance = dht ? await dht.getBalance(dht.keypair) : 0;
       await setDoc(userRef, { balance, lastUpdated: Date.now() }, { merge: true });
     } catch (error) {
@@ -459,7 +458,7 @@ export const useDHT = () => {
   const updateUserProfile = async (userId) => {
     if (!userId) return;
     try {
-      const userRef = doc(window.db, 'users', userId);
+      const userRef = doc(db, 'users', userId);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
         const userData = userSnap.data();
@@ -492,10 +491,10 @@ export const useDHT = () => {
     if (!userId) return;
 
     try {
-      const feedbackRef = doc(window.db, 'snippets', ipHash, 'feedback', userId);
+      const feedbackRef = doc(db, 'snippets', ipHash, 'feedback', userId);
       await setDoc(feedbackRef, { action, timestamp: Date.now() });
 
-      const snippetRef = doc(window.db, 'snippets', ipHash);
+      const snippetRef = doc(db, 'snippets', ipHash);
       if (action === 'like') {
         await updateDoc(snippetRef, { likes: increment(1) });
       } else if (action === 'dislike') {
