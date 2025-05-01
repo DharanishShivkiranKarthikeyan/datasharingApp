@@ -34,60 +34,56 @@ export async function loadKeypair(indexedDB) {
   });
 }
 
-export async function initializeIndexedDB() {
+let indexedDBInstance = null;
+
+export const initializeIndexedDB = async () => {
+  if (indexedDBInstance) {
+    console.log('IndexedDB already initialized');
+    return indexedDBInstance;
+  }
   const TARGET_VERSION = 5;
   return new Promise((resolve, reject) => {
-    console.log('Starting IndexedDB initialization...');
     const checkRequest = indexedDB.open('dcrypt_db');
 
     checkRequest.onsuccess = () => {
       const db = checkRequest.result;
       const currentVersion = db.version;
-      console.log('Current IndexedDB version:', currentVersion);
       db.close();
 
       const openRequest = indexedDB.open('dcrypt_db', Math.max(currentVersion, TARGET_VERSION));
 
       openRequest.onupgradeneeded = (event) => {
         const db = openRequest.result;
-        console.log('Upgrading database to version', TARGET_VERSION);
         if (!db.objectStoreNames.contains('store')) {
           db.createObjectStore('store', { keyPath: 'id' });
-          console.log('Created object store: store');
         }
         if (!db.objectStoreNames.contains('transactions')) {
           db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
-          console.log('Created object store: transactions');
         }
         if (!db.objectStoreNames.contains('offlineQueue')) {
           db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
-          console.log('Created object store: offlineQueue');
         }
         if (!db.objectStoreNames.contains('chunkCache')) {
           db.createObjectStore('chunkCache', { keyPath: 'id' });
-          console.log('Created object store: chunkCache');
         }
-        console.log('Database upgrade completed');
       };
 
       openRequest.onsuccess = () => {
-        const db = openRequest.result;
-        console.log('IndexedDB opened successfully at version', db.version);
-        resolve(db);
+        indexedDBInstance = openRequest.result;
+        console.log('IndexedDB opened successfully at version', indexedDBInstance.version);
+        resolve(indexedDBInstance);
       };
 
       openRequest.onerror = () => {
-        console.error('Failed to open IndexedDB:', openRequest.error);
         reject(new Error(`Failed to open IndexedDB: ${openRequest.error.message}`));
       };
     };
 
     checkRequest.onerror = () => {
-      console.error('Failed to check IndexedDB version:', checkRequest.error);
       reject(new Error(`Failed to check IndexedDB version: ${checkRequest.error.message}`));
     };
   });
-}
+};
 // Helper to generate a static nonce (for simplicity; in production, store this with the chunk)
 function generateNonce() {
   const nonce = new Uint8Array(12); // 96-bit nonce for AES-GCM

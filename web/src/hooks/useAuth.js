@@ -1,13 +1,13 @@
+// useAuth.js
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, increment, collection} from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
 import { DHT, uint8ArrayToBase64Url } from '../lib/dht';
 import { initializeIndexedDB, loadKeypair } from '../lib/utils';
-import { auth, db } from '../firebase';
+import { auth, db, storage } from '../firebase';
 
-let storage = null;
 let isSigningUp = false;
 
 export const useAuth = () => {
@@ -19,9 +19,8 @@ export const useAuth = () => {
 
   const initializeFirebase = useCallback(async () => {
     try {
-      storage = getStorage();
       await setPersistence(auth, browserLocalPersistence);
-      console.log('Firebase services initialized successfully with local persistence');
+      console.log('Firebase services initialized with local persistence');
     } catch (error) {
       console.error('Failed to initialize Firebase services:', error);
       throw error;
@@ -29,14 +28,12 @@ export const useAuth = () => {
   }, []);
 
   const isAuthenticated = useCallback(() => {
-    return !!auth?.currentUser || localStorage.getItem('role') === 'node';
+    return !!auth.currentUser || localStorage.getItem('role') === 'node';
   }, []);
 
   const signIn = useCallback(async () => {
     try {
-      if (!auth) {
-        await initializeFirebase();
-      }
+      await initializeFirebase();
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       console.log('Sign-in successful, user:', result.user);
@@ -91,7 +88,6 @@ export const useAuth = () => {
       const result = await signInWithPopup(auth, provider);
       const profileImageUrl = profileImageFile ? await uploadProfileImage(result.user.uid, profileImageFile) : null;
 
-      if (!db) throw new Error('Firestore db is not initialized');
       const userRef = doc(db, 'users', result.user.uid);
       await setDoc(userRef, {
         username: username || result.user.displayName || 'Anonymous User',
@@ -110,7 +106,6 @@ export const useAuth = () => {
   const uploadProfileImage = async (userId, file) => {
     if (!file) return null;
     try {
-      if (!storage) throw new Error('Firebase Storage is not initialized');
       const storageRef = ref(storage, `profile_images/${userId}/${file.name}`);
       await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(storageRef);
@@ -127,7 +122,6 @@ export const useAuth = () => {
     localStorage.setItem('role', 'node');
     setNodeId(nodeId);
     setRole('node');
-    if (!db) throw new Error('Firestore db is not initialized');
     const nodeRef = doc(db, 'nodes', nodeId);
     await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
     navigate('/node-instructions');
@@ -152,7 +146,6 @@ export const useAuth = () => {
   const updateUserProfile = useCallback(async (userId) => {
     if (!userId) return;
     try {
-      if (!db) throw new Error('Firestore db is not initialized');
       const userRef = doc(db, 'users', userId);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
@@ -161,19 +154,13 @@ export const useAuth = () => {
         const userAvatarElement = document.querySelector('.user-avatar');
         const snippetsPostedElement = document.getElementById('snippetsPosted');
 
-        if (userNameElement) {
-          userNameElement.textContent = userData.username || 'Anonymous User';
-        }
+        if (userNameElement) userNameElement.textContent = userData.username || 'Anonymous User';
         if (userAvatarElement) {
-          if (userData.profileImageUrl) {
-            userAvatarElement.innerHTML = `<img src="${userData.profileImageUrl}" alt="Profile Image" class="w-12 h-12 rounded-full object-cover">`;
-          } else {
-            userAvatarElement.innerHTML = '<i class="fas fa-user text-lg"></i>';
-          }
+          userAvatarElement.innerHTML = userData.profileImageUrl
+            ? `<img src="${userData.profileImageUrl}" alt="Profile Image" class="w-12 h-12 rounded-full object-cover">`
+            : '<i class="fas fa-user text-lg"></i>';
         }
-        if (snippetsPostedElement) {
-          snippetsPostedElement.textContent = userData.snippetsPosted || 0;
-        }
+        if (snippetsPostedElement) snippetsPostedElement.textContent = userData.snippetsPosted || 0;
       }
     } catch (error) {
       console.error('Failed to fetch user profile:', error);
@@ -197,9 +184,7 @@ export const useAuth = () => {
     if (elements.transactionList) elements.transactionList.innerHTML = 'No transactions yet.';
     if (elements.userBalanceElement) elements.userBalanceElement.textContent = 'Balance: 0 DCT';
     if (elements.userNameElement) elements.userNameElement.textContent = 'Guest User';
-    if (elements.userAvatarElement) {
-      elements.userAvatarElement.innerHTML = '<i class="fas fa-user text-lg"></i>';
-    }
+    if (elements.userAvatarElement) elements.userAvatarElement.innerHTML = '<i class="fas fa-user text-lg"></i>';
     if (elements.snippetsPostedElement) elements.snippetsPostedElement.textContent = '0';
 
     localStorage.removeItem('userKeypair');
@@ -214,12 +199,11 @@ export const useAuth = () => {
     }
     console.log('Initializing application for userId:', userId);
     isInitializedRef.current = true;
+
     try {
       const indexedDB = await initializeIndexedDB();
       let keypair = await loadKeypair(indexedDB);
-      if (keypair instanceof Uint8Array) {
-        keypair = uint8ArrayToBase64Url(keypair);
-      }
+      if (keypair instanceof Uint8Array) keypair = uint8ArrayToBase64Url(keypair);
       if (!keypair && userId) {
         await storeKeypair(indexedDB, userId);
         keypair = userId;
@@ -230,11 +214,8 @@ export const useAuth = () => {
         await storeKeypair(indexedDB, userId);
       }
 
-      if (!db) throw new Error('Firestore db is not initialized');
       const isNode = await checkIfUserIsNode(userId);
-      if (window.dht) {
-        window.dht.destroy();
-      }
+      if (window.dht) window.dht.destroy();
       window.dht = new DHT(keypair, isNode);
       await window.dht.initDB();
       await window.dht.initSwarm();
@@ -249,7 +230,6 @@ export const useAuth = () => {
 
   const checkIfUserIsNode = async (userId) => {
     try {
-      if (!db) throw new Error('Firestore db is not initialized');
       console.log('Checking node status for userId:', userId, 'with db:', db);
       const nodeRef = doc(db, 'nodes', userId);
       const nodeSnap = await getDoc(nodeRef);
@@ -265,11 +245,12 @@ export const useAuth = () => {
       console.warn('Auth is not initialized');
       return;
     }
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
+      if (currentUser && !isInitializedRef.current) {
         await init(currentUser.uid);
-      } else {
+      } else if (!currentUser && !isInitializedRef.current) {
         const indexedDB = await initializeIndexedDB();
         const keypair = await loadKeypair(indexedDB);
         if (keypair) {
@@ -280,10 +261,9 @@ export const useAuth = () => {
         }
       }
     });
-    return () => {
-      unsubscribe();
-    };
-  }, [init]);
+
+    return () => unsubscribe();
+  }, [init, updateUIForSignOut]);
 
   return {
     user,
@@ -317,13 +297,8 @@ const storeKeypair = (indexedDB, userId) => {
       const store = tx.objectStore('store');
       const request = store.put({ id: 'dcrypt_identity', value: userId });
 
-      request.onsuccess = () => {
-        resolve();
-      };
-
-      request.onerror = () => {
-        reject(new Error('Failed to store keypair in IndexedDB'));
-      };
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to store keypair in IndexedDB'));
     } catch (error) {
       reject(error);
     }
