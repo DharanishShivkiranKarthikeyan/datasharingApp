@@ -6,9 +6,7 @@ import { BrowserRouter } from 'react-router-dom';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
-  <React>
-    <BrowserRouter basename="/datasharingApp">
-      <App />
-    </BrowserRouter>
-  </React>
+  <BrowserRouter basename="/datasharingApp">
+    <App />
+  </BrowserRouter>
 );
