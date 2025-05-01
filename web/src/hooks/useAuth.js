@@ -8,6 +8,9 @@ import { DHT, uint8ArrayToBase64Url } from '../lib/dht';
 import { initializeIndexedDB, loadKeypair } from '../lib/utils';
 import { auth, db, storage } from '../firebase';
 
+// Global flag to prevent multiple initializations across all hook instances
+let isAppInitialized = false;
+
 let isSigningUp = false;
 
 export const useAuth = () => {
@@ -16,6 +19,10 @@ export const useAuth = () => {
   const [nodeId, setNodeId] = useState(localStorage.getItem('nodeId'));
   const navigate = useNavigate();
   const isInitializedRef = useRef(false);
+  const authStateHandledRef = useRef(false);
+
+  // Debug: Log when hook is instantiated
+  console.log('useAuth hook instantiated');
 
   const initializeFirebase = useCallback(async () => {
     try {
@@ -67,10 +74,13 @@ export const useAuth = () => {
       setUser(null);
       updateUIForSignOut();
       isInitializedRef.current = false;
+      isAppInitialized = false;
+      authStateHandledRef.current = false;
       if (window.dht) {
         window.dht.destroy();
         window.dht = null;
       }
+      console.log('Signed out successfully, reset initialization flags');
     } catch (error) {
       console.error('Sign-out failed:', error);
       throw error;
@@ -193,16 +203,18 @@ export const useAuth = () => {
   }, []);
 
   const init = useCallback(async (userId) => {
-    if (isInitializedRef.current) {
-      console.log('Already initialized, skipping.');
+    if (isAppInitialized || isInitializedRef.current) {
+      console.log('Application already initialized, skipping for userId:', userId);
       return;
     }
     console.log('Initializing application for userId:', userId);
-    console.log("NIGGGGGAAAAA "+isInitializedRef.current);
+    console.log('isAppInitialized:', isAppInitialized, 'isInitializedRef.current:', isInitializedRef.current);
 
     try {
+      isAppInitialized = true;
       isInitializedRef.current = true;
-      console.log("after "+ isInitializedRef.current)
+      console.log('Set initialization flags: isAppInitialized:', isAppInitialized, 'isInitializedRef.current:', isInitializedRef.current);
+
       const indexedDB = await initializeIndexedDB();
       let keypair = await loadKeypair(indexedDB);
       if (keypair instanceof Uint8Array) keypair = uint8ArrayToBase64Url(keypair);
@@ -222,9 +234,10 @@ export const useAuth = () => {
       await window.dht.initDB();
       await window.dht.initSwarm();
       await window.dht.syncUserData();
-      console.log('Application initialized successfully');
+      console.log('Application initialized successfully for userId:', userId);
     } catch (error) {
-      console.error('Error initializing application:', error);
+      console.error('Error initializing application for userId:', userId, error);
+      isAppInitialized = false;
       isInitializedRef.current = false;
       throw error;
     }
@@ -248,23 +261,48 @@ export const useAuth = () => {
       return;
     }
 
+    console.log('Setting up onAuthStateChanged listener');
+    let timeoutId;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser && !isInitializedRef.current) {
-        await init(currentUser.uid);
-      } else if (!currentUser && !isInitializedRef.current) {
-        const indexedDB = await initializeIndexedDB();
-        const keypair = await loadKeypair(indexedDB);
-        if (keypair) {
-          await init(keypair);
-        } else {
-          console.log('No user or keypair available for initialization');
-          updateUIForSignOut();
-        }
+      if (authStateHandledRef.current) {
+        console.log('Auth state already handled, skipping for user:', currentUser?.uid);
+        return;
       }
+      authStateHandledRef.current = true;
+
+      console.log('onAuthStateChanged triggered with user:', currentUser?.uid);
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        try {
+          setUser(currentUser);
+          if (currentUser && !isInitializedRef.current) {
+            console.log('Calling init for authenticated user:', currentUser.uid);
+            await init(currentUser.uid);
+          } else if (!currentUser && !isInitializedRef.current) {
+            const indexedDB = await initializeIndexedDB();
+            const keypair = await loadKeypair(indexedDB);
+            if (keypair) {
+              console.log('Calling init for keypair:', keypair);
+              await init(keypair);
+            } else {
+              console.log('No user or keypair available for initialization');
+              updateUIForSignOut();
+            }
+          } else {
+            console.log('Initialization skipped: isInitializedRef.current:', isInitializedRef.current);
+          }
+        } catch (error) {
+          console.error('Error handling auth state change:', error);
+          authStateHandledRef.current = false;
+        }
+      }, 100); // 100ms debounce
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log('Cleaning up onAuthStateChanged listener');
+      clearTimeout(timeoutId);
+      unsubscribe();
+    };
   }, [init, updateUIForSignOut]);
 
   return {
