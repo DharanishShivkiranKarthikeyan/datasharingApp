@@ -2,8 +2,8 @@
 import CryptoJS from 'crypto-js';
 import Peer from 'peerjs';
 import { db } from '../firebase.js'; // Use @ alias
+import { collection, getDocs } from 'firebase/firestore'; // Local import instead of CDN
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getIpMetadata, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
-import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 
 export class DHT {
   constructor(keypair, isNode = false) {
@@ -31,6 +31,10 @@ export class DHT {
   async initializeKnownNodes() {
     const fetchNodes = async () => {
       try {
+        if (!db) {
+          console.error('Firestore db is not initialized');
+          return;
+        }
         const nodesSnapshot = await getDocs(collection(db, 'nodes'));
         this.nodes.clear();
         if (!nodesSnapshot.empty) {

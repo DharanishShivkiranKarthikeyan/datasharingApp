@@ -1,15 +1,10 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from './useAuth.js';
 import { doc, getDocs, setDoc, updateDoc, increment, query, where, onSnapshot, collection } from 'firebase/firestore';
+import { db } from '../firebase.js';
 
-async function loadDB(){
-  return await import('../firebase.js').then((r)=>{return r.db;});
-  
-
-}
 export const useDHT = () => {
-  const db = loadDB().then((r)=>{return r;});
-  console.log(db)
+  console.log(db);
   const { user, isAuthenticated } = useAuth();
   const [dht, setDht] = useState(window.dht);
 
