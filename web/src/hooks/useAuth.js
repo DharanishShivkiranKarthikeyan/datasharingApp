@@ -198,6 +198,7 @@ export const useAuth = () => {
       return;
     }
     console.log('Initializing application for userId:', userId);
+    console.log("NIGGGGGAAAAA "+isInitializedRef.current);
     isInitializedRef.current = true;
 
     try {
