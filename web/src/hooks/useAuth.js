@@ -5,7 +5,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
 import { DHT, uint8ArrayToBase64Url } from '../lib/dht';
 import { auth, db } from '../firebase';
-import { initializeIndexedDB, loadKeypair, storeKeypair } from '../lib/utils.js';
+import { initializeIndexedDB, loadKeypair, storeKeypair } from '../lib/utils';
 
 let storage = null;
 let isSigningUp = false;
@@ -314,49 +314,6 @@ const generateUUID = () => {
   });
 };
 
-const initializeIndexedDB = async () => {
-  const TARGET_VERSION = 5;
-  return new Promise((resolve, reject) => {
-    const checkRequest = indexedDB.open('dcrypt_db');
-
-    checkRequest.onsuccess = () => {
-      const db = checkRequest.result;
-      const currentVersion = db.version;
-      db.close();
-
-      const openRequest = indexedDB.open('dcrypt_db', Math.max(currentVersion, TARGET_VERSION));
-
-      openRequest.onupgradeneeded = (event) => {
-        const db = openRequest.result;
-        if (!db.objectStoreNames.contains('store')) {
-          db.createObjectStore('store', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('transactions')) {
-          db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
-        }
-        if (!db.objectStoreNames.contains('offlineQueue')) {
-          db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
-        }
-        if (!db.objectStoreNames.contains('chunkCache')) {
-          db.createObjectStore('chunkCache', { keyPath: 'id' });
-        }
-      };
-
-      openRequest.onsuccess = () => {
-        const db = openRequest.result;
-        resolve(db);
-      };
-
-      openRequest.onerror = () => {
-        reject(new Error(`Failed to open IndexedDB: ${openRequest.error.message}`));
-      };
-    };
-
-    checkRequest.onerror = () => {
-      reject(new Error(`Failed to check IndexedDB version: ${checkRequest.error.message}`));
-    };
-  });
-};
 
 const loadKeypair = (indexedDB) => {
   return new Promise((resolve, reject) => {
