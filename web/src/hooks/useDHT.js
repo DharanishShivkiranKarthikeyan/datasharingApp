@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from './useAuth.js';
-import { doc, getDocs, setDoc, updateDoc, increment, query, where, onSnapshot } from 'firebase/firestore';
-
+import { doc, getDocs, setDoc, updateDoc, increment, query, where, onSnapshot, collection } from 'firebase/firestore';
+import { db } from '../firebase.js';
 export const useDHT = () => {
   const { user, isAuthenticated } = useAuth();
   const [dht, setDht] = useState(window.dht);
+  window.db = db;
 
   const updateBalanceDisplay = useCallback(async () => {
     const userBalanceElement = document.getElementById('userBalance');
