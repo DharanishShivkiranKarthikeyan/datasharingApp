@@ -1,5 +1,5 @@
 // hooks/useAuth.js
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -20,6 +20,7 @@ export const useAuth = () => {
   const navigate = useNavigate();
   const isInitializedRef = useRef(false);
   const authStateHandledRef = useRef(false);
+  const unsubscribeRef = useRef(null);
 
   console.log('useAuth hook instantiated'); // Debug
 
@@ -255,14 +256,19 @@ export const useAuth = () => {
     }
   };
 
-  useEffect(() => {
+  // Manual subscription to auth state changes
+  const subscribeToAuthChanges = useCallback(() => {
     if (!auth) {
       console.warn('Auth is not initialized');
       return;
     }
 
+    if (unsubscribeRef.current) {
+      console.log('Already subscribed to auth changes, skipping');
+      return;
+    }
+
     console.log('Setting up onAuthStateChanged listener');
-    let timeoutId;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (authStateHandledRef.current) {
         console.log('Auth state already handled, skipping for user:', currentUser?.uid);
@@ -271,39 +277,42 @@ export const useAuth = () => {
       authStateHandledRef.current = true;
 
       console.log('onAuthStateChanged triggered with user:', currentUser?.uid);
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(async () => {
-        try {
-          setUser(currentUser);
-          if (currentUser && !isInitializedRef.current) {
-            console.log('Calling init for authenticated user:', currentUser.uid);
-            await init(currentUser.uid);
-          } else if (!currentUser && !isInitializedRef.current) {
-            const indexedDB = await initializeIndexedDB();
-            const keypair = await loadKeypair(indexedDB);
-            if (keypair) {
-              console.log('Calling init for keypair:', keypair);
-              await init(keypair);
-            } else {
-              console.log('No user or keypair available for initialization');
-              updateUIForSignOut();
-            }
+      try {
+        setUser(currentUser);
+        if (currentUser && !isInitializedRef.current) {
+          console.log('Calling init for authenticated user:', currentUser.uid);
+          await init(currentUser.uid);
+        } else if (!currentUser && !isInitializedRef.current) {
+          const indexedDB = await initializeIndexedDB();
+          const keypair = await loadKeypair(indexedDB);
+          if (keypair) {
+            console.log('Calling init for keypair:', keypair);
+            await init(keypair);
           } else {
-            console.log('Initialization skipped: isInitializedRef.current:', isInitializedRef.current);
+            console.log('No user or keypair available for initialization');
+            updateUIForSignOut();
           }
-        } catch (error) {
-          console.error('Error handling auth state change:', error);
-          authStateHandledRef.current = false;
+        } else {
+          console.log('Initialization skipped: isInitializedRef.current:', isInitializedRef.current);
         }
-      }, 100); // 100ms debounce
+      } catch (error) {
+        console.error('Error handling auth state change:', error);
+        authStateHandledRef.current = false;
+      }
     });
 
-    return () => {
-      console.log('Cleaning up onAuthStateChanged listener');
-      clearTimeout(timeoutId);
-      unsubscribe();
-    };
+    unsubscribeRef.current = unsubscribe;
+    return unsubscribe;
   }, [init, updateUIForSignOut]);
+
+  // Manual cleanup of auth state subscription
+  const unsubscribeFromAuthChanges = useCallback(() => {
+    if (unsubscribeRef.current) {
+      console.log('Cleaning up onAuthStateChanged listener');
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
+    }
+  }, []);
 
   return {
     user,
@@ -319,6 +328,8 @@ export const useAuth = () => {
     updateUserProfile,
     updateUIForSignOut,
     init,
+    subscribeToAuthChanges,
+    unsubscribeFromAuthChanges,
   };
 };
 

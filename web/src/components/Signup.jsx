@@ -1,21 +1,20 @@
+// components/Signup.jsx
 import React, { useState } from 'react';
-import { useAuth } from '../hooks/useAuth.js';
-import { useToast } from './ToastContext.jsx';
 import { useNavigate } from 'react-router-dom';
 
-const Signup = () => {
-  const { handleSignup, becomeNode } = useAuth();
-  const { showToast } = useToast();
+const Signup = ({ handleSignup, becomeNode, showToast }) => {
   const navigate = useNavigate();
   const [isUserSignupOpen, setIsUserSignupOpen] = useState(false);
   const [username, setUsername] = useState('');
   const [profileImage, setProfileImage] = useState(null);
 
   const openUserSignupModal = () => {
+    console.log('Opening user signup modal');
     setIsUserSignupOpen(true);
   };
 
   const closeUserSignupModal = () => {
+    console.log('Closing user signup modal');
     setIsUserSignupOpen(false);
     setUsername('');
     setProfileImage(null);
@@ -23,12 +22,11 @@ const Signup = () => {
 
   const onSignupSubmit = async (e) => {
     e.preventDefault();
+    console.log('Submitting signup form with username:', username);
     try {
-      await handleSignup(username, profileImage);
-      showToast('Sign-up successful! Redirecting to dashboard...');
-      navigate('/');
+      await handleSignup(username, profileImage, showToast);
     } catch (error) {
-      showToast(`Sign-up failed: ${error.message}`, true);
+      // Error handled in handleSignup
     }
   };
 
@@ -45,7 +43,15 @@ const Signup = () => {
           </div>
           <div className="flex justify-center space-x-4">
             <button className="btn btn-primary" onClick={openUserSignupModal}>Become a User</button>
-            <button className="btn btn-secondary" onClick={becomeNode}>Become a Node</button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                console.log('Become a Node clicked');
+                becomeNode(showToast);
+              }}
+            >
+              Become a Node
+            </button>
           </div>
           <div className="text-center">
             <button onClick={() => navigate('/')} className="text-blue-400 hover:underline text-sm">Back to Dashboard</button>

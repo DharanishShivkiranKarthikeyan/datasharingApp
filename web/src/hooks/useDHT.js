@@ -1,25 +1,55 @@
-import { useState, useCallback } from 'react';
-import { useAuth } from './useAuth.js';
+import { useState, useCallback, useEffect } from 'react';
 import { doc, getDocs, setDoc, updateDoc, increment, query, where, onSnapshot, collection } from 'firebase/firestore';
 import { db } from '../firebase.js';
 
-export const useDHT = () => {
-  console.log(db);
-  const { user, isAuthenticated } = useAuth();
-  const [dht, setDht] = useState(window.dht);
+export const useDHT = ({ user } = {}) => {
+  const [dht, setDht] = useState(null); // Initialize as null instead of window.dht to avoid stale references
+
+  useEffect(() => {
+    console.log('useDHT effect triggered with user:', user?.uid);
+    if (!user) {
+      console.log('No user provided, skipping DHT initialization');
+      return;
+    }
+
+    if (window.dht) {
+      console.log('window.dht found, setting DHT');
+      setDht(window.dht);
+    } else {
+      console.log('window.dht not found, starting polling');
+      const checkDht = setInterval(() => {
+        if (window.dht) {
+          console.log('window.dht became available, setting DHT');
+          setDht(window.dht);
+          clearInterval(checkDht);
+        }
+      }, 100); // Check every 100ms
+
+      // Cleanup interval on unmount or user change
+      return () => {
+        console.log('Cleaning up useDHT effect');
+        clearInterval(checkDht);
+      };
+    }
+  }, [user]); // Only depend on user, not dht, to avoid infinite loops
 
   const updateBalanceDisplay = useCallback(async () => {
     const userBalanceElement = document.getElementById('userBalance');
-    if (!userBalanceElement) return;
+    if (!userBalanceElement) {
+      console.log('userBalance element not found');
+      return;
+    }
 
     if (!dht) {
       userBalanceElement.textContent = 'Balance: 0 DCT';
+      console.log('DHT not initialized, setting balance to 0');
       return;
     }
 
     try {
       const userBalance = (await dht.getBalance(dht.keypair)) || 0;
       userBalanceElement.textContent = `Balance: ${userBalance} DCT`;
+      console.log('Updated balance:', userBalance);
     } catch (error) {
       console.error('Failed to update balance:', error);
       userBalanceElement.textContent = 'Balance: 0 DCT';
@@ -28,10 +58,14 @@ export const useDHT = () => {
 
   const updateTransactionHistory = useCallback(async () => {
     const transactionList = document.getElementById('transactionList');
-    if (!transactionList) return;
+    if (!transactionList) {
+      console.log('transactionList element not found');
+      return;
+    }
 
     if (!dht) {
       transactionList.innerHTML = 'Not initialized.';
+      console.log('DHT not initialized, setting transaction list to Not initialized');
       return;
     }
 
@@ -39,11 +73,13 @@ export const useDHT = () => {
       const transactions = await dht.dbGetAll('transactions');
       if (transactions.length === 0) {
         transactionList.innerHTML = 'No transactions yet.';
+        console.log('No transactions found');
         return;
       }
       transactionList.innerHTML = transactions
         .map((tx) => `<p class="py-1">${tx.type} - ${tx.amount} DCT - ${new Date(tx.timestamp).toLocaleString()}</p>`)
         .join('');
+      console.log('Updated transaction history with', transactions.length, 'transactions');
     } catch (error) {
       console.error('Failed to update transaction history:', error);
       transactionList.innerHTML = 'Failed to load transactions.';
@@ -52,7 +88,10 @@ export const useDHT = () => {
 
   const updateLiveFeed = useCallback(async () => {
     const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
-    if (!publishedItemsTableBody) return;
+    if (!publishedItemsTableBody) {
+      console.log('publishedItems table body not found');
+      return;
+    }
 
     publishedItemsTableBody.innerHTML = '';
     try {
@@ -98,24 +137,30 @@ export const useDHT = () => {
             `;
             publishedItemsTableBody.appendChild(row);
           });
+          console.log('Updated live feed with', dht.knownObjects.size, 'snippets');
         }
       });
     } catch (error) {
       console.error('Failed to update live feed:', error);
-      throw error;
+      publishedItemsTableBody.innerHTML = '<tr><td colspan="6">Failed to load snippets.</td></tr>';
     }
   }, [dht]);
 
   const updateMySnippets = useCallback(async () => {
     const mySnippetsTableBody = document.getElementById('mySnippets')?.querySelector('tbody');
-    if (!mySnippetsTableBody) return;
+    if (!mySnippetsTableBody) {
+      console.log('mySnippets table body not found');
+      return;
+    }
 
     mySnippetsTableBody.innerHTML = '';
-    try {
-      const userId = user?.uid || localStorage.getItem('nodeId');
-      if (!userId) return;
+    if (!user?.uid) {
+      console.log('No user ID, skipping mySnippets update');
+      return;
+    }
 
-      const snippetsQuery = query(collection(db, 'snippets'), where('creatorId', '==', userId));
+    try {
+      const snippetsQuery = query(collection(db, 'snippets'), where('creatorId', '==', user.uid));
       const snippetsSnapshot = await getDocs(snippetsQuery);
       snippetsSnapshot.forEach((doc) => {
         const data = doc.data();
@@ -129,15 +174,19 @@ export const useDHT = () => {
         `;
         mySnippetsTableBody.appendChild(row);
       });
+      console.log('Updated my snippets with', snippetsSnapshot.size, 'items');
     } catch (error) {
       console.error('Failed to update my snippets:', error);
-      throw error;
+      mySnippetsTableBody.innerHTML = '<tr><td colspan="3">Failed to load snippets.</td></tr>';
     }
   }, [user]);
 
   const searchSnippets = useCallback(async (searchTerm) => {
     const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
-    if (!publishedItemsTableBody) return;
+    if (!publishedItemsTableBody) {
+      console.log('publishedItems table body not found for search');
+      return;
+    }
 
     publishedItemsTableBody.innerHTML = '';
     try {
@@ -192,17 +241,27 @@ export const useDHT = () => {
           `;
           publishedItemsTableBody.appendChild(row);
         });
+        console.log('Searched snippets with term:', searchTerm);
       }
     } catch (error) {
       console.error('Failed to search snippets:', error);
-      throw error;
+      publishedItemsTableBody.innerHTML = '<tr><td colspan="6">Failed to load snippets.</td></tr>';
     }
   }, [dht]);
 
   const publishSnippet = useCallback(async (title, description, tags, content, fileInput) => {
-    if (!isAuthenticated()) throw new Error('Please sign in to publish.');
-    if (!dht) throw new Error('DHT not initialized');
-    if (!title) throw new Error('Title is required');
+    if (!user?.uid) {
+      console.log('No authenticated user, cannot publish snippet');
+      throw new Error('Please sign in to publish.');
+    }
+    if (!dht) {
+      console.log('DHT not initialized, cannot publish snippet');
+      throw new Error('DHT not initialized');
+    }
+    if (!title) {
+      console.log('Title is required for publishing');
+      throw new Error('Title is required');
+    }
 
     let finalContent = content || '';
     let fileType = 'text/plain';
@@ -219,7 +278,7 @@ export const useDHT = () => {
       finalContent = new TextEncoder().encode(finalContent);
     }
 
-    const isPremium = document.getElementById('modalPremium').checked;
+    const isPremium = document.getElementById('modalPremium')?.checked;
     const priceInput = document.getElementById('modalPriceInput');
     const priceUsd = isPremium && priceInput ? parseFloat(priceInput.value) || 0 : 0;
 
@@ -233,7 +292,7 @@ export const useDHT = () => {
     };
 
     const ipHash = await dht.publishIP(metadata, finalContent, fileType);
-    const userId = user?.uid || localStorage.getItem('nodeId');
+    const userId = user.uid;
     const snippetRef = doc(db, 'snippets', ipHash);
 
     const snippetData = {
@@ -262,21 +321,32 @@ export const useDHT = () => {
       updateMySnippets(),
       updateTransactionHistory(),
       updateBalanceDisplay(),
-      uploadUserDataToFirebase(),
-      updateUserProfile(userId),
     ]);
+    console.log('Published snippet with hash:', ipHash);
   }, [dht, user, updateLiveFeed, updateMySnippets, updateTransactionHistory, updateBalanceDisplay]);
 
   const buySnippet = useCallback(async (hash) => {
-    if (!isAuthenticated()) throw new Error('Please sign in to buy.');
-    if (!dht) throw new Error('DHT not initialized');
-    if (!hash) throw new Error('Hash is required');
+    if (!user?.uid) {
+      console.log('No authenticated user, cannot buy snippet');
+      throw new Error('Please sign in to buy.');
+    }
+    if (!dht) {
+      console.log('DHT not initialized, cannot buy snippet');
+      throw new Error('DHT not initialized');
+    }
+    if (!hash) {
+      console.log('Hash is required for buying snippet');
+      throw new Error('Hash is required');
+    }
 
     let ipObject = dht.knownObjects.get(hash);
     if (!ipObject) {
       const snippetRef = doc(db, 'snippets', hash);
       const snippetSnap = await getDoc(snippetRef);
-      if (!snippetSnap.exists()) throw new Error('Snippet not found');
+      if (!snippetSnap.exists()) {
+        console.log('Snippet not found for hash:', hash);
+        throw new Error('Snippet not found');
+      }
 
       const data = snippetSnap.data();
       ipObject = {
@@ -299,7 +369,10 @@ export const useDHT = () => {
 
     if (buyCost > 0) {
       const balance = await dht.getBalance(dht.keypair);
-      if (balance < buyCost) throw new Error('Insufficient balance');
+      if (balance < buyCost) {
+        console.log('Insufficient balance:', balance, 'for cost:', buyCost);
+        throw new Error('Insufficient balance');
+      }
 
       const commission = buyCost * 0.05;
       await dht.distributeCommission(commission);
@@ -314,7 +387,6 @@ export const useDHT = () => {
     await Promise.all([
       updateTransactionHistory(),
       updateBalanceDisplay(),
-      uploadUserDataToFirebase(),
       updateMySnippets(),
     ]);
 
@@ -328,18 +400,24 @@ export const useDHT = () => {
     }
 
     displaySnippetContent(data, fileType, ipObject.metadata.content_type);
+    console.log('Bought snippet with hash:', hash);
     return { data, fileType };
-  }, [dht, isAuthenticated, updateTransactionHistory, updateBalanceDisplay, updateMySnippets, updateLiveFeed]);
+  }, [dht, user, updateTransactionHistory, updateBalanceDisplay, updateMySnippets, updateLiveFeed]);
 
   const buySnippetByHash = useCallback(async (hash) => {
-    if (!hash) throw new Error('Please enter a valid hash.');
+    if (!hash) {
+      console.log('Invalid hash for buySnippetByHash');
+      throw new Error('Please enter a valid hash.');
+    }
     const result = await buySnippet(hash);
     if (result) console.log('Snippet purchased and displayed below!');
   }, [buySnippet]);
 
   const flagSnippet = useCallback(async (ipHash) => {
-    const userId = user?.uid || localStorage.getItem('nodeId');
-    if (!userId) throw new Error('Please sign in to flag content.');
+    if (!user?.uid) {
+      console.log('No authenticated user, cannot flag snippet');
+      throw new Error('Please sign in to flag content.');
+    }
 
     try {
       const snippetRef = doc(db, 'snippets', ipHash);
@@ -352,6 +430,7 @@ export const useDHT = () => {
         await updateDoc(snippetRef, { reviewStatus: 'under_review' });
         await updateLiveFeed();
       }
+      console.log('Flagged snippet with hash:', ipHash);
     } catch (error) {
       console.error('Failed to flag snippet:', error);
       throw error;
@@ -359,9 +438,18 @@ export const useDHT = () => {
   }, [user, updateLiveFeed]);
 
   const deposit = useCallback(async (amount) => {
-    if (!isAuthenticated()) throw new Error('Please sign in to deposit.');
-    if (!dht) throw new Error('DHT not initialized');
-    if (!amount || amount <= 0) throw new Error('Invalid deposit amount');
+    if (!user?.uid) {
+      console.log('No authenticated user, cannot deposit');
+      throw new Error('Please sign in to deposit.');
+    }
+    if (!dht) {
+      console.log('DHT not initialized, cannot deposit');
+      throw new Error('DHT not initialized');
+    }
+    if (!amount || amount <= 0) {
+      console.log('Invalid deposit amount:', amount);
+      throw new Error('Invalid deposit amount');
+    }
 
     const balance = await dht.getBalance(dht.keypair);
     const newBalance = balance + amount;
@@ -371,17 +459,29 @@ export const useDHT = () => {
     await Promise.all([
       updateTransactionHistory(),
       updateBalanceDisplay(),
-      uploadUserDataToFirebase(),
     ]);
-  }, [dht, isAuthenticated, updateTransactionHistory, updateBalanceDisplay]);
+    console.log('Deposited amount:', amount);
+  }, [dht, user, updateTransactionHistory, updateBalanceDisplay]);
 
   const withdraw = useCallback(async (amount) => {
-    if (!isAuthenticated()) throw new Error('Please sign in to withdraw.');
-    if (!dht) throw new Error('DHT not initialized');
-    if (!amount || amount <= 0) throw new Error('Invalid withdrawal amount');
+    if (!user?.uid) {
+      console.log('No authenticated user, cannot withdraw');
+      throw new Error('Please sign in to withdraw.');
+    }
+    if (!dht) {
+      console.log('DHT not initialized, cannot withdraw');
+      throw new Error('DHT not initialized');
+    }
+    if (!amount || amount <= 0) {
+      console.log('Invalid withdrawal amount:', amount);
+      throw new Error('Invalid withdrawal amount');
+    }
 
     const balance = await dht.getBalance(dht.keypair);
-    if (balance < amount) throw new Error('Insufficient balance');
+    if (balance < amount) {
+      console.log('Insufficient balance:', balance, 'for withdrawal:', amount);
+      throw new Error('Insufficient balance');
+    }
 
     await dht.putBalance(dht.keypair, balance - amount);
     await dht.dbAdd('transactions', { type: 'withdraw', amount, timestamp: Date.now() });
@@ -389,13 +489,14 @@ export const useDHT = () => {
     await Promise.all([
       updateTransactionHistory(),
       updateBalanceDisplay(),
-      uploadUserDataToFirebase(),
     ]);
-  }, [dht, isAuthenticated, updateTransactionHistory, updateBalanceDisplay]);
+    console.log('Withdrew amount:', amount);
+  }, [dht, user, updateTransactionHistory, updateBalanceDisplay]);
 
   const copyHash = useCallback(async (hash) => {
     try {
       await navigator.clipboard.writeText(hash);
+      console.log('Copied hash:', hash);
     } catch (error) {
       console.error('Failed to copy hash:', error);
       throw error;
@@ -404,7 +505,10 @@ export const useDHT = () => {
 
   const displaySnippetContent = (data, fileType, title) => {
     const snippetDisplay = document.getElementById('snippetDisplay');
-    if (!snippetDisplay) return;
+    if (!snippetDisplay) {
+      console.log('snippetDisplay element not found');
+      return;
+    }
 
     snippetDisplay.innerHTML = '';
     const contentDiv = document.createElement('div');
@@ -444,56 +548,14 @@ export const useDHT = () => {
     snippetDisplay.appendChild(contentDiv);
   };
 
-  const uploadUserDataToFirebase = async () => {
-    const userId = user?.uid || localStorage.getItem('nodeId');
-    if (!userId) return;
-
-    try {
-      const userRef = doc(db, 'users', userId);
-      const balance = dht ? await dht.getBalance(dht.keypair) : 0;
-      await setDoc(userRef, { balance, lastUpdated: Date.now() }, { merge: true });
-    } catch (error) {
-      console.error('Failed to upload user data to Firebase:', error);
-    }
-  };
-
-  const updateUserProfile = async (userId) => {
-    if (!userId) return;
-    try {
-      const userRef = doc(db, 'users', userId);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const userData = userSnap.data();
-        const userNameElement = document.getElementById('userName');
-        const userAvatarElement = document.querySelector('.user-avatar');
-        const snippetsPostedElement = document.getElementById('snippetsPosted');
-
-        if (userNameElement) {
-          userNameElement.textContent = userData.username || 'Anonymous User';
-        }
-        if (userAvatarElement) {
-          if (userData.profileImageUrl) {
-            userAvatarElement.innerHTML = `<img src="${userData.profileImageUrl}" alt="Profile Image" class="w-12 h-12 rounded-full object-cover">`;
-          } else {
-            userAvatarElement.innerHTML = '<i class="fas fa-user text-lg"></i>';
-          }
-        }
-        if (snippetsPostedElement) {
-          snippetsPostedElement.textContent = userData.snippetsPosted || 0;
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch user profile:', error);
-      throw error;
-    }
-  };
-
   const submitFeedback = async (ipHash, action) => {
-    const userId = user?.uid || localStorage.getItem('nodeId');
-    if (!userId) return;
+    if (!user?.uid) {
+      console.log('No authenticated user, cannot submit feedback');
+      return;
+    }
 
     try {
-      const feedbackRef = doc(db, 'snippets', ipHash, 'feedback', userId);
+      const feedbackRef = doc(db, 'snippets', ipHash, 'feedback', user.uid);
       await setDoc(feedbackRef, { action, timestamp: Date.now() });
 
       const snippetRef = doc(db, 'snippets', ipHash);
@@ -502,6 +564,7 @@ export const useDHT = () => {
       } else if (action === 'dislike') {
         await updateDoc(snippetRef, { dislikes: increment(1) });
       }
+      console.log('Submitted feedback:', action, 'for hash:', ipHash);
     } catch (error) {
       console.error('Failed to submit feedback:', error);
       throw error;

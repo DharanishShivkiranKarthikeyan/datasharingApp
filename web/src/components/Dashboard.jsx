@@ -1,12 +1,9 @@
-// components/Dashboard.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDHT } from '../hooks/useDHT.js';
 import { useToast } from './ToastContext.jsx';
-import PublishModal from './PublishModal.jsx';
-
 const Dashboard = ({ user, signIn, signOutUser, updateUserProfile, updateUIForSignOut }) => {
-  const { dht, updateBalanceDisplay, updateTransactionHistory, updateLiveFeed, updateMySnippets, searchSnippets, deposit, withdraw, buySnippet, buySnippetByHash, flagSnippet, copyHash } = useDHT();
+  const { dht, updateBalanceDisplay, updateTransactionHistory, updateLiveFeed, updateMySnippets, searchSnippets, publishSnippet, buySnippetByHash, deposit, withdraw } = useDHT({ user });
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -16,6 +13,7 @@ const Dashboard = ({ user, signIn, signOutUser, updateUserProfile, updateUIForSi
   const [buyHash, setBuyHash] = useState('');
   const [isTransactionHistoryVisible, setIsTransactionHistoryVisible] = useState(false);
   const [isLightMode, setIsLightMode] = useState(false);
+
 
   useEffect(() => {
     console.log('Dashboard component mounted');
@@ -236,5 +234,6 @@ const Dashboard = ({ user, signIn, signOutUser, updateUserProfile, updateUIForSi
     </div>
   );
 };
+
 
 export default Dashboard;
