@@ -12,15 +12,15 @@ const App = () => {
   return (
     <ToastProvider>
       <Routes>
-        <Route path="/datasharingApp/" element={<Dashboard />} />
-        <Route path="/datasharingApp/signup" element={<Signup />} />
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/signup" element={<Signup />} />
         <Route
           path="/datasharingApp/node-instructions"
           element={
             role === 'node' && nodeId ? (
               <NodeInstructions />
             ) : (
-              <Navigate to="/datasharingApp/signup" />
+              <Navigate to="/signup" />
             )
           }
         />
