@@ -45,6 +45,7 @@ export const useAuth = () => {
       const result = await signInWithPopup(auth, provider);
       console.log('Sign-in successful, user:', result.user);
       setUser(result.user);
+      user = result.user;
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -107,6 +108,7 @@ export const useAuth = () => {
       }, { merge: true });
 
       setUser(result.user);
+      user = result.user;
       navigate('/'); // Redirect to dashboard after signup
     } finally {
       isSigningUp = false;
@@ -279,6 +281,7 @@ export const useAuth = () => {
       console.log('onAuthStateChanged triggered with user:', currentUser?.uid);
       try {
         setUser(currentUser);
+        user = currentUser;
         if (currentUser && !isInitializedRef.current) {
           console.log('Calling init for authenticated user:', currentUser.uid);
           await init(currentUser.uid);
