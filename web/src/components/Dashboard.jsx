@@ -1,14 +1,14 @@
+// components/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../hooks/useAuth.js';
+import { useNavigate } from 'react-router-dom';
 import { useDHT } from '../hooks/useDHT.js';
 import { useToast } from './ToastContext.jsx';
 import PublishModal from './PublishModal.jsx';
 
-
-const Dashboard = () => {
-  const { user, signIn, signOutUser, updateUserProfile, updateUIForSignOut } = useAuth();
+const Dashboard = ({ user, signIn, signOutUser, updateUserProfile, updateUIForSignOut }) => {
   const { dht, updateBalanceDisplay, updateTransactionHistory, updateLiveFeed, updateMySnippets, searchSnippets, deposit, withdraw, buySnippet, buySnippetByHash, flagSnippet, copyHash } = useDHT();
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
@@ -18,6 +18,7 @@ const Dashboard = () => {
   const [isLightMode, setIsLightMode] = useState(false);
 
   useEffect(() => {
+    console.log('Dashboard component mounted');
     if (user) {
       updateUserProfile(user.uid);
       updateBalanceDisplay();
@@ -27,6 +28,7 @@ const Dashboard = () => {
     } else {
       updateUIForSignOut();
     }
+    return () => console.log('Dashboard component unmounted');
   }, [user, updateUserProfile, updateBalanceDisplay, updateTransactionHistory, updateLiveFeed, updateMySnippets, updateUIForSignOut]);
 
   const handleSearch = () => {
@@ -58,7 +60,7 @@ const Dashboard = () => {
             <button className="btn btn-danger" onClick={signOutUser}>Logout</button>
           ) : (
             <>
-              <button className="btn btn-primary" onClick={() => window.location.href = '/datasharingApp/signup'}>Sign Up</button>
+              <button className="btn btn-primary" onClick={() => navigate('/signup')}>Sign Up</button>
               <button className="btn btn-primary" onClick={signIn}>Login</button>
             </>
           )}

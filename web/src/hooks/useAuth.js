@@ -1,4 +1,4 @@
-// useAuth.js
+// hooks/useAuth.js
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -8,7 +8,7 @@ import { DHT, uint8ArrayToBase64Url } from '../lib/dht';
 import { initializeIndexedDB, loadKeypair } from '../lib/utils';
 import { auth, db, storage } from '../firebase';
 
-// Global flag to prevent multiple initializations across all hook instances
+// Global flag to prevent multiple initializations
 let isAppInitialized = false;
 
 let isSigningUp = false;
@@ -21,8 +21,7 @@ export const useAuth = () => {
   const isInitializedRef = useRef(false);
   const authStateHandledRef = useRef(false);
 
-  // Debug: Log when hook is instantiated
-  console.log('useAuth hook instantiated');
+  console.log('useAuth hook instantiated'); // Debug
 
   const initializeFirebase = useCallback(async () => {
     try {
@@ -107,11 +106,12 @@ export const useAuth = () => {
       }, { merge: true });
 
       setUser(result.user);
+      navigate('/'); // Redirect to dashboard after signup
     } finally {
       isSigningUp = false;
       localStorage.removeItem('pendingRole');
     }
-  }, []);
+  }, [navigate]);
 
   const uploadProfileImage = async (userId, file) => {
     if (!file) return null;

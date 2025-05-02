@@ -1,3 +1,4 @@
+// App.jsx
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from './components/Dashboard.jsx';
@@ -7,15 +8,26 @@ import { useAuth } from './hooks/useAuth.js';
 import { ToastProvider } from './components/ToastContext.jsx';
 
 const App = () => {
-  const { user, role, nodeId } = useAuth();
+  const { user, role, nodeId, signIn, signOutUser, updateUserProfile, updateUIForSignOut } = useAuth();
 
   return (
     <ToastProvider>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route
+          path="/"
+          element={
+            <Dashboard
+              user={user}
+              signIn={signIn}
+              signOutUser={signOutUser}
+              updateUserProfile={updateUserProfile}
+              updateUIForSignOut={updateUIForSignOut}
+            />
+          }
+        />
         <Route path="/signup" element={<Signup />} />
         <Route
-          path="/datasharingApp/node-instructions"
+          path="/node-instructions"
           element={
             role === 'node' && nodeId ? (
               <NodeInstructions />
@@ -24,7 +36,7 @@ const App = () => {
             )
           }
         />
-        <Route path="*" element={<Navigate to="/datasharingApp/" />} />
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </ToastProvider>
   );
