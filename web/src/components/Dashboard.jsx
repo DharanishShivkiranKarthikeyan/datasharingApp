@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDHT } from '../hooks/useDHT.js';
 import { useToast } from './ToastContext.jsx';
 const Dashboard = ({ user, signIn, signOutUser, updateUserProfile, updateUIForSignOut }) => {
-  const { dht, updateBalanceDisplay, updateTransactionHistory, updateLiveFeed, updateMySnippets, searchSnippets, publishSnippet, buySnippetByHash, deposit, withdraw } = useDHT({ user });
+  const { dht, updateBalanceDisplay, updateTransactionHistory, updateLiveFeed, updateMySnippets, searchSnippets, publishSnippet, buySnippetByHash, deposit, withdraw } = useDHT(user);
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);

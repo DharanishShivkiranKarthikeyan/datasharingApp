@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { doc, getDocs, setDoc, updateDoc, increment, query, where, onSnapshot, collection } from 'firebase/firestore';
 import { db } from '../firebase.js';
 
-export const useDHT = ({ user } = {}) => {
+export const useDHT = (user) => {
   const [dht, setDht] = useState(null); // Initialize as null instead of window.dht to avoid stale references
 
   useEffect(() => {
