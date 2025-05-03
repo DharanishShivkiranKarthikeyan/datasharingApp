@@ -159,7 +159,7 @@ export class DHT {
       this.peerId = this.isNode ? `node-${this.keypair}-${uniqueSuffix}` : `${this.keypair}-${uniqueSuffix}`;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, { host: '0.peerjs.com', port: 443, path: '/', secure: true, debug: 2 });
-
+  
       return await new Promise((resolve, reject) => {
         this.peer.on('open', id => {
           console.log(`PeerJS connection opened with ID: ${id}`);

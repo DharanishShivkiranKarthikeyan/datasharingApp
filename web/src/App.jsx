@@ -12,7 +12,7 @@ import { initializeIndexedDB, loadKeypair, storeKeypair } from './utils/helpers'
 
 function App() {
   const [user, setUser] = useState(null);
-  const [isInitializing, setIsInitializing] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const navigate = useNavigate();
   const { dht, initDht, destroyDht } = useDht();
 
@@ -21,25 +21,26 @@ function App() {
     const initialize = async () => {
       unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
-        if (currentUser && !isInitializing) {
+        if (currentUser && !isInitialized) {
           await initializeApp(currentUser.uid);
-        } else if (!currentUser && localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId')) {
+          setIsInitialized(true);
+        } else if (!currentUser && localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId') && !isInitialized) {
           await initializeApp(localStorage.getItem('nodeId'));
-        } else {
+          setIsInitialized(true);
+        } else if (!currentUser && isInitialized) {
           destroyDht();
+          setIsInitialized(false);
         }
       });
     };
     initialize();
     return () => {
       if (unsubscribe) unsubscribe();
-      destroyDht();
+      if (isInitialized) destroyDht();
     };
-  }, [isInitializing]);
+  }, [isInitialized]);
 
   const initializeApp = async (keypair) => {
-    if (isInitializing) return;
-    setIsInitializing(true);
     try {
       const indexedDB = await initializeIndexedDB();
       let storedKeypair = await loadKeypair(indexedDB);
@@ -52,9 +53,6 @@ function App() {
     } catch (error) {
       console.error('Initialization failed:', error);
       showToast(`Initialization failed: ${error.message}`, true);
-      destroyDht();
-    } finally {
-      setIsInitializing(false);
     }
   };
 
@@ -87,6 +85,7 @@ function App() {
         request.onsuccess = resolve;
         request.onerror = () => reject(new Error('Failed to delete keypair'));
       });
+      setIsInitialized(false);
       navigate('/');
     } catch (error) {
       console.error('Sign-out failed:', error);
