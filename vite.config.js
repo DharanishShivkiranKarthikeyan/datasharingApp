@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
 import { cpSync } from 'fs';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  plugins: [react()],
   root: './web',
   build: {
     outDir: '../dist',

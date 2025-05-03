@@ -1,0 +1,89 @@
+html, body {
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-color: #1A1F2A;
+    color: #D1D5DB;
+    font-family: 'Inter', sans-serif;
+  }
+  
+  #AllItems {
+    display: none;
+  }
+  
+  .loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    display: none;
+  }
+  
+  .loader {
+    width: fit-content;
+    font-weight: bold;
+    font-family: monospace;
+    white-space: pre;
+    font-size: 30px;
+    line-height: 1.2em;
+    height: 1.2em;
+    overflow: hidden;
+    z-index: 2;
+  }
+  
+  .loader:before {
+    content: "Loading...\\A⌰oading...\\A⌰⍜ading...\\A⌰⍜⏃ding...\\A⌰⍜⏃⎅ing...\\A⌰⍜⏃⎅⟟ng...\\A⌰⍜⏃⎅⟟⋏g...\\A⌰⍜⏃⎅⟟⋏☌...\\A⌰⍜⏃⎅⟟⋏☌⟒..\\A⌰⍜⏃⎅⟟⋏☌⟒⏁.\\A⌰⍜⏃⎅⟟⋏☌⟒⏁⋔";
+    white-space: pre;
+    display: inline-block;
+    animation: l39 1s infinite steps(11) alternate;
+  }
+  
+  @keyframes l39 {
+    100% { transform: translateY(-100%) }
+  }
+  
+  #loadingTextBox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    flex-direction: column;
+  }
+  
+  #background-loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    align-items: center;
+    justify-content: center;
+    min-height: auto;
+  }
+  
+  .toast {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    background-color: #252B3A;
+    color: #D1D5DB;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    display: none;
+    z-index: 1001;
+  }
+  
+  .error-toast {
+    background-color: #EF4444;
+    color: #FFF;
+  }
