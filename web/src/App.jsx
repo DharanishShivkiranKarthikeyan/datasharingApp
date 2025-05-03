@@ -102,7 +102,7 @@ function App() {
       toast.style.display = 'block';
       setTimeout(() => {
         toast.style.display = 'none';
-      }, 3000);
+      }, 3000); 
     }
   };
 
