@@ -31,6 +31,10 @@ export class DHT {
   async initializeKnownNodes() {
     const fetchNodes = async () => {
       try {
+        if (!db) {
+          console.error('Firestore not initialized');
+          return;
+        }
         const nodesSnapshot = await getDocs(collection(db, 'nodes'));
         this.nodes.clear();
         if (!nodesSnapshot.empty) {
@@ -150,7 +154,9 @@ export class DHT {
 
   async initSwarm() {
     try {
-      this.peerId = this.isNode ? `node-${this.keypair}` : this.keypair;
+      // Append a unique suffix to avoid ID conflicts
+      const uniqueSuffix = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+      this.peerId = this.isNode ? `node-${this.keypair}-${uniqueSuffix}` : `${this.keypair}-${uniqueSuffix}`;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, { host: '0.peerjs.com', port: 443, path: '/', secure: true, debug: 2 });
 
@@ -176,7 +182,7 @@ export class DHT {
               console.log('PeerJS peer destroyed on page unload');
             }
           });
-          setInterval(() => this.discoverPeers(), 3000); // Reduced from 5s to 3s for faster discovery
+          setInterval(() => this.discoverPeers(), 3000);
           setInterval(() => this.measureLatency(), 60000);
           resolve();
         });
@@ -509,7 +515,7 @@ export class DHT {
     const commissionPerNode = commission / activeNodeList.length;
     console.log(`Distributing commission of ${commission} to ${activeNodeList.length} nodes (${commissionPerNode} per node)`);
     for (const nodePeerId of activeNodeList) {
-      const base64Keypair = nodePeerId.replace('node-', '');
+      const base64Keypair = nodePeerId.replace('node-', '').split('-')[0]; // Extract original keypair
       const nodeKeypair = this.base64UrlToUint8Array(base64Keypair);
       const currentBalance = await this.getBalance(nodeKeypair);
       const newBalance = currentBalance + commissionPerNode;

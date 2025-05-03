@@ -17,17 +17,24 @@ function App() {
   const { dht, initDht, destroyDht } = useDht();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser && !isInitializing) {
-        await initializeApp(currentUser.uid);
-      } else if (localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId')) {
-        await initializeApp(localStorage.getItem('nodeId'));
-      } else {
-        destroyDht();
-      }
-    });
-    return () => unsubscribe();
+    let unsubscribe = null;
+    const initialize = async () => {
+      unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        setUser(currentUser);
+        if (currentUser && !isInitializing) {
+          await initializeApp(currentUser.uid);
+        } else if (!currentUser && localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId')) {
+          await initializeApp(localStorage.getItem('nodeId'));
+        } else {
+          destroyDht();
+        }
+      });
+    };
+    initialize();
+    return () => {
+      if (unsubscribe) unsubscribe();
+      destroyDht();
+    };
   }, [isInitializing]);
 
   const initializeApp = async (keypair) => {
