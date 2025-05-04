@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
-import { auth } from './utils/firebase';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { auth, db } from './utils/firebase';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, getDoc, doc } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import NodeInstructions from './components/NodeInstructions';
@@ -12,6 +13,7 @@ import { initializeIndexedDB, loadKeypair, storeKeypair } from './utils/helpers'
 
 function App() {
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const navigate = useNavigate();
   const { dht, initDht, destroyDht } = useDht();
@@ -21,15 +23,27 @@ function App() {
     const initialize = async () => {
       unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
-        if (currentUser && !isInitialized) {
-          await initializeApp(currentUser.uid);
-          setIsInitialized(true);
+        if (currentUser) {
+          // Fetch user profile from Firestore
+          const userRef = doc(db, 'users', currentUser.uid);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            setUserProfile(userSnap.data());
+          } else {
+            setUserProfile(null);
+          }
+          if (!isInitialized) {
+            await initializeApp(currentUser.uid);
+            setIsInitialized(true);
+          }
         } else if (!currentUser && localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId') && !isInitialized) {
           await initializeApp(localStorage.getItem('nodeId'));
           setIsInitialized(true);
+          setUserProfile(null); // Reset user profile for node users
         } else if (!currentUser && isInitialized) {
           destroyDht();
           setIsInitialized(false);
+          setUserProfile(null);
         }
       });
     };
@@ -86,6 +100,7 @@ function App() {
         request.onerror = () => reject(new Error('Failed to delete keypair'));
       });
       setIsInitialized(false);
+      setUserProfile(null);
       navigate('/');
     } catch (error) {
       console.error('Sign-out failed:', error);
@@ -101,13 +116,13 @@ function App() {
       toast.style.display = 'block';
       setTimeout(() => {
         toast.style.display = 'none';
-      }, 3000); 
+      }, 3000);
     }
   };
 
   return (
     <div className="min-h-screen">
-      <Navbar user={user} signIn={signIn} signOut={signOutUser} />
+      <Navbar user={user} userProfile={userProfile} signIn={signIn} signOut={signOutUser} />
       <Routes>
         <Route path="/" element={<Home dht={dht} user={user} showToast={showToast} />} />
         <Route path="/node-instructions" element={<NodeInstructions dht={dht} showToast={showToast} />} />
