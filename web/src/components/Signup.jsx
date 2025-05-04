@@ -4,7 +4,10 @@ import { auth, db } from '../utils/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { generateUUID } from '../utils/helpers';
-import { initializeAppOnce } from '../App'; // Import from App.jsx
+import App from '../App'; // Import from App.jsx
+
+const {initializeAppOnce} = App();
+
 
 function Signup({ setUser, showToast }) {
   const [showUserModal, setShowUserModal] = useState(false);

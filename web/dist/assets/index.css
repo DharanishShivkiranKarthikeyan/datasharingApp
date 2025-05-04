@@ -1,0 +1,1 @@
+html,body{min-height:100vh;overflow-x:hidden;background-color:#1a1f2a;color:#d1d5db;font-family:Inter,sans-serif}#AllItems{display:none}.toast{position:fixed;top:1rem;right:1rem;background-color:#252b3a;color:#d1d5db;padding:.5rem 1rem;border-radius:.25rem;box-shadow:0 4px 6px #0000004d;display:none;z-index:1001}.error-toast{background-color:#ef4444;color:#fff}
