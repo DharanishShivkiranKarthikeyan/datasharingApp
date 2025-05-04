@@ -34,10 +34,16 @@ function Signup({ setUser, showToast }) {
 
   const becomeNode = async () => {
     const nodeId = generateUUID();
+    const peerId = `node-${nodeId}`; // Match the format used in initSwarm
     localStorage.setItem('nodeId', nodeId);
     localStorage.setItem('role', 'node');
     const nodeRef = doc(db, 'nodes', nodeId);
-    await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
+    await setDoc(nodeRef, { 
+      role: 'node', 
+      createdAt: Date.now(), 
+      status: 'active',
+      peerId: peerId // Store the full peer ID
+    }, { merge: true });
     showToast('Node registered successfully!');
     navigate('/node-instructions');
   };

@@ -39,7 +39,12 @@ export class DHT {
         const nodesSnapshot = await getDocs(collection(db, 'nodes'));
         this.nodes.clear();
         if (!nodesSnapshot.empty) {
-          nodesSnapshot.forEach(doc => this.nodes.add(`node-${doc.id}`));
+          nodesSnapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.peerId) {
+              this.nodes.add(data.peerId);
+            }
+          });
         }
         console.log('Fetched nodes:', Array.from(this.nodes));
       } catch (error) {
@@ -156,8 +161,7 @@ export class DHT {
   async initSwarm() {
     try {
       // Append a unique suffix to avoid ID conflicts
-      const uniqueSuffix = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-      this.peerId = this.isNode ? `node-${this.keypair}-${uniqueSuffix}` : `${this.keypair}-${uniqueSuffix}`;
+      this.peerId = this.isNode ? `node-${this.keypair}` : `${this.keypair}`;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, { host: '0.peerjs.com', port: 443, path: '/', secure: true, debug: 2 });
 
