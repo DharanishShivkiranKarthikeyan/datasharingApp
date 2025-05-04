@@ -205,15 +205,16 @@ export class DHT {
     knownPeerIds.forEach(peerId => {
       if (!this.peers.has(peerId)) {
         this.peers.set(peerId, { connected: false, conn: null });
-        console.log('Discovered peer:', peerId);
+        console.log('Discovered peer:', peerId, 'Current peerId:', this.peerId);
         this.connectToPeer(peerId);
       } else if (!this.peers.get(peerId).connected) {
+        console.log('Retrying connection to:', peerId);
         this.connectToPeer(peerId);
       }
     });
     this.peers.forEach((peer, peerId) => {
       if (!peer.connected && (this.connectionAttempts.get(peerId) || 0) >= this.maxConnectionAttempts) {
-        console.log(`Removing unreachable peer: ${peerId}`);
+        console.log(`Removing unreachable peer: ${peerId} after ${this.maxConnectionAttempts} attempts`);
         this.peers.delete(peerId);
         this.connectionAttempts.delete(peerId);
         this.activeNodes.delete(peerId);
@@ -224,11 +225,14 @@ export class DHT {
   connectToPeer(peerId) {
     if (this.peers.get(peerId)?.connected) return;
     const attempts = this.connectionAttempts.get(peerId) || 0;
-    if (attempts >= this.maxConnectionAttempts) return;
+    if (attempts >= this.maxConnectionAttempts) {
+      console.log(`Max attempts reached for ${peerId}`);
+      return;
+    }
     console.log(`Connecting to peer: ${peerId} (Attempt ${attempts + 1}/${this.maxConnectionAttempts})`);
     const conn = this.peer.connect(peerId, { reliable: true });
     conn.on('open', () => {
-      console.log(`Connected to peer: ${peerId}`);
+      console.log(`Connected to peer: ${peerId} with local peerId: ${this.peerId}`);
       this.peers.set(peerId, { connected: true, conn });
       this.activeNodes.add(peerId);
       this.connectionAttempts.delete(peerId);
@@ -237,10 +241,11 @@ export class DHT {
     conn.on('data', data => this.handlePeerData(data, peerId));
     conn.on('close', () => this.handlePeerDisconnect(peerId));
     conn.on('error', err => {
-      console.warn(`Connection error with peer ${peerId}: ${err.message}`);
+      console.warn(`Connection error with peer ${peerId}: ${err.message}, Attempt: ${attempts + 1}`);
       this.handlePeerDisconnect(peerId);
     });
     this.connectionAttempts.set(peerId, attempts + 1);
+    setTimeout(() => this.connectToPeer(peerId), this.connectionRetryDelay); // Retry after delay
   }
 
   handleConnection(conn) {

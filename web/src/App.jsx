@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from './utils/firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -8,7 +8,7 @@ import Home from './components/Home';
 import NodeInstructions from './components/NodeInstructions';
 import Publish from './components/Publish';
 import Signup from './components/Signup';
-import useDht from './utils/dht'; // Updated import path
+import useDht from './utils/dht';
 import { initializeIndexedDB, loadKeypair, storeKeypair } from './utils/helpers';
 
 function App() {
@@ -17,6 +17,7 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [dhtInitialized, setDhtInitialized] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { dht, initDht, destroyDht } = useDht();
 
   useEffect(() => {
@@ -59,6 +60,18 @@ function App() {
       if (isInitialized) destroyDht();
     };
   }, [isInitialized]);
+
+  useEffect(() => {
+    const initializeForNode = async () => {
+      if (localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId') && !dhtInitialized && location.pathname.includes('/node-instructions')) {
+        await initializeApp(localStorage.getItem('nodeId'));
+        if (dht && dht.peer && dht.peer.open) {
+          setDhtInitialized(true);
+        }
+      }
+    };
+    initializeForNode();
+  }, [location.pathname, dhtInitialized]);
 
   const initializeApp = async (keypair) => {
     try {
