@@ -34,13 +34,17 @@ function App() {
           }
           if (!isInitialized) {
             await initializeApp(currentUser.uid);
+            if (dht && dht.peer && dht.peer.open) {
+              setDhtInitialized(true);
+            }
             setIsInitialized(true);
-            setDhtInitialized(true);
           }
         } else if (!currentUser && localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId') && !isInitialized) {
           await initializeApp(localStorage.getItem('nodeId'));
+          if (dht && dht.peer && dht.peer.open) {
+            setDhtInitialized(true);
+          }
           setIsInitialized(true);
-          setDhtInitialized(true);
         } else if (!currentUser && isInitialized) {
           destroyDht();
           setIsInitialized(false);

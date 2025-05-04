@@ -11,26 +11,25 @@ function NodeInstructions({ dht, showToast }) {
       try {
         const nodeId = localStorage.getItem('nodeId');
         const role = localStorage.getItem('role');
-        if (role !== 'node' || !nodeId) {
-          showToast('You must be signed in as a node to view this page.', true);
+        if (!dht || !role || role !== 'node' || !nodeId) {
+          showToast('Invalid node configuration. Please sign up as a node again.', true);
           navigate('/signup');
           return;
         }
-        if (dht) {
-          const transactions = await dht.dbGetAll('transactions');
+        const transactions = await dht.dbGetAll('transactions');
+        if (transactions && Array.isArray(transactions)) {
           const commissionEarnings = transactions
             .filter(tx => tx.type === 'commission')
             .reduce((total, tx) => total + (tx.amount || 0), 0);
           setEarnings(commissionEarnings);
-          setLoading(false);
         } else {
-          showToast('DHT not initialized. Please try again.', true);
-          navigate('/signup');
+          setEarnings(0);
         }
+        setLoading(false);
       } catch (error) {
-        console.error('Error initializing node instructions:', error);
-        showToast(`Initialization failed: ${error.message}`, true);
-        navigate('/signup');
+        console.error('Error fetching node data:', error);
+        showToast(`Failed to load node data: ${error.message}`, true);
+        setLoading(false);
       }
     };
     initNode();
