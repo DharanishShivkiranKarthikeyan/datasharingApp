@@ -8,7 +8,7 @@ import Home from './components/Home';
 import NodeInstructions from './components/NodeInstructions';
 import Publish from './components/Publish';
 import Signup from './components/Signup';
-import useDht from './hooks/useDHT';
+import useDht from './utils/dht'; // Updated import path
 import { initializeIndexedDB, loadKeypair, storeKeypair } from './utils/helpers';
 
 function App() {
