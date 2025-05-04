@@ -9,13 +9,13 @@ import NodeInstructions from './components/NodeInstructions';
 import Publish from './components/Publish';
 import Signup from './components/Signup';
 import useDht from './hooks/useDHT';
-
 import { initializeIndexedDB, loadKeypair, storeKeypair } from './utils/helpers';
 
 function App() {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [dhtInitialized, setDhtInitialized] = useState(false);
   const navigate = useNavigate();
   const { dht, initDht, destroyDht } = useDht();
 
@@ -25,7 +25,6 @@ function App() {
       unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
         if (currentUser) {
-          // Fetch user profile from Firestore
           const userRef = doc(db, 'users', currentUser.uid);
           const userSnap = await getDoc(userRef);
           if (userSnap.exists()) {
@@ -36,14 +35,16 @@ function App() {
           if (!isInitialized) {
             await initializeApp(currentUser.uid);
             setIsInitialized(true);
+            setDhtInitialized(true);
           }
         } else if (!currentUser && localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId') && !isInitialized) {
           await initializeApp(localStorage.getItem('nodeId'));
           setIsInitialized(true);
-          setUserProfile(null); // Reset user profile for node users
+          setDhtInitialized(true);
         } else if (!currentUser && isInitialized) {
           destroyDht();
           setIsInitialized(false);
+          setDhtInitialized(false);
           setUserProfile(null);
         }
       });
@@ -101,6 +102,7 @@ function App() {
         request.onerror = () => reject(new Error('Failed to delete keypair'));
       });
       setIsInitialized(false);
+      setDhtInitialized(false);
       setUserProfile(null);
       navigate('/');
     } catch (error) {
@@ -126,7 +128,18 @@ function App() {
       <Navbar user={user} userProfile={userProfile} signIn={signIn} signOut={signOutUser} />
       <Routes>
         <Route path="/" element={<Home dht={dht} user={user} showToast={showToast} />} />
-        <Route path="/node-instructions" element={<NodeInstructions dht={dht} showToast={showToast} />} />
+        <Route
+          path="/node-instructions"
+          element={
+            dhtInitialized ? (
+              <NodeInstructions dht={dht} showToast={showToast} />
+            ) : (
+              <div className="flex justify-center items-center min-h-screen">
+                <div className="loader">Loading...</div>
+              </div>
+            )
+          }
+        />
         <Route path="/publish" element={<Publish dht={dht} user={user} showToast={showToast} />} />
         <Route path="/signup" element={<Signup setUser={setUser} showToast={showToast} />} />
       </Routes>

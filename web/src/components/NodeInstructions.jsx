@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 function NodeInstructions({ dht, showToast }) {
   const [earnings, setEarnings] = useState(0);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,14 +22,27 @@ function NodeInstructions({ dht, showToast }) {
             .filter(tx => tx.type === 'commission')
             .reduce((total, tx) => total + (tx.amount || 0), 0);
           setEarnings(commissionEarnings);
+          setLoading(false);
+        } else {
+          showToast('DHT not initialized. Please try again.', true);
+          navigate('/signup');
         }
       } catch (error) {
         console.error('Error initializing node instructions:', error);
         showToast(`Initialization failed: ${error.message}`, true);
+        navigate('/signup');
       }
     };
     initNode();
   }, [dht, navigate, showToast]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="loader">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto p-4">
