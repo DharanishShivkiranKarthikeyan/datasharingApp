@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { auth, db } from './utils/firebase';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, getDoc, doc } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
@@ -9,6 +9,7 @@ import NodeInstructions from './components/NodeInstructions';
 import Publish from './components/Publish';
 import Signup from './components/Signup';
 import useDht from './hooks/useDHT';
+
 import { initializeIndexedDB, loadKeypair, storeKeypair } from './utils/helpers';
 
 function App() {
