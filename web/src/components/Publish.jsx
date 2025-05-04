@@ -10,23 +10,6 @@ function Publish({ dht, user, showToast }) {
   const [isPremium, setIsPremium] = useState(false);
   const [price, setPrice] = useState('');
 
-  useEffect(() => {
-    const vantaEffect = window.VANTA.TOPOLOGY({
-      el: document.body,
-      mouseControls: true,
-      touchControls: true,
-      gyroControls: false,
-      minHeight: 800,
-      minWidth: 400,
-      scale: 1.00,
-      scaleMobile: 1.00,
-      color: 0x00DDEB,
-      backgroundColor: 0x1E2A44,
-      speed: 10.0
-    });
-    return () => vantaEffect.destroy();
-  }, []);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!dht || !user) {
