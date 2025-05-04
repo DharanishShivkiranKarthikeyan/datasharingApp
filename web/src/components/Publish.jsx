@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { publishSnippet } from '../utils/helpers';
 
 function Publish({ dht, user, showToast }) {
@@ -41,7 +41,7 @@ function Publish({ dht, user, showToast }) {
             Share your code, ideas, or creations with the Dcrypt community.
           </p>
         </div>
-        <form className="space-y-6" onSubmit={handleSubmit}>
+        <div className="space-y-6">
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-300">Title</label>
             <input
@@ -129,13 +129,13 @@ function Publish({ dht, user, showToast }) {
           )}
           <div>
             <button
-              type="submit"
+              onClick={handleSubmit}
               className="w-full bg-purple-500 text-white py-3 px-4 rounded-lg hover:bg-purple-600 focus:outline-none"
             >
               Publish
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

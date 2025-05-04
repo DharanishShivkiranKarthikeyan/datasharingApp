@@ -1,79 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from './utils/firebase';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import NodeInstructions from './components/NodeInstructions';
 import Publish from './components/Publish';
 import Signup from './components/Signup';
-import useDht from './utils/dht';
+import { DHT } from './utils/dht';
 import { initializeIndexedDB, loadKeypair, storeKeypair } from './utils/helpers';
 
 function App() {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [dhtInitialized, setDhtInitialized] = useState(false);
+  const [dht, setDht] = useState(null);
+  const [appInitialized, setAppInitialized] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { dht, initDht, destroyDht } = useDht();
 
-  useEffect(() => {
-    let unsubscribe = null;
-    const initialize = async () => {
-      unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-        setUser(currentUser);
-        if (currentUser) {
-          const userRef = doc(db, 'users', currentUser.uid);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            setUserProfile(userSnap.data());
-          } else {
-            setUserProfile(null);
-          }
-          if (!isInitialized) {
-            await initializeApp(currentUser.uid);
-            if (dht && dht.peer && dht.peer.open) {
-              setDhtInitialized(true);
-            }
-            setIsInitialized(true);
-          }
-        } else if (!currentUser && localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId') && !isInitialized) {
-          await initializeApp(localStorage.getItem('nodeId'));
-          if (dht && dht.peer && dht.peer.open) {
-            setDhtInitialized(true);
-          }
-          setIsInitialized(true);
-        } else if (!currentUser && isInitialized) {
-          destroyDht();
-          setIsInitialized(false);
-          setDhtInitialized(false);
-          setUserProfile(null);
-        }
-      });
-    };
-    initialize();
-    return () => {
-      if (unsubscribe) unsubscribe();
-      if (isInitialized) destroyDht();
-    };
-  }, [isInitialized]);
-
-  useEffect(() => {
-    const initializeForNode = async () => {
-      if (localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId') && !dhtInitialized && location.pathname.includes('/node-instructions')) {
-        await initializeApp(localStorage.getItem('nodeId'));
-        if (dht && dht.peer && dht.peer.open) {
-          setDhtInitialized(true);
-        }
-      }
-    };
-    initializeForNode();
-  }, [location.pathname, dhtInitialized]);
-
-  const initializeApp = async (keypair) => {
+  // Initialize Firebase and DHT once at app start
+  const initializeAppOnce = async (keypair) => {
+    if (appInitialized) return;
     try {
       const indexedDB = await initializeIndexedDB();
       let storedKeypair = await loadKeypair(indexedDB);
@@ -82,12 +30,47 @@ function App() {
         storedKeypair = keypair;
       }
       if (!storedKeypair) throw new Error('No keypair available');
-      await initDht(storedKeypair, localStorage.getItem('role') === 'node');
+      const dhtInstance = new DHT(storedKeypair, localStorage.getItem('role') === 'node');
+      await dhtInstance.initDB();
+      await dhtInstance.initSwarm();
+      await dhtInstance.syncUserData();
+      setDht(dhtInstance);
+      window.dht = dhtInstance;
+      setAppInitialized(true);
     } catch (error) {
       console.error('Initialization failed:', error);
       showToast(`Initialization failed: ${error.message}`, true);
     }
   };
+
+  // Cleanup on logout or app close
+  const destroyApp = () => {
+    if (dht) {
+      dht.destroy();
+      setDht(null);
+      window.dht = null;
+    }
+    setAppInitialized(false);
+    setUserProfile(null);
+  };
+
+  // Handle auth state changes
+  React.useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) setUserProfile(userSnap.data());
+        await initializeAppOnce(currentUser.uid);
+      } else if (localStorage.getItem('role') === 'node' && localStorage.getItem('nodeId')) {
+        await initializeAppOnce(localStorage.getItem('nodeId'));
+      } else {
+        destroyApp();
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const signIn = async () => {
     try {
@@ -109,7 +92,7 @@ function App() {
         await signOut(auth);
         showToast('Signed out successfully!');
       }
-      destroyDht();
+      destroyApp();
       const indexedDB = await initializeIndexedDB();
       const tx = indexedDB.transaction('store', 'readwrite');
       const store = tx.objectStore('store');
@@ -118,9 +101,6 @@ function App() {
         request.onsuccess = resolve;
         request.onerror = () => reject(new Error('Failed to delete keypair'));
       });
-      setIsInitialized(false);
-      setDhtInitialized(false);
-      setUserProfile(null);
       navigate('/');
     } catch (error) {
       console.error('Sign-out failed:', error);
@@ -134,9 +114,7 @@ function App() {
       toast.textContent = message;
       toast.className = `toast ${isError ? 'error-toast' : ''}`;
       toast.style.display = 'block';
-      setTimeout(() => {
-        toast.style.display = 'none';
-      }, 3000);
+      setTimeout(() => toast.style.display = 'none', 3000);
     }
   };
 
@@ -145,18 +123,7 @@ function App() {
       <Navbar user={user} userProfile={userProfile} signIn={signIn} signOut={signOutUser} />
       <Routes>
         <Route path="/" element={<Home dht={dht} user={user} showToast={showToast} />} />
-        <Route
-          path="/node-instructions"
-          element={
-            dhtInitialized ? (
-              <NodeInstructions dht={dht} showToast={showToast} />
-            ) : (
-              <div className="flex justify-center items-center min-h-screen">
-                <div className="loader">Loading...</div>
-              </div>
-            )
-          }
-        />
+        <Route path="/node-instructions" element={<NodeInstructions dht={dht} showToast={showToast} />} />
         <Route path="/publish" element={<Publish dht={dht} user={user} showToast={showToast} />} />
         <Route path="/signup" element={<Signup setUser={setUser} showToast={showToast} />} />
       </Routes>

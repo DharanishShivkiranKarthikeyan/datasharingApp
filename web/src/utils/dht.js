@@ -1,6 +1,5 @@
 import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
-import { useState, useEffect } from 'react';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'firebase/firestore';
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getIpMetadata, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
@@ -21,9 +20,8 @@ export class DHT {
     this.peer = null;
     this.connectionAttempts = new Map();
     this.maxConnectionAttempts = 3;
-    this.baseRetryDelay = 2000; // Base delay for exponential backoff
+    this.baseRetryDelay = 2000;
     this.averageLatency = 0;
-
     console.log('DHT initialized with keypair:', keypair);
     this.initializeKnownNodes();
   }
@@ -40,9 +38,7 @@ export class DHT {
         if (!nodesSnapshot.empty) {
           nodesSnapshot.forEach(doc => {
             const data = doc.data();
-            if (data.peerId) {
-              this.nodes.add(data.peerId);
-            }
+            if (data.peerId) this.nodes.add(data.peerId);
           });
         }
         console.log('Fetched nodes:', Array.from(this.nodes));
@@ -234,7 +230,7 @@ export class DHT {
       console.log(`Max attempts reached for ${peerId}`);
       return;
     }
-    const delay = this.baseRetryDelay * Math.pow(2, attempts - 1); // Exponential backoff: 2s, 4s, 8s
+    const delay = this.baseRetryDelay * Math.pow(2, attempts - 1);
     console.log(`Connecting to peer: ${peerId} (Attempt ${attempts + 1}/${this.maxConnectionAttempts}) with delay ${delay}ms`);
     const conn = this.peer.connect(peerId, { reliable: true });
     let connectionTimeout;
@@ -252,7 +248,6 @@ export class DHT {
       console.warn(`Connection error with peer ${peerId}: ${err.message}, Attempt: ${attempts + 1}`);
       this.handlePeerDisconnect(peerId);
     });
-    // Increase timeout to 10 seconds for initial connection attempts
     connectionTimeout = setTimeout(() => {
       if (!this.peers.get(peerId)?.connected) {
         this.connectionAttempts.set(peerId, attempts + 1);
@@ -260,7 +255,7 @@ export class DHT {
           setTimeout(() => this.connectToPeer(peerId), delay);
         }
       }
-    }, 10000); // 10-second timeout per attempt
+    }, 10000);
   }
 
   handleConnection(conn) {
@@ -536,7 +531,7 @@ export class DHT {
     const commissionPerNode = commission / activeNodeList.length;
     console.log(`Distributing commission of ${commission} to ${activeNodeList.length} nodes (${commissionPerNode} per node)`);
     for (const nodePeerId of activeNodeList) {
-      const base64Keypair = nodePeerId.replace('node-', '').split('-')[0]; // Extract original keypair
+      const base64Keypair = nodePeerId.replace('node-', '').split('-')[0];
       const nodeKeypair = this.base64UrlToUint8Array(base64Keypair);
       const currentBalance = await this.getBalance(nodeKeypair);
       const newBalance = currentBalance + commissionPerNode;
@@ -681,36 +676,4 @@ export class DHT {
     this.activeNodes.clear();
     this.pendingRequests.clear();
   }
-}
-
-export default function useDht() {
-  const [dht, setDht] = useState(null);
-
-  const initDht = async (keypair, isNode) => {
-    try {
-      const instance = new DHT(keypair, isNode);
-      await instance.initDB();
-      await instance.initSwarm();
-      await instance.syncUserData();
-      setDht(instance);
-      window.dht = instance;
-    } catch (error) {
-      console.error('DHT initialization failed:', error);
-      throw error;
-    }
-  };
-
-  const destroyDht = () => {
-    if (dht) {
-      dht.destroy();
-      setDht(null);
-      window.dht = null;
-    }
-  };
-
-  useEffect(() => {
-    return () => destroyDht();
-  }, []);
-
-  return { dht, initDht, destroyDht };
 }
