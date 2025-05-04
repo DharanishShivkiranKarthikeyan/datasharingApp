@@ -1,4 +1,3 @@
-// web/dht.js
 import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
 import { useState, useEffect } from 'react';
@@ -22,7 +21,7 @@ export class DHT {
     this.peer = null;
     this.connectionAttempts = new Map();
     this.maxConnectionAttempts = 3;
-    this.connectionRetryDelay = 5000;
+    this.baseRetryDelay = 2000; // Base delay for exponential backoff
     this.averageLatency = 0;
 
     console.log('DHT initialized with keypair:', keypair);
@@ -53,7 +52,7 @@ export class DHT {
       }
     };
     await fetchNodes();
-    setInterval(fetchNodes, 5 * 60 * 1000);
+    setInterval(fetchNodes, 1 * 60 * 1000);
   }
 
   async measureLatency() {
@@ -160,7 +159,6 @@ export class DHT {
 
   async initSwarm() {
     try {
-      // Append a unique suffix to avoid ID conflicts
       this.peerId = this.isNode ? `node-${this.keypair}` : `${this.keypair}`;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, { host: '0.peerjs.com', port: 443, path: '/', secure: true, debug: 2 });
@@ -187,7 +185,10 @@ export class DHT {
               console.log('PeerJS peer destroyed on page unload');
             }
           });
-          setInterval(() => this.discoverPeers(), 3000);
+          setTimeout(() => {
+            setInterval(() => this.discoverPeers(), 3000);
+            this.discoverPeers();
+          }, 5000);
           setInterval(() => this.measureLatency(), 60000);
           resolve();
         });
@@ -233,9 +234,12 @@ export class DHT {
       console.log(`Max attempts reached for ${peerId}`);
       return;
     }
-    console.log(`Connecting to peer: ${peerId} (Attempt ${attempts + 1}/${this.maxConnectionAttempts})`);
+    const delay = this.baseRetryDelay * Math.pow(2, attempts - 1); // Exponential backoff: 2s, 4s, 8s
+    console.log(`Connecting to peer: ${peerId} (Attempt ${attempts + 1}/${this.maxConnectionAttempts}) with delay ${delay}ms`);
     const conn = this.peer.connect(peerId, { reliable: true });
+    let connectionTimeout;
     conn.on('open', () => {
+      clearTimeout(connectionTimeout);
       console.log(`Connected to peer: ${peerId} with local peerId: ${this.peerId}`);
       this.peers.set(peerId, { connected: true, conn });
       this.activeNodes.add(peerId);
@@ -248,8 +252,15 @@ export class DHT {
       console.warn(`Connection error with peer ${peerId}: ${err.message}, Attempt: ${attempts + 1}`);
       this.handlePeerDisconnect(peerId);
     });
-    this.connectionAttempts.set(peerId, attempts + 1);
-    setTimeout(() => this.connectToPeer(peerId), this.connectionRetryDelay); // Retry after delay
+    // Increase timeout to 10 seconds for initial connection attempts
+    connectionTimeout = setTimeout(() => {
+      if (!this.peers.get(peerId)?.connected) {
+        this.connectionAttempts.set(peerId, attempts + 1);
+        if (attempts + 1 < this.maxConnectionAttempts) {
+          setTimeout(() => this.connectToPeer(peerId), delay);
+        }
+      }
+    }, 10000); // 10-second timeout per attempt
   }
 
   handleConnection(conn) {
