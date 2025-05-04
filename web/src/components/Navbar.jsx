@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 function Navbar({ user, signIn, signOut }) {
+  console.log(user)
   return (
     <nav className="bg-gray-800 p-4 flex justify-between items-center">
       <Link to="/" className="text-xl font-bold text-white">Dcrypt</Link>
