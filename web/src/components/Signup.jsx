@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth, db } from '../utils/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { generateUUID } from '../utils/helpers';
+import { initializeAppOnce } from '../App'; // Import from App.jsx
 
 function Signup({ setUser, showToast }) {
   const [showUserModal, setShowUserModal] = useState(false);
@@ -19,7 +20,7 @@ function Signup({ setUser, showToast }) {
       const userRef = doc(db, 'users', result.user.uid);
       await setDoc(userRef, {
         username: username || result.user.displayName || 'Anonymous User',
-        profileImageUrl: null, // Implement image upload if needed
+        profileImageUrl: null,
         createdAt: Date.now(),
         snippetsPosted: 0,
       }, { merge: true });
@@ -34,17 +35,18 @@ function Signup({ setUser, showToast }) {
 
   const becomeNode = async () => {
     const nodeId = generateUUID();
-    const peerId = `node-${nodeId}`; // Match the format used in initSwarm
+    const peerId = `node-${nodeId}`;
     localStorage.setItem('nodeId', nodeId);
     localStorage.setItem('role', 'node');
     const nodeRef = doc(db, 'nodes', nodeId);
-    await setDoc(nodeRef, { 
-      role: 'node', 
-      createdAt: Date.now(), 
+    await setDoc(nodeRef, {
+      role: 'node',
+      createdAt: Date.now(),
       status: 'active',
-      peerId: peerId // Store the full peer ID
+      peerId: peerId
     }, { merge: true });
     showToast('Node registered successfully!');
+    await initializeAppOnce(nodeId); // Initialize DHT before navigating
     navigate('/node-instructions');
   };
 
