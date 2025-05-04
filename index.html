@@ -7,10 +7,461 @@
   <title>Dcrypt - Decentralized Data Sharing</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    html {
+      min-height: 100vh !important;
+      overflow: hidden;
+      background-color: #1A1F2A;
+    }
+    #AllItems {
+      display: none;
+    }
+    body {
+      background-color: #1A1F2A;
+      color: #D1D5DB;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh !important;
+    }
+    .header {
+      background-color: #252B3A;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #4B5563;
+    }
+    .layout {
+      display: flex;
+      min-height: calc(100vh - 64px);
+    }
+    .sidebar {
+      width: 300px;
+      background-color: #252B3A;
+      padding: 1.5rem;
+      border-right: 1px solid #4B5563;
+      overflow-y: auto;
+    }
+    .sidebar-section {
+      margin-bottom: 1.5rem;
+    }
+    .sidebar-section h3 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: #F59E0B;
+    }
+    .main-content {
+      flex: 1;
+      padding: 2rem;
+      overflow-y: auto;
+    }
+    .toast {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      background-color: #252B3A;
+      color: #D1D5DB;
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      display: none;
+      z-index: 1001;
+    }
+    .error-toast {
+      background-color: #EF4444;
+      color: #FFF;
+    }
+    .input-field {
+      padding: 0.75rem;
+      background-color: #2D3748;
+      color: #D1D5DB;
+      border: 1px solid #4B5563;
+      border-radius: 0.25rem;
+      width: 100%;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: #3B82F6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+    .btn {
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      transition: background-color 0.3s ease, transform 0.1s ease;
+    }
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+    .btn-primary {
+      background-color: #3B82F6;
+      color: #FFF;
+    }
+    .btn-primary:hover {
+      background-color: #1D4ED8;
+    }
+    .btn-secondary {
+      background-color: #F59E0B;
+      color: #1A1F2A;
+    }
+    .btn-secondary:hover {
+      background-color: #D97706;
+    }
+    .btn-success {
+      background-color: #10B981;
+      color: #FFF;
+    }
+    .btn-success:hover {
+      background-color: #059669;
+    }
+    .btn-danger {
+      background-color: #EF4444;
+      color: #FFF;
+    }
+    .btn-danger:hover {
+      background-color: #DC2626;
+    }
+    .card {
+      background-color: #252B3A;
+      padding: 1.5rem;
+      border-radius: 0.25rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      border: 1px solid #4B5563;
+      margin-bottom: 1.5rem;
+    }
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      visibility: hidden;
+      opacity: 0;
+      transition: all 0.3s ease;
+    }
+    .modal-overlay.active {
+      visibility: visible;
+      opacity: 1;
+    }
+    .publish-card {
+      background: #252B3A;
+      border-radius: 0.25rem;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+      border: 1px solid #4B5563;
+      max-width: 600px;
+      width: 100%;
+      padding: 2rem;
+      position: relative;
+    }
+    .close-btn {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      color: #D1D5DB;
+      font-size: 1.5rem;
+      cursor: pointer;
+      transition: color 0.3s ease;
+    }
+    .close-btn:hover {
+      color: #F59E0B;
+    }
+    .publish-btn {
+      background: #F59E0B;
+      color: #1A1F2A;
+      transition: background 0.3s ease, transform 0.1s ease;
+    }
+    .publish-btn:hover {
+      background: #D97706;
+      transform: translateY(-1px);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid #4B5563;
+    }
+    th {
+      background-color: #2D3748;
+      font-weight: 600;
+    }
+    tr:hover {
+      background-color: #2D3748;
+    }
+    .filter-group {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .filter-select {
+      padding: 0.5rem;
+      background-color: #2D3748;
+      color: #D1D5DB;
+      border: 1px solid #4B5563;
+      border-radius: 0.25rem;
+    }
+    @media (max-width: 768px) {
+      .layout {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #4B5563;
+      }
+      .main-content {
+        padding: 1rem;
+      }
+    }
+  </style>
   <script type="module" crossorigin src="/datasharingApp/assets/app.js"></script>
-  <link rel="stylesheet" crossorigin href="/datasharingApp/assets/index.css">
 </head>
-<body class="bg-gray-900 text-gray-200">
-  <div id="root"></div>
+<body id="body">
+  <div class="header">
+    <h1 class="text-2xl font-semibold">Dcrypt - Decentralized Data Sharing</h1>
+    <div class="space-x-2">
+      <button id="signupButton" class="btn btn-primary" onclick="window.location.href='/datasharingApp/signup.html'">Sign Up</button>
+      <button id="loginButton" class="btn btn-primary">Login</button>
+      <button id="logoutButton" class="btn btn-danger hidden" onclick="window.logout()">Logout</button>
+    </div>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <h3>User Profile</h3>
+        <div class="flex items-center space-x-3">
+          <div class="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center user-avatar">
+            <i class="fas fa-user text-lg"></i>
+          </div>
+          <div>
+            <p id="userName" class="font-medium">Guest User</p>
+            <p class="text-sm text-gray-400">Snippets Posted: <span id="snippetsPosted">0</span></p>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <h3>Balance</h3>
+        <p id="userBalance" class="text-lg font-medium">Balance: 0 DCT</p>
+      </div>
+      <div class="sidebar-section">
+        <h3>Manage Balance</h3>
+        <div class="space-y-4">
+          <div class="flex space-x-2">
+            <input id="depositInput" type="number" placeholder="Deposit Amount (DCT)" class="input-field flex-1">
+            <button id="depositButton" class="btn btn-success" onclick="window.deposit(parseFloat(document.getElementById('depositInput').value))" disabled>Deposit</button>
+          </div>
+          <div class="flex space-x-2">
+            <input id="withdrawInput" type="number" placeholder="Withdraw Amount (DCT)" class="input-field flex-1">
+            <button id="withdrawButton" class="btn btn-danger" onclick="window.withdraw(parseFloat(document.getElementById('withdrawInput').value))" disabled>Withdraw</button>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <h3>Transaction History</h3>
+        <button id="toggleHistoryButton" class="btn btn-secondary mb-2" onclick="window.toggleTransactionHistory()" disabled>Toggle History</button>
+        <div id="transactionHistory" class="mt-2" style="display: none;">
+          <div id="transactionList">No transactions yet.</div>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <h3>Theme</h3>
+        <button id="themeToggle" class="btn btn-primary">Switch to Light Mode</button>
+      </div>
+    </div>
+    <div class="main-content">
+      <div class="card">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-semibold">Quick Actions</h2>
+          <button id="publish" class="btn btn-secondary" onclick="window.redirectToPublish()">Post Something!</button>
+        </div>
+        <div class="flex space-x-2">
+          <input id="searchInput" type="text" placeholder="Search snippets..." class="input-field flex-1">
+          <button id="searchButton" class="btn btn-primary" onclick="window.searchSnippets(document.getElementById('searchInput').value)" disabled>Search</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2 class="text-xl font-semibold mb-4">Live Feed</h2>
+        <div class="filter-group">
+          <select id="sortBy" class="filter-select">
+            <option value="likes-desc">Sort by Likes (High to Low)</option>
+            <option value="likes-asc">Sort by Likes (Low to High)</option>
+            <option value="dislikes-desc">Sort by Dislikes (High to Low)</option>
+            <option value="dislikes-asc">Sort by Dislikes (Low to High)</option>
+            <option value="date-desc">Sort by Date (Newest)</option>
+            <option value="date-asc">Sort by Date (Oldest)</option>
+          </select>
+          <input id="filterTags" type="text" placeholder="Filter by tags..." class="input-field flex-1">
+        </div>
+        <table id="publishedItems">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Description</th>
+              <th>Tags</th>
+              <th>Likes</th>
+              <th>Dislikes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2 class="text-xl font-semibold mb-4">My Snippets</h2>
+        <table id="mySnippets">
+          <thead>
+            <tr>
+              <th>Hash</th>
+              <th>Title</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2 class="text-xl font-semibold mb-4">Buy Snippet by Hash</h2>
+        <div class="flex space-x-2">
+          <input id="buyHashInput" type="text" placeholder="Enter snippet hash..." class="input-field flex-1">
+          <button id="buyHashButton" class="btn btn-primary" onclick="window.buySnippetByHash()" disabled>Buy</button>
+        </div>
+      </div>
+      <div class="card" id="snippetDisplay">
+      </div>
+    </div>
+  </div>
+  <div id="publishModal" class="modal-overlay">
+    <div class="publish-card space-y-6">
+      <span class="close-btn" onclick="closePublishModal()">×</span>
+      <div>
+        <h2 class="text-2xl font-bold text-center text-[#D1D5DB]">Publish a Snippet</h2>
+        <p class="mt-2 text-center text-sm text-gray-400">
+          Share your code, ideas, or creations with the Dcrypt community.
+        </p>
+      </div>
+      <form id="publishForm" class="space-y-6">
+        <div>
+          <label for="modalTitleInput" class="block text-sm font-medium text-gray-300">Title</label>
+          <input id="modalTitleInput" name="title" type="text" required
+                 class="input-field mt-1 block w-full px-4 py-3 placeholder-gray-500">
+        </div>
+        <div>
+          <label for="modalDescriptionInput" class="block text-sm font-medium text-gray-300">Description</label>
+          <textarea id="modalDescriptionInput" name="description" rows="4" required
+                    class="input-field mt-1 block w-full px-4 py-3 placeholder-gray-500"
+                    placeholder="Describe your snippet"></textarea>
+        </div>
+        <div>
+          <label for="modalTagsInput" class="block text-sm font-medium text-gray-300">Tags (comma-separated)</label>
+          <input id="modalTagsInput" name="tags" type="text"
+                 class="input-field mt-1 block w-full px-4 py-3 placeholder-gray-500"
+                 placeholder="e.g., javascript, python, css">
+        </div>
+        <div>
+          <label for="modalContentInput" class="block text-sm font-medium text-gray-300">Content</label>
+          <textarea id="modalContentInput" name="content" rows="4"
+                    class="input-field mt-1 block w-full px-4 py-3 placeholder-gray-500"
+                    placeholder="Type Your Content (Or Upload File)"></textarea>
+        </div>
+        <div>
+          <label for="modalFileInput" class="block text-sm font-medium text-gray-300">Choose File</label>
+          <div class="mt-1 flex items-center">
+            <label class="input-field px-4 py-3 cursor-pointer flex items-center">
+              <span id="modalFileLabel" class="text-gray-500">No file chosen</span>
+              <input id="modalFileInput" name="file-upload" type="file" class="hidden"
+                     onchange="document.getElementById('modalFileLabel').textContent = this.files[0]?.name || 'No file chosen'">
+              <span class="ml-3 text-gray-400"><i class="fas fa-upload"></i></span>
+            </label>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <div class="flex items-center">
+            <input id="modalPremium" name="premium" type="checkbox"
+                   class="h-4 w-4 text-[#F59E0B] focus:ring-[#F59E0B] border-gray-300 rounded">
+            <label for="modalPremium" class="ml-2 block text-sm text-gray-300">Premium</label>
+          </div>
+          <input id="modalPriceInput" type="number" placeholder="Price (DCT)" min="0" step="0.01"
+                 class="input-field hidden max-w-[150px] px-3 py-2">
+        </div>
+        <div>
+          <button type="submit"
+                  class="publish-btn w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium focus:outline-none">
+            Publish
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    function closePublishModal() {
+      const modal = document.getElementById('publishModal');
+      modal.classList.remove('active');
+      document.getElementById('publishForm').reset();
+      document.getElementById('modalFileLabel').textContent = 'No file chosen';
+      const priceInput = document.getElementById('modalPriceInput');
+      priceInput.classList.add('hidden');
+      document.getElementById('modalPremium').checked = false;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const premiumToggle = document.getElementById('modalPremium');
+      const priceInput = document.getElementById('modalPriceInput');
+      if (premiumToggle && priceInput) {
+        premiumToggle.addEventListener('change', (e) => {
+          priceInput.classList.toggle('hidden', !e.target.checked);
+          if (!e.target.checked) priceInput.value = '';
+        });
+      }
+
+      const themeToggle = document.getElementById('themeToggle');
+      if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+          const isDark = document.body.classList.toggle('light-mode');
+          themeToggle.textContent = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+        });
+      }
+    });
+  </script>
+  <style>
+    .light-mode {
+      background-color: #F3F4F6;
+      color: #1F2937;
+    }
+    .light-mode .header,
+    .light-mode .sidebar,
+    .light-mode .card,
+    .light-mode .publish-card {
+      background-color: #FFFFFF;
+      border-color: #D1D5DB;
+    }
+    .light-mode th {
+      background-color: #E5E7EB;
+    }
+    .light-mode tr:hover {
+      background-color: #E5E7EB;
+    }
+    .light-mode .input-field {
+      background-color: #FFFFFF;
+      border-color: #D1D5DB;
+      color: #1F2937;
+    }
+    .light-mode .sidebar-section h3 {
+      color: #D97706;
+    }
+    .light-mode .toast {
+      background-color: #FFFFFF;
+      color: #1F2937;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+  </style>
 </body>
 </html>
