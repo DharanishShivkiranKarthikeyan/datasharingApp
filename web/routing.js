@@ -59,8 +59,9 @@ const locationHandler = async () => {
     if(!document.querySelector('meta[name="description"]')){
         const meta = document.createElement("meta");
         meta.name = "description";
-        document.querySelector('meta[name="description"]').setAttribute("content", route.description);
         document.head.appendChild(meta);
+        document.querySelector('meta[name="description"]').setAttribute("content", route.description);
+        
 
     }
 };
