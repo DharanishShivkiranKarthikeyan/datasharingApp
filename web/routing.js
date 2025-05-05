@@ -38,15 +38,16 @@ const route = (event) => {
     locationHandler();
 };
 const locationHandler = async () => {
-    const location = window.location.pathname; // get the url path
+    var location = window.location.pathname; // get the url path
     // if the path length is 0, set it to primary page route
     if (location.length == 0) {
         location = "/";
     }
     // get the route object from the urlRoutes object
-    const route = routes[location];
+    var route = routes[location];
+    console.log(route + "NIGGER")
     // get the html from the template
-    const html = await fetch(route["template"]).then((response) => response.text());
+    var html = await fetch(route["template"]).then((response) => response.text());
     // set the content of the content div to the html
     document.getElementById("content").innerHTML = html;
     // set the title of the document to the title of the route
