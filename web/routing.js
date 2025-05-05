@@ -10,22 +10,22 @@ document.addEventListener("click", (e) => {
 
 const routes = {
     "/datasharingApp/":{
-        template: "../dashboard.html",
+        template: "/datasharingApp/dashboard.html",
         title: "Datashare",
         description: "Post and Share"
     },
     "/datasharingApp/publish":{
-        template:"../publish.html",
+        template:"/datasharingApp/publish.html",
         title: "Publish",
         description: "Publish something"
     },
     "/datasharingApp/node-instructions":{
-        template: "../node-instructions.html",
+        template: "/datasharingApp/node-instructions.html",
         title: "Node instruction",
         description: "how to be a node"
     },
     "/datasharingApp/signup":{
-        template:"../signup.html",
+        template:"/datasharingApp/signup.html",
         title: "sign up for Datashare",
         description: "Sign up"
     }
