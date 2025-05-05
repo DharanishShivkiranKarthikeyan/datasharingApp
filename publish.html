@@ -44,18 +44,8 @@
     .publish-btn:hover {
       background: #5b00b3;
     }
-    #background-default {
-      position: absolute; /* or fixed, depending on your needs */
-      top: 0;
-      left: 0;
-      width: 100%;
-      min-height: 100vh !important;
-      z-index: -1; /* Places it behind other elements */
-      display: flex;
-    }
 </style>
 <body id="body">
-    <div id="background-default"></div>
     <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div class="publish-card max-w-2xl w-full space-y-8 p-8">
           <div>
@@ -125,22 +115,4 @@
           </form>
         </div>
       </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js"></script>
-    <script>
-      VANTA.TOPOLOGY({
-            el: "#background-default",
-            mouseControls: true,
-            touchControls: true,
-            gyroControls: false,
-            minHeight: 800.00,
-            minWidth: 400.00,
-            scale: 1.00,
-            scaleMobile: 1.00,
-            color: 0x00DDEB, /* Neon Cyan */
-            backgroundColor: 0x1E2A44, /* Dark Blue */
-            speed: 10.0
-        });
-    </script>
-    <script type="module" src="/datasharingApp/assets/app.js"></script>
 </body>
