@@ -1,12 +1,8 @@
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase';
 import { DHT } from './dht.js';
 import { uint8ArrayToBase64Url } from './dht.js';
-import "https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js";
-import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js";
-import "https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js";
-import "https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.topology.min.js";
 
 import './utils.js';
 
