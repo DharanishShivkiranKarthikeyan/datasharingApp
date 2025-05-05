@@ -45,8 +45,9 @@ const locationHandler = async () => {
     }
 
     // get the route object from the urlRoutes object
+    console.log(window.location.pathname)
     var route = routes[location];
-    console.log(route + "NIGGER")
+    console.log(route.json() + "NIGGER")
     // get the html from the template
     var html = await fetch(route["template"]).then((response) => response.text());
     // set the content of the content div to the html
