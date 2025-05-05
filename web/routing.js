@@ -9,22 +9,22 @@ document.addEventListener("click", (e) => {
 });
 
 const routes = {
-    "/":{
+    "/datasharingApp":{
         template: "../dashboard.html",
         title: "Datashare",
         description: "Post and Share"
     },
-    "/publish":{
+    "/datasharingApp/publish":{
         template:"../publish.html",
         title: "Publish",
         description: "Publish something"
     },
-    "/node-instructions":{
+    "/datasharingApp/node-instructions":{
         template: "../node-instructions.html",
         title: "Node instruction",
         description: "how to be a node"
     },
-    "/signup":{
+    "/datasharingApp/signup":{
         template:"../signup.html",
         title: "sign up for Datashare",
         description: "Sign up"
