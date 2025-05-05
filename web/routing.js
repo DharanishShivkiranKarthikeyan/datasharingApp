@@ -9,7 +9,7 @@ document.addEventListener("click", (e) => {
 });
 
 const routes = {
-    "/datasharingApp":{
+    "/datasharingApp/":{
         template: "../dashboard.html",
         title: "Datashare",
         description: "Post and Share"
@@ -41,8 +41,9 @@ const locationHandler = async () => {
     var location = window.location.pathname; // get the url path
     // if the path length is 0, set it to primary page route
     if (location.length == 0) {
-        location = "/";
+        location = "/datasharingApp/";
     }
+
     // get the route object from the urlRoutes object
     var route = routes[location];
     console.log(route + "NIGGER")
