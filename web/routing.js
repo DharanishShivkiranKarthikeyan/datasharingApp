@@ -54,9 +54,15 @@ const locationHandler = async () => {
     // set the title of the document to the title of the route
     document.title = route.title;
     // set the description of the document to the description of the route
-    document
-        .querySelector('meta[name="description"]')
-        .setAttribute("content", route.description);
+    document.querySelector('meta[name="description"]')
+    console.log(document.querySelector('meta[name="description"]'));
+    if(!document.querySelector('meta[name="description"]')){
+        const meta = document.createElement("meta");
+        meta.name = "description";
+        document.querySelector('meta[name="description"]').setAttribute("content", route.description);
+        document.head.appendChild(meta);
+
+    }
 };
 
 // add an event listener to the window that watches for url changes
