@@ -399,7 +399,6 @@ function displaySnippetContent(data, fileType, title) {
 }
 
 async function initializeIndexedDB() {
-  isIndexedDBinit = true;
   const TARGET_VERSION = 5;
   return new Promise((resolve, reject) => {
     console.log('Starting IndexedDB initialization...');
