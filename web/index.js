@@ -255,8 +255,8 @@ async function updateMySnippets() {
       const data = doc.data();
       const row = document.createElement('tr');
       row.innerHTML = `
+        <td class="py-2 px-4">${data.title || 'No title'}</td>
         <td class="py-2 px-4">${data.ipHash}</td>
-        <td class="py-2 px-4">${data.ipHash || 'No title'}</td>
         <td class="py-2 px-4">
           <button onclick="window.copyHash('${data.ipHash}')" class="bg-blue-500 text-white rounded hover:bg-blue-600 px-3 py-1">Copy Hash</button>
         </td>
