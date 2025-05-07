@@ -1146,7 +1146,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             resolve();
           });
         }),
-        minLoadingTime
       ]);
     } catch (error) {
       console.error('Initialization error:', error);
