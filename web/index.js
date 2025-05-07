@@ -399,6 +399,7 @@ function displaySnippetContent(data, fileType, title) {
 }
 
 async function initializeIndexedDB() {
+  isIndexedDBinit = true;
   const TARGET_VERSION = 5;
   return new Promise((resolve, reject) => {
     console.log('Starting IndexedDB initialization...');
@@ -506,7 +507,7 @@ async function storeKeypair(indexedDB, userId) {
   });
 }
 
-async function init(userId) {
+async function init(userId,indexedDB) {
   if (isInitializing) {
     console.log('Initialization already in progress, skipping...');
     return;
@@ -514,8 +515,9 @@ async function init(userId) {
   isInitializing = true;
   console.log('Initializing app with userId:', userId);
   try {
-    const indexedDB = await initializeIndexedDB();
-
+    if(!indexedDB){
+      indexedDB = await initializeIndexedDB();
+    }
     let keypair = await loadKeypair(indexedDB);
     if (keypair instanceof Uint8Array) {
       keypair = uint8ArrayToBase64Url(keypair);
@@ -1109,8 +1111,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (isIndexPage || window.location.pathname.includes("publish")) {
-    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 3500));
-
+    const indexedDB = await initializeIndexedDB();
+    const keypair = await loadKeypair(indexedDB);
     try {
       await Promise.all([
         new Promise((resolve) => {
@@ -1118,15 +1120,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('onAuthStateChanged triggered');
             if (user) {
               console.log('User is signed in:', user.uid);
-              await init(user.uid);
+              await init(user.uid,indexedDB );
             } else {
               console.log('No user is signed in. Checking IndexedDB for keypair...');
               try {
-                const indexedDB = await initializeIndexedDB();
-                const keypair = await loadKeypair(indexedDB);
                 if (keypair) {
                   console.log('Found keypair in IndexedDB, initializing app...');
-                  await init(keypair);
+                  await init(keypair, indexedDB);
                 } else {
                   console.log('No keypair found in IndexedDB.');
                   if (isIndexPage) {
