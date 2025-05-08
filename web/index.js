@@ -21,7 +21,7 @@ async function initializeFirebase() {
     const firebaseModule = await import('./firebase.js');
     auth = firebaseModule.auth;
     db = firebaseModule.db;
-    storage = getStorage();
+    storage = firebaseModule.storage;
     await setPersistence(auth, browserLocalPersistence);
     console.log('Firebase services initialized successfully with local persistence');
   } catch (error) {
@@ -69,42 +69,6 @@ function redirectToPublish() {
     console.error('Failed to open publish modal:', error);
     showToast('Failed to open publish modal. Please try again.', true);
   }
-}
-
-function fade(element) {
-  var op = 0;
-  var loadText = document.getElementById("loadingTextBox");
-  loadText.style.opacity = op;
-  element.style.opacity = op;
-  element.style.display = 'block';
-  var timer = setInterval(function () {
-    op += 0.1;
-    if (op >= 1) {
-      op = 1;
-      clearInterval(timer);
-    }
-    element.style.opacity = op;
-    loadText.style.opacity = op;
-    element.style.filter = 'alpha(opacity=' + op * 100 + ")";
-    loadText.style.filter = 'alpha(opacity=' + op * 100 + ")";
-  }, 50);
-}
-
-function fadeOut(element) {
-  var loadText = document.getElementById("loadingTextBox");
-  var op = 1;
-  var timer = setInterval(function () {
-    op -= 0.1;
-    if (op <= 0) {
-      op = 0;
-      element.style.display = 'none';
-      clearInterval(timer);
-    }
-    element.style.opacity = op;
-    loadText.style.opacity = op;
-    element.style.filter = 'alpha(opacity=' + op * 100 + ")";
-    loadText.style.filter = 'alpha(opacity=' + op * 100 + ")";
-  }, 50);
 }
 
 function updateUIForSignOut() {
@@ -591,6 +555,7 @@ async function checkIfUserIsNode(userId) {
 async function uploadProfileImage(userId, file) {
   if (!file) return null;
   try {
+
     const storageRef = ref(storage, `profile_images/${userId}/${file.name}`);
     await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(storageRef);
@@ -628,7 +593,7 @@ async function handleSignup() {
     const username = document.getElementById('usernameInput').value;
     const profileImageInput = document.getElementById('profileImageInput');
     const profileImageFile = profileImageInput.files[0];
-
+    console.log(profileImageFile);
     const profileImageUrl = profileImageFile ? await uploadProfileImage(result.user.uid, profileImageFile) : null;
 
     const userRef = doc(db, 'users', result.user.uid);

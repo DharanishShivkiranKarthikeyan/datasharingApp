@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-
+import { getStorage } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js';
 const firebaseConfig = {
     apiKey: "AIzaSyBrdrwvY-lPObZgortEgw7YWycUOGsBlyM",
     authDomain: "dcrypt-edb9c.firebaseapp.com",
@@ -14,10 +14,10 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-
+const storage = getStorage(app);
 // Initialize Firebase services
 const auth = getAuth(app);
 const db = getFirestore(app);
 
 // Export the initialized services
-export { auth, db };
+export { auth, db, storage };
