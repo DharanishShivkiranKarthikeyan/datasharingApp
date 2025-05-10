@@ -286,7 +286,7 @@
           <button id="searchButton" class="btn btn-primary" onclick="window.searchSnippets(document.getElementById('searchInput').value)" disabled>Search</button>
         </div>
       </div>
-      <div class="card flex">
+      <div class="card">
         <h2 class="text-xl font-semibold mb-4">Live Feed</h2>
         <div class="filter-group">
           <select id="sortBy" class="filter-select">
@@ -299,7 +299,7 @@
           </select>
           <input id="filterTags" type="text" placeholder="Filter by tags..." class="input-field flex-1">
         </div>
-        <table id="publishedItems">
+        <table id="publishedItems" style="overflow: scroll;">
           <thead>
             <tr>
               <th>Title</th>
@@ -426,7 +426,8 @@
       if (themeToggle) {
         themeToggle.addEventListener('click', () => {
           const isDark = document.body.classList.toggle('light-mode');
-          themeToggle.textContent = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+          document.getElementById("sortBy").classList.toggle('light-mode');
+          themeToggle.textContent = isDark ? 'Switch to Dark Mode' : 'Switch to Light Mode';
         });
       }
     });
