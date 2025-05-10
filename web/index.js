@@ -169,12 +169,10 @@ async function updateLiveFeed() {
             priceUsd: data.priceUsd || 0,
           };
           dht.knownObjects.set(ipHash, { metadata, chunks: data.chunks || [] });
-          await dht.broadcastIP(ipHash, metadata, data.chunks || []);
         }
 
         dht.knownObjects.forEach((value, key) => {
           const snippetInfo = snippetsData[key] || { likes: 0, dislikes: 0, reviewStatus: 'active' };
-          if (snippetInfo.reviewStatus !== 'active') return;
 
           const isPremium = value.metadata.isPremium || false;
           const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
