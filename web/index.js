@@ -162,7 +162,7 @@ async function updateLiveFeed() {
         dht.knownObjects.clear();
         for (const [ipHash, data] of Object.entries(snippetsData)) {
           const metadata = {
-            content_type: data.ipHash,
+            content_type: data.title,
             description: data.description || 'No description',
             tags: data.tags || [],
             isPremium: data.isPremium || false,
@@ -172,7 +172,7 @@ async function updateLiveFeed() {
         }
 
         dht.knownObjects.forEach((value, key) => {
-          const snippetInfo = snippetsData[key] || { likes: 0, dislikes: 0, reviewStatus: 'active' };
+          const snippetInfo = snippetsData[key];
 
           const isPremium = value.metadata.isPremium || false;
           const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
