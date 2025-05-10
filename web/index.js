@@ -150,7 +150,7 @@ async function updateLiveFeed() {
   publishedItemsTableBody.innerHTML = '';
   try {
     // Use onSnapshot for real-time updates
-    const snippetsQuery = query(collection(db, 'snippets'), where('reviewStatus', '==', 'active'));
+    const snippetsQuery = query(collection(db, 'snippets'));
     onSnapshot(snippetsQuery, async (snapshots) => {
       const snippetsData = {};
       snapshots.forEach((doc) => {

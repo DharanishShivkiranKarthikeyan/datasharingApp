@@ -1,6 +1,3 @@
-// web/utils.js
-import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
-
 // Use the global crypto.subtle for Web Crypto API in the browser
 const subtle = globalThis.crypto?.subtle;
 if (!subtle) {
@@ -36,45 +33,7 @@ export async function computeFullHash(content) {
   const buffer = await subtle.digest('SHA-256', content);
   return new Uint8Array(buffer);
 }
-/*
 
-export async function chunkEncrypt(ip, key, minChunks) {
-  const content = ip.content;
-  const chunkSize = Math.ceil(content.length / minChunks);
-  const chunks = [];
-  key = await subtle.digest('SHA-256',new ArrayBuffer(key))
-  console.log("ERROR MAKING SHA 256 if u dont see this" + key)
-  const keyBuffer = await subtle.importKey(
-    'raw',
-    new Uint8Array(key), // Use first 32 bytes for AES-256
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt']
-  );
-
-  for (let i = 0; i < minChunks; i++) {
-    const start = i * chunkSize;
-    const end = Math.min(start + chunkSize, content.length);
-    const chunkData = content.slice(start, end);
-
-    const nonce = generateNonce();
-    const encrypted = await subtle.encrypt(
-      { name: 'AES-GCM', iv: nonce },
-      keyBuffer,
-      chunkData
-    );
-
-    const chunk = {
-      data: new Uint8Array(encrypted),
-      nonce: nonce,
-      index: i,
-      file_type: ip.file_type,
-    };
-    chunks.push(chunk);
-  }
-
-  return chunks;
-*/
 export function getChunkHash(chunk) {
     // Convert chunk.index (a number) to a Uint8Array
     const indexBytes = new Uint8Array(new Int32Array([chunk.index]).buffer);
