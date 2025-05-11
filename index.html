@@ -399,9 +399,9 @@
       </form>
     </div>
   </div>
-  <div id="buyPreviewModal" class="modal-overlay">
+  <div id="buyModal" class="modal-overlay">
     <div class="publish-card space-y-6">
-      <span class="close-btn" onclick="closeBuyPreviewModal()">×</span>
+      <span class="close-btn" onclick="closeBuyModal()">×</span>
       <div>
         <h2 class="text-2xl font-bold text-center text-[#D1D5DB]">Product Description</h2>
       </div>
@@ -417,12 +417,6 @@
           <textarea id="snippetDescription" readonly rows="4"
                     class="input-field mt-1 block w-full px-4 py-3 text-gray-300"
                     placeholder="No description available"></textarea>
-        </div>
-        <div>
-          <label for="snippetTags" class="block text-sm font-medium text-gray-300">Tags</label>
-          <input id="snippetTags" type="text" readonly
-                 class="input-field mt-1 block w-full px-4 py-3 text-gray-300"
-                 value="No tags">
         </div>
         <div>
           <label for="snippetPrice" class="block text-sm font-medium text-gray-300">Price</label>
@@ -444,13 +438,19 @@
     function closePublishModal() {
       const modal = document.getElementById('publishModal');
       modal.classList.remove('active');
+      document.getElementById('snippetDetails').reset();
+      document.getElementById('snippetTitle').reset();
+      document.getElementById('snippetPrice').reset();
+    }
+    function closeBuyModal() {
+      const modal = document.getElementById('buyModal');
+      modal.classList.remove('active');
       document.getElementById('publishForm').reset();
       document.getElementById('modalFileLabel').textContent = 'No file chosen';
       const priceInput = document.getElementById('modalPriceInput');
       priceInput.classList.add('hidden');
       document.getElementById('modalPremium').checked = false;
     }
-
     document.addEventListener('DOMContentLoaded', () => {
       const premiumToggle = document.getElementById('modalPremium');
       const priceInput = document.getElementById('modalPriceInput');
