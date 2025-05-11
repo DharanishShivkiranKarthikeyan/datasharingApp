@@ -80,7 +80,7 @@ async function openBuyModal(key) {
   }
 
   try {
-    const modal = document.getElementById('buyPreviewModal');
+    const modal = document.getElementById('buyModal');
     document.getElementById('snippetTitle').value = data.content_type;
     document.getElementById('snippetDescription').value = data.description;
     document.getElementById('snippetPrice').value = data.priceUsd==0?"Free":data.priceUsd;
