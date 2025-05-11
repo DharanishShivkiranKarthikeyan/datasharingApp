@@ -70,9 +70,8 @@ function redirectToPublish() {
     showToast('Failed to open publish modal. Please try again.', true);
   }
 }
-async function openBuyModal(hash, title, description, price) {
-  console.log(hash,title,description,price)
-  window.currentProduct = hash;
+async function openBuyModal(ip) {
+  window.currentProduct = ip.ipHash;
   if (!isAuthenticated() || !dht) {
     showToast('Please sign in and ensure the app is initialized before viewing.', true);
     return;
@@ -80,9 +79,9 @@ async function openBuyModal(hash, title, description, price) {
 
   try {
     const modal = document.getElementById('buyPreviewModal');
-    document.getElementById('snippetTitle').value = title;
-    document.getElementById('snippetDescription').value = description;
-    document.getElementById('snippetPrice').value = price==0?"Free":price;
+    document.getElementById('snippetTitle').value = ip.title;
+    document.getElementById('snippetDescription').value = ip.description;
+    document.getElementById('snippetPrice').value = ip.priceUsd==0?"Free":ip.priceUsd;
     modal.classList.add('active');
   } catch (error) {
     console.error('Failed to open buy/preview modal:', error);
@@ -193,7 +192,6 @@ async function updateLiveFeed() {
 
         dht.knownObjects.forEach((value, key) => {
           const snippetInfo = snippetsData[key];
-          console.log(snippetInfo);
           //value.metadata.hash,value.metadata.content_type,value.metadata.description,value.metadata.priceUsd
           const isPremium = value.metadata.isPremium || false;
           const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
