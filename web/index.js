@@ -206,7 +206,7 @@ async function updateLiveFeed() {
             <td class="py-2 px-4">${snippetInfo.dislikes}</td>
             <td class="py-2 px-4">
             
-              <button onclick="window.openBuyModal('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+              <button onclick="window.openBuyModal('${snippetInfo}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
               <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
             </td>
           `;
@@ -305,7 +305,7 @@ async function searchSnippets(searchTerm) {
           <td class="py-2 px-4">${snippetInfo.likes}</td>
           <td class="py-2 px-4">${snippetInfo.dislikes}</td>
           <td class="py-2 px-4">
-            <button onclick="window.openBuyModal('hello123')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+            <button onclick="window.openBuyModal(${snippetInfo})" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
             <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
           </td>
         `;
