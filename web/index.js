@@ -71,6 +71,7 @@ function redirectToPublish() {
   }
 }
 async function openBuyModal(hash, title, description, price) {
+  console.log(hash,title,description,price)
   window.currentProduct = hash;
   if (!isAuthenticated() || !dht) {
     showToast('Please sign in and ensure the app is initialized before viewing.', true);
@@ -83,7 +84,6 @@ async function openBuyModal(hash, title, description, price) {
     document.getElementById('snippetDescription').value = description;
     document.getElementById('snippetPrice').value = price==0?"Free":price;
     modal.classList.add('active');
-    console.log('Opened buy/preview modal for snippet:', snippetId);
   } catch (error) {
     console.error('Failed to open buy/preview modal:', error);
     showToast('Failed to open buy/preview modal. Please try again.', true);
