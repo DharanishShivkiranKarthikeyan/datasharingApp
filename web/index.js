@@ -193,7 +193,7 @@ async function updateLiveFeed() {
 
         dht.knownObjects.forEach((value, key) => {
           const snippetInfo = snippetsData[key];
-
+          //value.metadata.hash,value.metadata.content_type,value.metadata.description,value.metadata.priceUsd
           const isPremium = value.metadata.isPremium || false;
           const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
           const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
@@ -204,7 +204,8 @@ async function updateLiveFeed() {
             <td class="py-2 px-4">${snippetInfo.likes}</td>
             <td class="py-2 px-4">${snippetInfo.dislikes}</td>
             <td class="py-2 px-4">
-              <button onclick="window.openBuyModal('${value.metadata.hash,value.metadata.content_type,value.metadata.description,value.metadata.priceUsd}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+            
+              <button onclick="window.openBuyModal('${value.metadata}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
               <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
             </td>
           `;
