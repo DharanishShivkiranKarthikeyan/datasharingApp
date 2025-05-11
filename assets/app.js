@@ -4,7 +4,8 @@ import{getAuth as he,onAuthStateChanged as V,setPersistence as fe,browserLocalPe
             <td class="py-2 px-4">${c.likes}</td>
             <td class="py-2 px-4">${c.dislikes}</td>
             <td class="py-2 px-4">
-              <button onclick="window.openBuyModal('${i.metadata.hash,i.metadata.content_type,i.metadata.description,i.metadata.priceUsd}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${p})</button>
+            
+              <button onclick="window.openBuyModal('${i.metadata}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${p})</button>
               <button onclick="window.flagSnippet('${r}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
             </td>
           `,n.appendChild(h)})}},s=>{console.error("Live feed snapshot error:",s),u("Failed to load live feed.",!0)})}catch(t){console.error("Failed to update live feed:",t),u("Failed to load live feed.",!0)}}}async function K(){var e,t;const n=(e=document.getElementById("mySnippets"))==null?void 0:e.querySelector("tbody");if(n){n.innerHTML="";try{const s=((t=y.currentUser)==null?void 0:t.uid)||localStorage.getItem("nodeId");if(!s)return;const o=H(T(b,"snippets"),Q("creatorId","==",s));(await O(o)).forEach(r=>{const c=r.data(),a=document.createElement("tr");a.innerHTML=`
