@@ -1,6 +1,6 @@
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js';
+import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js';
 import { DHT } from './dht.js';
 import { uint8ArrayToBase64Url } from './dht.js';
 
@@ -550,18 +550,73 @@ async function checkIfUserIsNode(userId) {
   }
 }
 
-async function uploadProfileImage(userId, file) {
-  if (!file) return null;
-  try {
+async function compressImage(file, maxWidth = 800, maxHeight = 800, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
 
-    const storageRef = ref(storage, `profile_images/${userId}/${file.name}`);
-    await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(storageRef);
-    console.log('Profile image uploaded:', downloadURL);
-    return downloadURL;
+      if (width > height) {
+        if (width > maxWidth) {
+          height *= maxWidth / width;
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width *= maxHeight / height;
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => resolve(blob),
+        file.type,
+        quality
+      );
+    };
+    img.onerror = reject;
+  });
+}
+
+async function uploadProfileImage(userId, file) {
+  if (!file) {
+    console.log('No file provided for upload');
+    return null;
+  }
+  if (!auth.currentUser || auth.currentUser.uid !== userId) {
+    console.error('User not authenticated or ID mismatch');
+    showToast('Please sign in to upload a profile image.', true);
+    return null;
+  }
+  try {
+    const compressedBlob = await compressImage(file);
+    const reader = new FileReader();
+    const base64Promise = new Promise((resolve, reject) => {
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(compressedBlob);
+    });
+    const base64String = await base64Promise;
+
+    const userDocRef = doc(db, 'users', userId);
+    await setDoc(userDocRef, {
+      profileImage: base64String,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+
+    console.log('Compressed profile image stored in Firestore for user:', userId);
+    return base64String;
   } catch (error) {
-    console.error('Failed to upload profile image:', error);
-    showToast('Failed to upload profile image.', true);
+    console.error('Failed to store profile image in Firestore:', error);
+    showToast(`Failed to store profile image: ${error.message}`, true);
     return null;
   }
 }
