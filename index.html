@@ -304,7 +304,6 @@
           <thead>
             <tr>
               <th>Title</th>
-              <th>Description</th>
               <th>Tags</th>
               <th>Likes</th>
               <th>Dislikes</th>
@@ -398,6 +397,46 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+  <div id="buyPreviewModal" class="modal-overlay">
+    <div class="publish-card space-y-6">
+      <span class="close-btn" onclick="closeBuyPreviewModal()">×</span>
+      <div>
+        <h2 class="text-2xl font-bold text-center text-[#D1D5DB]">Product Description</h2>
+      </div>
+      <div id="snippetDetails" class="space-y-6">
+        <div>
+          <label for="snippetTitle" class="block text-sm font-medium text-gray-300">Title</label>
+          <input id="snippetTitle" type="text" readonly
+                 class="input-field mt-1 block w-full px-4 py-3 text-gray-300"
+                 value="Loading...">
+        </div>
+        <div>
+          <label for="snippetDescription" class="block text-sm font-medium text-gray-300">Description</label>
+          <textarea id="snippetDescription" readonly rows="4"
+                    class="input-field mt-1 block w-full px-4 py-3 text-gray-300"
+                    placeholder="No description available"></textarea>
+        </div>
+        <div>
+          <label for="snippetTags" class="block text-sm font-medium text-gray-300">Tags</label>
+          <input id="snippetTags" type="text" readonly
+                 class="input-field mt-1 block w-full px-4 py-3 text-gray-300"
+                 value="No tags">
+        </div>
+        <div>
+          <label for="snippetPrice" class="block text-sm font-medium text-gray-300">Price</label>
+          <input id="snippetPrice" type="text" readonly
+                 class="input-field mt-1 block w-full px-4 py-3 text-gray-300"
+                 value="Free">
+        </div>
+        <div class="flex justify-between space-x-4">
+          <button id="buyButton" onclick="window.buySnippet(window.currentProduct)"
+                  class="publish-btn w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium focus:outline-none">
+            Buy Now
+          </button>
+        </div>
+      </div>
     </div>
   </div>
   <div class="toast" id="toast"></div>
