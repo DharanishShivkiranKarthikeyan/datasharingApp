@@ -71,7 +71,7 @@ function redirectToPublish() {
   }
 }
 async function openBuyModal(key) {
-  let data = dht.knownObjects.get(key)[0];
+  let data = dht.knownObjects.get(key).metadata;
   console.log(data,"HEYYYYY")
   window.currentProduct = data.hash;
   if (!isAuthenticated() || !dht) {
