@@ -70,8 +70,10 @@ function redirectToPublish() {
     showToast('Failed to open publish modal. Please try again.', true);
   }
 }
-async function openBuyModal(ip) {
-  window.currentProduct = ip.ipHash;
+async function openBuyModal(key) {
+  let data = dht.knownObjects.get(key)[0];
+  console.log(data,"HEYYYYY")
+  window.currentProduct = data.hash;
   if (!isAuthenticated() || !dht) {
     showToast('Please sign in and ensure the app is initialized before viewing.', true);
     return;
@@ -79,9 +81,9 @@ async function openBuyModal(ip) {
 
   try {
     const modal = document.getElementById('buyPreviewModal');
-    document.getElementById('snippetTitle').value = ip.title;
-    document.getElementById('snippetDescription').value = ip.description;
-    document.getElementById('snippetPrice').value = ip.priceUsd==0?"Free":ip.priceUsd;
+    document.getElementById('snippetTitle').value = data.content_type;
+    document.getElementById('snippetDescription').value = data.description;
+    document.getElementById('snippetPrice').value = data.priceUsd==0?"Free":data.priceUsd;
     modal.classList.add('active');
   } catch (error) {
     console.error('Failed to open buy/preview modal:', error);
@@ -204,7 +206,7 @@ async function updateLiveFeed() {
             <td class="py-2 px-4">${snippetInfo.dislikes}</td>
             <td class="py-2 px-4">
             
-              <button onclick="window.openBuyModal('${snippetInfo}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+              <button onclick="window.openBuyModal('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
               <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
             </td>
           `;
@@ -286,8 +288,7 @@ async function searchSnippets(searchTerm) {
       }
 
       dht.knownObjects.forEach((value, key) => {
-        const snippetInfo = snippetsData[key] || { likes: 0, dislikes: 0, reviewStatus: 'active' };
-        if (snippetInfo.reviewStatus !== 'active') return;
+        const snippetInfo = snippetsData[key] || { likes: 0, dislikes: 0 };
 
         const tags = (value.metadata.tags || []).map(tag => tag.toLowerCase());
         if (searchTags.length > 0 && !searchTags.some(tag => tags.includes(tag))) return;
@@ -303,7 +304,7 @@ async function searchSnippets(searchTerm) {
           <td class="py-2 px-4">${snippetInfo.likes}</td>
           <td class="py-2 px-4">${snippetInfo.dislikes}</td>
           <td class="py-2 px-4">
-            <button onclick="window.openBuyModal(${snippetInfo})" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+            <button onclick="window.openBuyModal(${key})" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
             <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
           </td>
         `;
