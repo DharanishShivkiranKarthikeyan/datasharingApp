@@ -70,6 +70,25 @@ function redirectToPublish() {
     showToast('Failed to open publish modal. Please try again.', true);
   }
 }
+async function openBuyModal(hash, title, description, price) {
+  window.currentProduct = hash;
+  if (!isAuthenticated() || !dht) {
+    showToast('Please sign in and ensure the app is initialized before viewing.', true);
+    return;
+  }
+
+  try {
+    const modal = document.getElementById('buyPreviewModal');
+    document.getElementById('snippetTitle').value = title;
+    document.getElementById('snippetDescription').value = description;
+    document.getElementById('snippetPrice').value = price==0?"Free":price;
+    modal.classList.add('active');
+    console.log('Opened buy/preview modal for snippet:', snippetId);
+  } catch (error) {
+    console.error('Failed to open buy/preview modal:', error);
+    showToast('Failed to open buy/preview modal. Please try again.', true);
+  }
+}
 
 function updateUIForSignOut() {
   const elements = {
@@ -166,7 +185,7 @@ async function updateLiveFeed() {
             description: data.description || 'No description',
             tags: data.tags || [],
             isPremium: data.isPremium || false,
-            priceUsd: data.priceUsd || 0,
+            priceUsd: data.priceUsd || 0
           };
           dht.knownObjects.set(ipHash, { metadata, chunks: data.chunks || [] });
         }
@@ -180,12 +199,11 @@ async function updateLiveFeed() {
           const row = document.createElement('tr');
           row.innerHTML = `
             <td class="py-2 px-4">${value.metadata.content_type}</td>
-            <td class="py-2 px-4">${value.metadata.description || 'No description'}</td>
             <td class="py-2 px-4">${value.metadata.tags.join(', ') || 'No tags'}</td>
             <td class="py-2 px-4">${snippetInfo.likes}</td>
             <td class="py-2 px-4">${snippetInfo.dislikes}</td>
             <td class="py-2 px-4">
-              <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+              <button onclick="window.openBuyModal('${key,value.metadata.content_type,value.metadata.description,value.metadata.priceUsd}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
               <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
             </td>
           `;
@@ -257,7 +275,7 @@ async function searchSnippets(searchTerm) {
       dht.knownObjects.clear();
       for (const [ipHash, data] of Object.entries(snippetsData)) {
         const metadata = {
-          content_type: data.ipHash,
+          content_type: data.title,
           description: data.description || 'No description',
           tags: data.tags || [],
           isPremium: data.isPremium || false,
@@ -284,7 +302,7 @@ async function searchSnippets(searchTerm) {
           <td class="py-2 px-4">${snippetInfo.likes}</td>
           <td class="py-2 px-4">${snippetInfo.dislikes}</td>
           <td class="py-2 px-4">
-            <button onclick="window.buySnippet('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
+            <button onclick="window.openBuyModal('${key,value.metadata.content_type,value.metadata.description,value.metadata.priceUsd}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
             <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
           </td>
         `;
@@ -1257,4 +1275,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.redirectToPublish = redirectToPublish;
   window.searchSnippets = searchSnippets;
   window.copyHash = copyHash;
+  window.openBuyModal = openBuyModal;
 });
