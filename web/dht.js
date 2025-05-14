@@ -417,12 +417,13 @@ export class DHT {
           continue;
         }
         const peersWithChunk = this.chunkToPeerMap.get(chunkHash);
-        console.log(peersWithChunk);
+        console.log(peersWithChunk, "HELLO");
         if (!peersWithChunk || peersWithChunk.size === 0) throw new Error(`No peers found with chunk ${chunkHash}`);
         const nodePeers = Array.from(peersWithChunk).filter(peerId => peerId.startsWith('node-'));
         let chunkFetched = false;
         let lastError = null;
         for (const peerId of [...nodePeers, ...regularPeers]) {
+          console.log('lol');
           if (this.activeNodes.has(peerId)) {
             try {
               const chunk = await this.fetchChunkFromPeer(peerId, chunkHash);
