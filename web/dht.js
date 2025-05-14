@@ -417,15 +417,16 @@ export class DHT {
           continue;
         }
         const peersWithChunk = this.chunkToPeerMap.get(chunkHash);
+        console.log(peersWithChunk);
         if (!peersWithChunk || peersWithChunk.size === 0) throw new Error(`No peers found with chunk ${chunkHash}`);
         const nodePeers = Array.from(peersWithChunk).filter(peerId => peerId.startsWith('node-'));
-        const regularPeers = Array.from(peersWithChunk).filter(peerId => !peerId.startsWith('node-'));
         let chunkFetched = false;
         let lastError = null;
         for (const peerId of [...nodePeers, ...regularPeers]) {
           if (this.activeNodes.has(peerId)) {
             try {
               const chunk = await this.fetchChunkFromPeer(peerId, chunkHash);
+              console.log(chunk,"HEYYY")
               await this.dbPut('chunkCache', { id: chunkHash, value: chunk });
               chunks.push({ chunk, hash: chunkHash });
               chunkFetched = true;
