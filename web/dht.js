@@ -404,6 +404,7 @@ export class DHT {
   }
 
   async requestData(ipHash) {
+    console.log("HEYYYYY")
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
       if (!ipHash || typeof ipHash !== 'string') throw new Error('Invalid IP hash');
@@ -451,7 +452,7 @@ export class DHT {
       console.log(sortedChunks)
       console.log(sortedChunks[0]);
       const fileType = getChunkFileType(sortedChunks[0]);
-      return { data: fullData, fileType };
+      return { data: fullData, fileType: ".jpg" };
     } catch (error) {
       console.error('requestData failed:', error);
       throw error;
