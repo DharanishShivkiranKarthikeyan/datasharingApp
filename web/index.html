@@ -438,14 +438,14 @@
     function closePublishModal() {
       const modal = document.getElementById('publishModal');
       modal.classList.remove('active');
-      document.getElementById('snippetDetails').reset();
-      document.getElementById('snippetTitle').reset();
-      document.getElementById('snippetPrice').reset();
+      document.getElementById('snippetDetails');
+      document.getElementById('snippetTitle');
+      document.getElementById('snippetPrice');
     }
     function closeBuyModal() {
       const modal = document.getElementById('buyModal');
       modal.classList.remove('active');
-      document.getElementById('publishForm').reset();
+      document.getElementById('publishForm');
       document.getElementById('modalFileLabel').textContent = 'No file chosen';
       const priceInput = document.getElementById('modalPriceInput');
       priceInput.classList.add('hidden');

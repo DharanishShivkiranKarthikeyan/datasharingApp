@@ -72,7 +72,6 @@ function redirectToPublish() {
 }
 async function openBuyModal(key) {
   let data = dht.knownObjects.get(key).metadata;
-  console.log(data,"HEYYYYY")
   window.currentProduct = data.hash;
   if (!isAuthenticated() || !dht) {
     showToast('Please sign in and ensure the app is initialized before viewing.', true);

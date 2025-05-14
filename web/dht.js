@@ -446,7 +446,8 @@ export class DHT {
         fullData.set(chunk, offset);
         offset += chunk.length;
       }
-      const fileType = getChunkFileType(sortedChunks[0].chunk);
+      console.log(sortedChunks[0]);
+      const fileType = getChunkFileType(sortedChunks[0]);
       return { data: fullData, fileType };
     } catch (error) {
       console.error('requestData failed:', error);
