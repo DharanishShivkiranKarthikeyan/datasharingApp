@@ -1,5 +1,10 @@
 // web/dht.js
-import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
+import { createLibp2p } from 'https://cdn.jsdelivr.net/npm/libp2p@0.46.0/dist/index.min.js';
+import { webRTCStar } from 'https://cdn.jsdelivr.net/npm/@libp2p/webrtc-star@8.0.0/dist/index.min.js';
+import { mplex } from 'https://cdn.jsdelivr.net/npm/@libp2p/mplex@8.0.0/dist/index.min.js';
+import { noise } from 'https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-noise@11.0.0/dist/index.min.js';
+import { generateKeyPair } from 'https://cdn.jsdelivr.net/npm/@libp2p/crypto@1.0.0/dist/index.min.js';
+import { peerIdFromKeys } from 'https://cdn.jsdelivr.net/npm/@libp2p/peer-id@2.0.0/dist/index.min.js';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
@@ -11,13 +16,12 @@ export class DHT {
     this.chunkToPeerMap = new Map();
     this.pendingRequests = new Map();
     this.db = null;
-    this.keypair = keypair;
+    this.appKeypair = keypair; // Application-level key for encryption
     this.activeNodes = new Set();
     this.nodes = new Set();
     this.offlineQueue = [];
     this.isNode = isNode;
-    this.peerId = null;
-    this.peer = null;
+    this.libp2pNode = null;
     this.connectionAttempts = new Map();
     this.maxConnectionAttempts = 3;
     this.connectionRetryDelay = 5000;
@@ -50,12 +54,12 @@ export class DHT {
     const peersToTest = Array.from(this.activeNodes).slice(0, 5);
     for (const peerId of peersToTest) {
       const peer = this.peers.get(peerId);
-      if (peer && peer.connected && peer.conn) {
+      if (peer && peer.connected && peer.stream) {
         const start = Date.now();
         try {
           await new Promise((resolve, reject) => {
             const requestId = `${peerId}-ping-${Date.now()}`;
-            peer.conn.send({ type: 'ping', requestId });
+            peer.stream.sink(JSON.stringify({ type: 'ping', requestId }));
             this.pendingRequests.set(requestId, { resolve, reject });
             setTimeout(() => {
               if (this.pendingRequests.has(requestId)) {
@@ -127,10 +131,10 @@ export class DHT {
   async syncUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
-      await this.dbPut('store', { id: 'dcrypt_identity', value: this.keypair });
+      await this.dbPut('store', { id: 'dcrypt_identity', value: this.appKeypair });
       await this.updateBalance();
       if (this.activeNodes.size > 0) await this.processOfflineQueue();
-      const userData = { type: 'userData', peerId: this.peerId, keypair: this.keypair, balance: await this.getBalance(this.keypair), timestamp: Date.now() };
+      const userData = { type: 'userData', peerId: this.libp2pNode.peerId.toString(), keypair: this.appKeypair, balance: await this.getBalance(this.appKeypair), timestamp: Date.now() };
       this.broadcast(userData);
       console.log('User data synced successfully');
     } catch (error) {
@@ -142,7 +146,7 @@ export class DHT {
   async saveUserData() {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
-      await this.dbPut('store', { id: 'dcrypt_identity', value: this.keypair });
+      await this.dbPut('store', { id: 'dcrypt_identity', value: this.appKeypair });
       await this.updateBalance();
       console.log('User data saved to IndexedDB');
     } catch (error) {
@@ -153,71 +157,75 @@ export class DHT {
 
   async initSwarm() {
     try {
-      this.peerId = this.isNode ? `node-${this.keypair}` : this.keypair;
-      console.log('Initializing PeerJS with Peer ID:', this.peerId);
-      this.peer = new Peer(this.peerId, {
-        host: '0.peerjs.com',
-        port: 443,
-        path: '/',
-        secure: true,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
-          ]
-        },
-        debug: 3 // Enable detailed PeerJS logs
+      const libp2pKeypair = await generateKeyPair('Ed25519');
+      const peerId = await peerIdFromKeys(libp2pKeypair.publicKey, libp2pKeypair.privateKey);
+      console.log('Initializing libp2p with Peer ID:', peerId.toString());
+
+      this.libp2pNode = await createLibp2p({
+        peerId,
+        transports: [webRTCStar()],
+        streamMuxers: [mplex()],
+        connectionEncryption: [noise()],
+        addresses: {
+          listen: ['/webrtc']
+        }
       });
-      return await new Promise((resolve, reject) => {
-        this.peer.on('open', id => {
-          console.log(`PeerJS connection opened with ID: ${id}`);
-          this.activeNodes.add(this.peerId);
-          this.peer.on('connection', conn => this.handleConnection(conn));
-          this.peer.on('error', err => {
-            console.error('PeerJS error:', err.type, err.message);
-            if (err.type === 'peer-unavailable') {
-              const peerId = err.message.match(/Peer (.+) is unavailable/)?.[1];
-              if (peerId) this.handlePeerDisconnect(peerId);
-            }
-          });
-          this.peer.on('disconnected', () => {
-            console.log('PeerJS disconnected. Attempting to reconnect...');
-            this.peer.reconnect();
-          });
-          window.addEventListener('beforeunload', () => {
-            if (this.peer && !this.peer.destroyed) {
-              this.peer.destroy();
-              console.log('PeerJS peer destroyed on page unload');
-            }
-          });
-          setInterval(() => this.discoverPeers(), 3000);
-          setInterval(() => this.measureLatency(), 60000);
-          resolve();
-        });
-        this.peer.on('error', err => reject(err));
+
+      this.libp2pNode.handle('/dht-protocol/1.0.0', async ({ stream, connection }) => {
+        const peerId = connection.remotePeer.toString();
+        console.log(`Incoming stream from peer: ${peerId} at ${Date.now()}`);
+        this.peers.set(peerId, { connected: true, stream });
+        this.activeNodes.add(peerId);
+        for await (const data of stream.source) {
+          this.handlePeerData(JSON.parse(data.toString()), peerId);
+        }
+        console.log(`Stream closed with peer: ${peerId}`);
+        this.handlePeerDisconnect(peerId);
       });
+
+      this.libp2pNode.on('error', err => {
+        console.error('libp2p error:', err);
+      });
+
+      this.libp2pNode.on('peer:discovery', peerId => {
+        console.log('Discovered peer:', peerId.toString());
+        if (!this.peers.has(peerId.toString())) {
+          this.peers.set(peerId.toString(), { connected: false, stream: null });
+          this.connectToPeer(peerId.toString());
+        }
+      });
+
+      window.addEventListener('beforeunload', () => {
+        if (this.libp2pNode) {
+          this.libp2pNode.stop();
+          console.log('libp2p node stopped on page unload');
+        }
+      });
+
+      setInterval(() => this.discoverPeers(), 3000);
+      setInterval(() => this.measureLatency(), 60000);
     } catch (error) {
       console.error('initSwarm failed:', error);
       throw error;
     }
   }
 
-  discoverPeers() {
+  async discoverPeers() {
     console.log('Discovering peers...');
-    const knownPeerIds = [...Array.from(this.nodes), ...Array.from(this.activeNodes)].filter(id => id !== this.peerId);
+    const knownPeerIds = [...Array.from(this.nodes), ...Array.from(this.activeNodes)].filter(id => id !== this.libp2pNode.peerId.toString());
     if (knownPeerIds.length === 0) {
       console.warn('No known peers to connect to.');
       return;
     }
-    knownPeerIds.forEach(peerId => {
+    for (const peerId of knownPeerIds) {
       if (!this.peers.has(peerId)) {
-        this.peers.set(peerId, { connected: false, conn: null });
+        this.peers.set(peerId, { connected: false, stream: null });
         console.log('Discovered peer:', peerId);
-        this.connectToPeer(peerId);
+        await this.connectToPeer(peerId);
       } else if (!this.peers.get(peerId).connected) {
-        this.connectToPeer(peerId);
+        await this.connectToPeer(peerId);
       }
-    });
+    }
     this.peers.forEach((peer, peerId) => {
       if (!peer.connected && (this.connectionAttempts.get(peerId) || 0) >= this.maxConnectionAttempts) {
         console.log(`Removing unreachable peer: ${peerId}`);
@@ -228,68 +236,44 @@ export class DHT {
     });
   }
 
-  connectToPeer(peerId, attempt = 1) {
+  async connectToPeer(peerId, attempt = 1) {
     if (this.peers.get(peerId)?.connected) return;
-    console.log(`Connecting to peer: ${peerId} (Attempt ${attempt}/3)`);
-    const conn = this.peer.connect(peerId, { reliable: true });
-    conn.on('open', () => {
+    console.log(`Connecting to peer: ${peerId} (Attempt ${attempt}/${this.maxConnectionAttempts})`);
+    try {
+      const stream = await this.libp2pNode.dialProtocol(peerId, '/dht-protocol/1.0.0');
       console.log(`Connection opened with peer: ${peerId}`);
-      this.peers.set(peerId, { connected: true, conn });
+      this.peers.set(peerId, { connected: true, stream });
       this.activeNodes.add(peerId);
-      conn.send({ type: 'handshake', peerId: this.peerId });
-    });
-    conn.on('data', (data) => {
-      console.log(`Received data from peer ${peerId}:`, data);
-      this.handlePeerData(data, peerId);
-    });
-    conn.on('close', () => {
-      console.log(`Connection closed with peer ${peerId}`);
+      this.connectionAttempts.delete(peerId);
+      stream.sink(JSON.stringify({ type: 'handshake', peerId: this.libp2pNode.peerId.toString() }));
+      for await (const data of stream.source) {
+        this.handlePeerData(JSON.parse(data.toString()), peerId);
+      }
+      console.log(`Connection closed with peer: ${peerId}`);
       this.handlePeerDisconnect(peerId);
-    });
-    conn.on('error', (err) => {
+    } catch (err) {
       console.error(`Connection error with peer ${peerId}:`, err);
-      if (attempt < 3) {
-        setTimeout(() => this.connectToPeer(peerId, attempt + 1), 5000 * attempt);
+      if (attempt < this.maxConnectionAttempts) {
+        this.connectionAttempts.set(peerId, attempt);
+        setTimeout(() => this.connectToPeer(peerId, attempt + 1), this.connectionRetryDelay * attempt);
       } else {
         console.log(`Max attempts reached for peer ${peerId}. Marking as unreachable.`);
         this.handlePeerDisconnect(peerId);
       }
-    });
-  }
-
-  handleConnection(conn) {
-    const peerId = conn.peer;
-    console.log(`Incoming connection from peer: ${peerId} at ${Date.now()}`);
-    conn.on('open', () => {
-      console.log(`Connection opened with peer: ${peerId}`);
-      this.peers.set(peerId, { connected: true, conn });
-      this.activeNodes.add(peerId);
-    });
-    conn.on('data', (data) => {
-      console.log(`Received data from peer ${peerId}:`, data);
-      this.handlePeerData(data, peerId);
-    });
-    conn.on('close', () => {
-      console.log(`Connection closed with peer ${peerId}`);
-      this.handlePeerDisconnect(peerId);
-    });
-    conn.on('error', (err) => {
-      console.error(`Connection error with peer ${peerId}:`, err);
-      this.handlePeerDisconnect(peerId);
-    });
+    }
   }
 
   handlePeerDisconnect(peerId) {
     const peer = this.peers.get(peerId);
     if (peer) {
       peer.connected = false;
-      peer.conn = null;
+      peer.stream = null;
       this.activeNodes.delete(peerId);
       console.log(`Peer disconnected: ${peerId}. Will reconnect on next discovery.`);
     }
   }
 
-  handlePeerData(data, peerId) {
+  async handlePeerData(data, peerId) {
     console.log(`Received data from peer ${peerId}:`, data);
     switch (data.type) {
       case 'handshake':
@@ -302,17 +286,17 @@ export class DHT {
         break;
       case 'ip':
         this.knownObjects.set(data.ipHash, { metadata: data.metadata, chunks: data.chunkHashes });
-        this.dbPut('store', { id: data.ipHash, value: JSON.stringify({ metadata: data.metadata, chunks: data.chunkHashes }) });
+        await this.dbPut('store', { id: data.ipHash, value: JSON.stringify({ metadata: data.metadata, chunks: data.chunkHashes }) });
         console.log(`Received IP ${data.ipHash} from peer ${peerId}`);
         break;
       case 'chunkRequest':
-        this.handleChunkRequest(data, peerId);
+        await this.handleChunkRequest(data, peerId);
         break;
       case 'chunkResponse':
         this.handleChunkResponse(data);
         break;
       case 'metadataRequest':
-        this.handleMetadataRequest(data, peerId);
+        await this.handleMetadataRequest(data, peerId);
         break;
       case 'metadataResponse':
         this.handleMetadataResponse(data);
@@ -321,11 +305,13 @@ export class DHT {
         console.log(`Received user data from peer ${peerId}:`, data);
         break;
       case 'storeChunk':
-        this.storeChunkFromPeer(data.chunkHash, data.chunkData, peerId);
+        await this.storeChunkFromPeer(data.chunkHash, data.chunkData, peerId);
         break;
       case 'ping':
         const peer = this.peers.get(peerId);
-        if (peer && peer.connected && peer.conn) peer.conn.send({ type: 'pong', requestId: data.requestId });
+        if (peer && peer.connected && peer.stream) {
+          peer.stream.sink(JSON.stringify({ type: 'pong', requestId: data.requestId }));
+        }
         break;
       case 'pong':
         const request = this.pendingRequests.get(data.requestId);
@@ -346,7 +332,7 @@ export class DHT {
     try {
       await this.dbPut('chunkCache', { id: chunkHash, value: chunkData });
       let peerSet = this.chunkToPeerMap.get(chunkHash) || new Set();
-      peerSet.add(this.peerId);
+      peerSet.add(this.libp2pNode.peerId.toString());
       this.chunkToPeerMap.set(chunkHash, peerSet);
       console.log(`Stored chunk ${chunkHash} from peer ${peerId}`);
     } catch (error) {
@@ -360,7 +346,7 @@ export class DHT {
       if (!chunkHash || typeof chunkHash !== 'string' || chunkHash.trim() === '') throw new Error('Invalid chunk hash');
       await this.dbPut('chunkCache', { id: chunkHash, value: chunkData });
       let peerSet = this.chunkToPeerMap.get(chunkHash) || new Set();
-      peerSet.add(this.peerId);
+      peerSet.add(this.libp2pNode.peerId.toString());
       this.chunkToPeerMap.set(chunkHash, peerSet);
       if (this.activeNodes.size > 0) {
         const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
@@ -368,19 +354,19 @@ export class DHT {
           const nodeIndex = chunkIndex % activeNodeList.length;
           const targetNode = activeNodeList[nodeIndex];
           const nodePeer = this.peers.get(targetNode);
-          if (nodePeer && nodePeer.connected && nodePeer.conn) {
-            nodePeer.conn.send({ type: 'storeChunk', chunkHash, chunkData, peerId: this.peerId });
+          if (nodePeer && nodePeer.connected && nodePeer.stream) {
+            nodePeer.stream.sink(JSON.stringify({ type: 'storeChunk', chunkHash, chunkData, peerId: this.libp2pNode.peerId.toString() }));
             peerSet.add(targetNode);
             this.chunkToPeerMap.set(chunkHash, peerSet);
             console.log(`Sent chunk ${chunkHash} to node ${targetNode}`);
           }
         }
-        const regularPeers = Array.from(this.activeNodes).filter(peerId => !peerId.startsWith('node-') && peerId !== this.peerId);
+        const regularPeers = Array.from(this.activeNodes).filter(peerId => !peerId.startsWith('node-') && peerId !== this.libp2pNode.peerId.toString());
         if (regularPeers.length > 0) {
           const randomPeerId = regularPeers[Math.floor(Math.random() * regularPeers.length)];
           const randomPeer = this.peers.get(randomPeerId);
-          if (randomPeer && randomPeer.connected && randomPeer.conn) {
-            randomPeer.conn.send({ type: 'storeChunk', chunkHash, chunkData, peerId: this.peerId });
+          if (randomPeer && randomPeer.connected && randomPeer.stream) {
+            randomPeer.stream.sink(JSON.stringify({ type: 'storeChunk', chunkHash, chunkData, peerId: this.libp2pNode.peerId.toString() }));
             peerSet.add(randomPeerId);
             this.chunkToPeerMap.set(chunkHash, peerSet);
             console.log(`Sent chunk ${chunkHash} to peer ${randomPeerId}`);
@@ -397,20 +383,20 @@ export class DHT {
   }
 
   broadcastChunk(chunkHash) {
-    const message = { type: 'chunk', chunkHash, peerId: this.peerId };
+    const message = { type: 'chunk', chunkHash, peerId: this.libp2pNode.peerId.toString() };
     this.broadcast(message);
     console.log(`Broadcasted chunk ${chunkHash} to ${this.activeNodes.size} peers`);
   }
 
   async publishIP(metadata, content, fileType) {
-    if (!this.db || !this.keypair) throw new Error('IndexedDB or keypair not initialized');
+    if (!this.db || !this.appKeypair) throw new Error('IndexedDB or keypair not initialized');
     try {
       const tags = Array.isArray(metadata.tags) ? metadata.tags.map(tag => String(tag).trim()).filter(tag => tag !== '') : [];
       const isPremium = !!metadata.isPremium;
       const priceUsd = isPremium ? (metadata.priceUsd || 30) : 0;
       const contentArray = new Uint8Array(content);
       const contentType = metadata.content_type || '';
-      const creatorId = this.keypair;
+      const creatorId = this.appKeypair;
       const fileTypeSafe = fileType || 'text/plain';
       const ip = createIntellectualProperty(contentArray, contentType, tags, isPremium, priceUsd, creatorId, fileTypeSafe);
       const contentBytes = getIpContent(ip);
@@ -418,7 +404,7 @@ export class DHT {
       const ipHash = this.uint8ArrayToBase64Url(ipHashBytes);
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
-      const chunks = await chunkEncrypt(ip, this.keypair, minChunks);
+      const chunks = await chunkEncrypt(ip, this.appKeypair, minChunks);
       const chunkHashes = await Promise.all(chunks.map(chunk => getChunkHash(chunk).then(hash => this.uint8ArrayToBase64Url(hash))));
       const updatedMetadata = { ...metadata, chunk_count: chunks.length, isPremium, priceUsd, chunks: chunkHashes };
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
@@ -435,7 +421,7 @@ export class DHT {
   }
 
   broadcastIP(ipHash, metadata, chunkHashes) {
-    const message = { type: 'ip', ipHash, metadata, chunkHashes, peerId: this.peerId };
+    const message = { type: 'ip', ipHash, metadata, chunkHashes, peerId: this.libp2pNode.peerId.toString() };
     this.broadcast(message);
     console.log(`Broadcasted IP ${ipHash} to ${this.activeNodes.size} peers`);
   }
@@ -474,7 +460,7 @@ export class DHT {
         if (!chunkFetched) throw lastError || new Error(`No available peer for chunk ${chunkHash}`);
       }
       const sortedChunks = chunks.sort((a, b) => getChunkIndex(a.chunk) - getChunkIndex(b.chunk));
-      const decryptedData = await Promise.all(sortedChunks.map(({ chunk }) => decryptChunk(chunk, this.keypair)));
+      const decryptedData = await Promise.all(sortedChunks.map(({ chunk }) => decryptChunk(chunk, this.appKeypair)));
       const fullData = new Uint8Array(decryptedData.reduce((acc, chunk) => acc + chunk.length, 0));
       let offset = 0;
       for (const chunk of decryptedData) {
@@ -494,8 +480,8 @@ export class DHT {
     if (!peerEntry) throw new Error('No peers available');
     const [peerId, peer] = peerEntry;
     const requestId = `${peerId}-${hash}-${Date.now()}`;
-    const message = { type: 'metadataRequest', requestId, ipHash: hash, peerId: this.peerId };
-    peer.conn.send(message);
+    const message = { type: 'metadataRequest', requestId, ipHash: hash, peerId: this.libp2pNode.peerId.toString() };
+    peer.stream.sink(JSON.stringify(message));
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(requestId, { resolve, reject, hash });
       setTimeout(() => {
@@ -509,10 +495,10 @@ export class DHT {
 
   async fetchChunkFromPeer(peerId, hash) {
     const peer = this.peers.get(peerId);
-    if (!peer || !peer.connected || !peer.conn) throw new Error(`Peer ${peerId} is not connected`);
+    if (!peer || !peer.connected || !peer.stream) throw new Error(`Peer ${peerId} is not connected`);
     const requestId = `${peerId}-${hash}-${Date.now()}`;
-    const message = { type: 'chunkRequest', requestId, chunkHash: hash, peerId: this.peerId };
-    peer.conn.send(message);
+    const message = { type: 'chunkRequest', requestId, chunkHash: hash, peerId: this.libp2pNode.peerId.toString() };
+    peer.stream.sink(JSON.stringify(message));
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(requestId, { resolve, reject, hash });
       setTimeout(() => {
@@ -524,27 +510,26 @@ export class DHT {
     });
   }
 
-  handleChunkRequest(data, peerId) {
+  async handleChunkRequest(data, peerId) {
     const { requestId, chunkHash } = data;
-    this.dbGet('chunkCache', chunkHash).then(chunk => {
-      if (chunk && chunk.value) {
-        const peer = this.peers.get(peerId);
-        if (peer && peer.connected && peer.conn) {
-          peer.conn.send({ type: 'chunkResponse', requestId, chunkHash, chunkData: chunk.value, peerId: this.peerId });
-          console.log(`Sent chunk ${chunkHash} to peer ${peerId}`);
-        }
-      } else {
-        console.warn(`Chunk ${chunkHash} not found for peer ${peerId}`);
+    const chunk = await this.dbGet('chunkCache', chunkHash);
+    if (chunk && chunk.value) {
+      const peer = this.peers.get(peerId);
+      if (peer && peer.connected && peer.stream) {
+        peer.stream.sink(JSON.stringify({ type: 'chunkResponse', requestId, chunkHash, chunkData: chunk.value, peerId: this.libp2pNode.peerId.toString() }));
+        console.log(`Sent chunk ${chunkHash} to peer ${peerId}`);
       }
-    }).catch(error => console.error(`Failed to retrieve chunk ${chunkHash} for peer ${peerId}:`, error));
+    } else {
+      console.warn(`Chunk ${chunkHash} not found for peer ${peerId}`);
+    }
   }
 
-  handleMetadataRequest(data, peerId) {
+  async handleMetadataRequest(data, peerId) {
     const { requestId, ipHash } = data;
     const ipObject = this.knownObjects.get(ipHash);
     const peer = this.peers.get(peerId);
-    if (peer && peer.connected && peer.conn) {
-      peer.conn.send({ type: 'metadataResponse', requestId, ipObject, peerId: this.peerId, ipHash });
+    if (peer && peer.connected && peer.stream) {
+      peer.stream.sink(JSON.stringify({ type: 'metadataResponse', requestId, ipObject, peerId: this.libp2pNode.peerId.toString(), ipHash }));
     }
   }
 
@@ -587,8 +572,8 @@ export class DHT {
       const newBalance = currentBalance + commissionPerNode;
       await this.putBalance(nodeKeypair, newBalance);
       const nodePeer = this.peers.get(nodePeerId);
-      if (nodePeer && nodePeer.connected && nodePeer.conn) {
-        nodePeer.conn.send({ type: 'commission', amount: commissionPerNode, newBalance, peerId: this.peerId });
+      if (nodePeer && nodePeer.connected && nodePeer.stream) {
+        nodePeer.stream.sink(JSON.stringify({ type: 'commission', amount: commissionPerNode, newBalance, peerId: this.libp2pNode.peerId.toString() }));
       }
     }
   }
@@ -604,14 +589,14 @@ export class DHT {
     if (typeof amount !== 'number' || amount < 0) throw new Error('Invalid balance amount');
     await this.dbPut('store', { id: 'balance_' + keypair, value: amount.toString() });
     if (this.activeNodes.size > 0) {
-      this.broadcast({ type: 'userData', peerId: this.peerId, keypair: this.keypair, balance: amount, timestamp: Date.now() });
+      this.broadcast({ type: 'userData', peerId: this.libp2pNode.peerId.toString(), keypair: this.appKeypair, balance: amount, timestamp: Date.now() });
     }
   }
 
   async updateBalance() {
     if (!this.db) throw new Error('IndexedDB not initialized');
-    const balance = await this.getBalance(this.keypair);
-    await this.putBalance(this.keypair, balance);
+    const balance = await this.getBalance(this.appKeypair);
+    await this.putBalance(this.appKeypair, balance);
   }
 
   async queueOfflineOperation(operation) {
@@ -695,9 +680,9 @@ export class DHT {
 
   broadcast(message) {
     this.activeNodes.forEach(peerId => {
-      if (peerId !== this.peerId) {
+      if (peerId !== this.libp2pNode.peerId.toString()) {
         const peer = this.peers.get(peerId);
-        if (peer && peer.connected && peer.conn) peer.conn.send(message);
+        if (peer && peer.connected && peer.stream) peer.stream.sink(JSON.stringify(message));
       }
     });
   }
@@ -718,9 +703,9 @@ export class DHT {
   }
 
   destroy() {
-    if (this.peer && !this.peer.destroyed) {
-      this.peer.destroy();
-      console.log('PeerJS peer destroyed');
+    if (this.libp2pNode) {
+      this.libp2pNode.stop();
+      console.log('libp2p node stopped');
     }
     this.peers.clear();
     this.activeNodes.clear();
