@@ -894,26 +894,8 @@ async function buySnippet(hash) {
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
-    let ipObject = dht.getIPmetadata(hash);
-    if (!ipObject) {
-      const snippetRef = doc(db, 'snippets', hash);
-      const snippetSnap = await getDoc(snippetRef);
-      if (!snippetSnap.exists()) throw new Error('Snippet not found');
-
-      const data = snippetSnap.data();
-      ipObject = {
-        metadata: {
-          content_type: data.ipHash,
-          description: data.description || 'No description',
-          tags: data.tags || [],
-          isPremium: data.isPremium || false,
-          priceUsd: data.priceUsd || 0,
-        },
-        chunks: data.chunks || [],
-      };
-      dht.knownObjects.set(hash, ipObject);
-      await dht.broadcastIP(hash, ipObject.metadata, ipObject.chunks);
-    }
+    let ipObject = await dht.getIPmetadata(hash);
+    console.log(ipObject,"IP OBJECT");
 
     const isPremium = ipObject.metadata.isPremium || false;
     const priceUsd = isPremium ? (ipObject.metadata.priceUsd || 0) : 0;
@@ -932,7 +914,7 @@ async function buySnippet(hash) {
       await dht.dbAdd('transactions', { type: 'buy', amount: 0, timestamp: Date.now() });
     }
 
-    const { data, fileType } = await dht.requestData(hash);
+    const { data, fileType } = await dht.requestData(ipObject);
     showToast('Snippet retrieved successfully!');
 
     await Promise.all([
