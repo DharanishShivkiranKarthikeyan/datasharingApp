@@ -1,9 +1,84 @@
 import Peer from 'peerjs';
-import { Kado } from '@kado/core';
+import { createLibp2p } from 'libp2p';
+import { kadDHT } from '@libp2p/kad-dht';
+import { createFromJSON } from '@libp2p/peer-id';
 import CryptoJS from 'crypto-js';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'firebase/firestore';
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
+import { multiaddr } from '@multiformats/multiaddr';
+
+// Custom PeerJsTransport for libp2p
+class PeerJsTransport {
+  constructor(peer) {
+    this.peer = peer;
+    this.connections = new Map();
+  }
+
+  async dial(multiaddr) {
+    const peerId = multiaddr.getPeerId();
+    if (!peerId) throw new Error('No peer ID in multiaddr');
+    const conn = this.peer.connect(peerId, { reliable: true });
+    return new Promise((resolve, reject) => {
+      conn.on('open', () => {
+        this.connections.set(peerId, conn);
+        resolve({
+          id: peerId,
+          remotePeer: peerId,
+          remoteAddr: multiaddr,
+          close: () => conn.close(),
+          abort: () => conn.close(),
+          getStreams: () => [{
+            id: `stream-${peerId}`,
+            protocol: '/webrtc/1.0.0',
+            read: (cb) => {
+              conn.on('data', data => cb(null, data));
+              conn.on('close', () => cb(new Error('Connection closed')));
+            },
+            write: (data) => conn.send(data),
+            close: () => conn.close(),
+            abort: () => conn.close(),
+          }],
+        });
+      });
+      conn.on('error', reject);
+    });
+  }
+
+  createListener(options) {
+    return {
+      listen: (multiaddr) => {
+        this.peer.on('connection', conn => {
+          this.connections.set(conn.peer, conn);
+          options.onConnection?.({
+            id: conn.peer,
+            remotePeer: conn.peer,
+            remoteAddr: multiaddr,
+            close: () => conn.close(),
+            abort: () => conn.close(),
+            getStreams: () => [{
+              id: `stream-${conn.peer}`,
+              protocol: '/webrtc/1.0.0',
+              read: (cb) => {
+                conn.on('data', data => cb(null, data));
+                conn.on('close', () => cb(new Error('Connection closed')));
+              },
+              write: (data) => conn.send(data),
+              close: () => conn.close(),
+              abort: () => conn.close(),
+            }],
+          });
+        });
+      },
+      close: () => this.peer.destroy(),
+      getAddrs: () => [multiaddr(`/webrtc/p2p/${this.peer.id}`)],
+    };
+  }
+
+  filter(multiaddrs) {
+    return multiaddrs.filter(ma => ma.protoNames().includes('webrtc'));
+  }
+}
 
 export class DHT {
   constructor(keypair, isNode = false) {
@@ -19,12 +94,13 @@ export class DHT {
     this.isNode = isNode;
     this.peerId = null;
     this.peer = null;
+    this.libp2p = null;
+    this.kadDht = null;
     this.connectionAttempts = new Map();
     this.maxConnectionAttempts = 3;
     this.connectionRetryDelay = 5000;
     this.averageLatency = 0;
     this.bootstrapNodes = new Set();
-    this.kado = null;
     this.nodeLatencies = new Map(); // Custom latency tracking
 
     // Generate 160-bit Kademlia ID
@@ -32,15 +108,48 @@ export class DHT {
     const hash = CryptoJS.SHA256(this.peerId).toString(CryptoJS.enc.Hex);
     this.kademliaId = hash.substring(0, 40); // 160-bit ID
 
-    // Initialize Kado
-    this.kado = new Kado({
-      identity: this.kademliaId,
-      storage: 'memory', // In-memory storage; use IndexedDB adapter if needed
-      k: 20, // Bucket size
-    });
-
     console.log('DHT initialized with keypair:', keypair, 'isNode:', isNode);
     this.initializeKnownNodes();
+  }
+
+  async initializeLibp2p() {
+    if (!this.isNode) return; // Only nodes run libp2p
+    this.peer = new Peer(this.peerId, {
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { url: 'turn:192.158.29.39:3478?transport=tcp', credential: 'JZEOEt2V3Qb0y27GRntt2u2PAYA=', username: '28224511:1379330808' }
+        ]
+      },
+      debug: 3
+    });
+
+    await new Promise((resolve, reject) => {
+      this.peer.on('open', resolve);
+      this.peer.on('error', reject);
+    });
+
+    const peerId = await createFromJSON({ id: this.kademliaId });
+    this.libp2p = await createLibp2p({
+      peerId,
+      transports: [new PeerJsTransport(this.peer)],
+      addresses: {
+        listen: [`/webrtc/p2p/${this.peerId}`]
+      },
+      services: {
+        dht: kadDHT({
+          kBucketSize: 20,
+          clientMode: false
+        })
+      }
+    });
+
+    this.kadDht = this.libp2p.services.dht;
+    console.log('libp2p and kad-dht initialized');
   }
 
   async initializeKnownNodes() {
@@ -51,7 +160,6 @@ export class DHT {
         nodesSnapshot.forEach(doc => this.nodes.add(`node-${doc.id}`));
         console.log('Fetched nodes:', Array.from(this.nodes));
 
-        // Select a bootstrap node
         if (this.nodes.size > 0) {
           const bootstrapNode = await this.selectBootstrapNode();
           if (bootstrapNode) {
@@ -67,9 +175,10 @@ export class DHT {
     await fetchNodes();
     setInterval(fetchNodes, 5 * 60 * 1000);
     if (this.isNode) {
-      setInterval(() => this.refreshRoutingTable(), 10 * 60 * 1000); // Refresh every 10 minutes
-      setInterval(() => this.republishData(), 6 * 60 * 60 * 1000); // Republish every 6 hours
-      setInterval(() => this.cleanupDHTStore(), 24 * 60 * 60 * 1000); // Cleanup daily
+      await this.initializeLibp2p();
+      setInterval(() => this.refreshRoutingTable(), 10 * 60 * 1000);
+      setInterval(() => this.republishData(), 6 * 60 * 60 * 1000);
+      setInterval(() => this.cleanupDHTStore(), 24 * 60 * 60 * 1000);
     }
   }
 
@@ -77,7 +186,6 @@ export class DHT {
     const nodes = Array.from(this.nodes).filter(id => id !== this.peerId);
     if (nodes.length === 0) return null;
 
-    // Try to select by latency
     let minLatency = Infinity;
     let selectedNode = null;
     for (const nodeId of nodes.slice(0, 5)) {
@@ -87,7 +195,6 @@ export class DHT {
         selectedNode = nodeId;
       }
     }
-    // Fallback to random selection
     if (!selectedNode) {
       selectedNode = nodes[Math.floor(Math.random() * nodes.length)];
     }
@@ -109,8 +216,8 @@ export class DHT {
                   this.bootstrapNodes.add(nodeId);
                   if (this.isNode) {
                     const nodeHash = CryptoJS.SHA256(nodeId).toString(CryptoJS.enc.Hex).substring(0, 40);
-                    this.kado.router.addContact({ identity: nodeHash, address: nodeId });
-                    this.nodeLatencies.set(nodeHash, Infinity); // Initialize latency
+                    this.kadDht.addPeer(nodeHash, [multiaddr(`/webrtc/p2p/${nodeId}`)]);
+                    this.nodeLatencies.set(nodeHash, Infinity);
                   }
                 }
               });
@@ -151,7 +258,7 @@ export class DHT {
         const latency = Date.now() - start;
         if (this.isNode) {
           const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-          this.nodeLatencies.set(nodeHash, latency); // Custom latency tracking
+          this.nodeLatencies.set(nodeHash, latency);
         }
         return latency;
       } catch (error) {
@@ -176,11 +283,10 @@ export class DHT {
   async refreshRoutingTable() {
     if (!this.isNode) return;
     try {
-      // Generate a random ID for FIND_NODE
       const randomId = CryptoJS.SHA256(String(Math.random())).toString(CryptoJS.enc.Hex).substring(0, 40);
-      const nodes = await this.kado.findNode(randomId, { count: 20 });
-      for (const node of nodes) {
-        await this.connectToPeer(node.address);
+      const peers = await this.kadDht.getClosestPeers(randomId);
+      for (const peer of peers) {
+        await this.connectToPeer(peer.id.toString());
       }
       console.log('Refreshed routing table');
     } catch (error) {
@@ -267,6 +373,7 @@ export class DHT {
 
   async initSwarm() {
     try {
+      if (this.isNode) return; // Nodes initialize in initializeLibp2p
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, {
         host: '0.peerjs.com',
@@ -323,9 +430,8 @@ export class DHT {
       return;
     }
     if (this.isNode) {
-      // Kado-based discovery
-      const nodes = await this.kado.findNode(this.kademliaId, { count: 20 });
-      knownPeerIds.push(...nodes.map(node => node.address));
+      const peers = await this.kadDht.getClosestPeers(this.kademliaId);
+      knownPeerIds.push(...peers.map(peer => peer.id.toString()));
     }
     knownPeerIds.forEach(peerId => {
       if (!this.peers.has(peerId)) {
@@ -336,7 +442,6 @@ export class DHT {
         this.connectToPeer(peerId);
       }
     });
-    // Enforce connection limit
     if (this.peers.size > 50) {
       const peersToRemove = Array.from(this.peers.entries())
         .filter(([_, peer]) => !peer.connected)
@@ -348,7 +453,7 @@ export class DHT {
         this.activeNodes.delete(peerId);
         if (this.isNode) {
           const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-          this.kado.router.removeContact(nodeHash);
+          this.kadDht.removePeer(nodeHash);
         }
       });
     }
@@ -364,7 +469,7 @@ export class DHT {
       this.activeNodes.add(peerId);
       if (this.isNode) {
         const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-        this.kado.router.addContact({ identity: nodeHash, address: peerId });
+        this.kadDht.addPeer(nodeHash, [multiaddr(`/webrtc/p2p/${peerId}`)]);
         this.nodeLatencies.set(nodeHash, Infinity);
       }
       conn.send({ type: 'handshake', peerId: this.peerId });
@@ -397,7 +502,7 @@ export class DHT {
       this.activeNodes.add(peerId);
       if (this.isNode) {
         const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-        this.kado.router.addContact({ identity: nodeHash, address: peerId });
+        this.kadDht.addPeer(nodeHash, [multiaddr(`/webrtc/p2p/${peerId}`)]);
         this.nodeLatencies.set(nodeHash, Infinity);
       }
     });
@@ -423,7 +528,7 @@ export class DHT {
       this.activeNodes.delete(peerId);
       if (this.isNode) {
         const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-        this.kado.router.removeContact(nodeHash);
+        this.kadDht.removePeer(nodeHash);
         this.nodeLatencies.delete(nodeHash);
       }
       console.log(`Peer disconnected: ${peerId}. Will reconnect on next discovery.`);
@@ -515,15 +620,15 @@ export class DHT {
       const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
       let targetNodes = [];
       if (this.isNode) {
-        targetNodes = await this.kado.findNode(keyHash, { count: 20 });
+        const peers = await this.kadDht.getClosestPeers(keyHash);
+        targetNodes = peers.map(peer => ({ id: peer.id.toString() })).slice(0, 20);
       } else {
-        // Regular user: Forward to bootstrap node
         const bootstrapNode = Array.from(this.bootstrapNodes)[0];
         if (!bootstrapNode) throw new Error('No bootstrap node available');
         targetNodes = await this.requestNodesFromPeer(bootstrapNode, keyHash);
       }
       for (const node of targetNodes) {
-        const peerId = node.address || node.id; // Handle both kado and peerjs node formats
+        const peerId = node.id || node.address;
         const peer = this.peers.get(peerId);
         if (peer && peer.connected && peer.conn) {
           peer.conn.send({ type: 'storeDHT', key, value, ttl, peerId: this.peerId });
@@ -531,7 +636,7 @@ export class DHT {
       }
       if (this.isNode) {
         await this.storeDHTFromPeer(key, value, ttl, this.peerId);
-        await this.kado.put(keyHash, value, { ttl }); // Store in kado
+        await this.kadDht.put(Buffer.from(keyHash), Buffer.from(value));
       }
       console.log(`Stored DHT key ${key} on ${targetNodes.length} nodes`);
     } catch (error) {
@@ -541,11 +646,11 @@ export class DHT {
   }
 
   async storeDHTFromPeer(key, value, ttl, peerId) {
-    if (!this.isNode) return; // Only nodes store DHT data
+    if (!this.isNode) return;
     try {
       await this.dbPut('dhtStore', { id: key, value, ttl, timestamp: Date.now() });
       const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
-      await this.kado.put(keyHash, value, { ttl });
+      await this.kadDht.put(Buffer.from(keyHash), Buffer.from(value));
       console.log(`Stored DHT key ${key} from peer ${peerId}`);
     } catch (error) {
       console.error(`Failed to store DHT key ${key} from peer ${peerId}:`, error);
@@ -556,21 +661,19 @@ export class DHT {
     try {
       const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
       if (this.isNode) {
-        const value = await this.kado.get(keyHash);
+        const value = await this.kadDht.get(Buffer.from(keyHash));
         if (value) {
           const stored = await this.dbGet('dhtStore', key);
           if (stored && stored.timestamp + stored.ttl > Date.now()) {
             return stored.value;
           }
         }
-        // Query closer nodes
-        const nodes = await this.kado.findNode(keyHash, { count: 20 });
-        for (const node of nodes) {
-          const value = await this.requestDHTFromPeer(node.address, key);
+        const peers = await this.kadDht.getClosestPeers(keyHash);
+        for (const peer of peers) {
+          const value = await this.requestDHTFromPeer(peer.id.toString(), key);
           if (value) return value;
         }
       } else {
-        // Regular user: Query bootstrap node
         const bootstrapNode = Array.from(this.bootstrapNodes)[0];
         if (!bootstrapNode) throw new Error('No bootstrap node available');
         const value = await this.requestDHTFromPeer(bootstrapNode, key);
@@ -590,7 +693,7 @@ export class DHT {
     peer.conn.send({ type: 'findDHT', key: keyHash, requestId, peerId: this.peerId });
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(requestId, {
-        resolve: ({ nodes }) => resolve(nodes.map(nodeId => ({ address: nodeId }))),
+        resolve: ({ nodes }) => resolve(nodes.map(nodeId => ({ id: nodeId }))),
         reject,
       });
       setTimeout(() => {
@@ -622,7 +725,7 @@ export class DHT {
   }
 
   async handleFindDHT(data, peerId) {
-    if (!this.isNode) return; // Only nodes handle DHT queries
+    if (!this.isNode) return;
     const { key, requestId } = data;
     const peer = this.peers.get(peerId);
     if (!peer || !peer.connected || !peer.conn) return;
@@ -631,8 +734,8 @@ export class DHT {
       peer.conn.send({ type: 'findDHTResponse', requestId, value: stored.value, nodes: [], peerId: this.peerId });
     } else {
       const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
-      const nodes = await this.kado.findNode(keyHash, { count: 20 });
-      peer.conn.send({ type: 'findDHTResponse', requestId, value: null, nodes: nodes.map(node => node.address), peerId: this.peerId });
+      const peers = await this.kadDht.getClosestPeers(keyHash);
+      peer.conn.send({ type: 'findDHTResponse', requestId, value: null, nodes: peers.map(peer => peer.id.toString()), peerId: this.peerId });
     }
   }
 
@@ -664,8 +767,6 @@ export class DHT {
           await new Promise(resolve => {
             store.delete(entry.id).onsuccess = resolve;
           });
-          const keyHash = CryptoJS.SHA256(entry.id).toString(CryptoJS.enc.Hex).substring(0, 40);
-          await this.kado.delete(keyHash);
         }
       }
       console.log('Cleaned up expired DHT entries');
@@ -675,7 +776,7 @@ export class DHT {
   }
 
   async storeChunkFromPeer(chunkHash, chunkData, peerId) {
-    if (!this.isNode) return; // Only nodes store chunks
+    if (!this.isNode) return;
     try {
       await this.dbPut('chunkCache', { id: chunkHash, value: chunkData });
       let peerSet = this.chunkToPeerMap.get(chunkHash) || new Set();
@@ -699,16 +800,17 @@ export class DHT {
         const chunkKeyHash = CryptoJS.SHA256(chunkHash).toString(CryptoJS.enc.Hex).substring(0, 40);
         let targetNodes = [];
         if (this.isNode) {
-          targetNodes = await this.kado.findNode(chunkKeyHash, { count: 3 }); // Store on 3 nodes
+          const peers = await this.kadDht.getClosestPeers(chunkKeyHash);
+          targetNodes = peers.map(peer => ({ id: peer.id.toString() })).slice(0, 3);
         } else {
           const bootstrapNode = Array.from(this.bootstrapNodes)[0];
           if (!bootstrapNode) throw new Error('No bootstrap node available');
           targetNodes = await this.requestNodesFromPeer(bootstrapNode, chunkKeyHash);
           targetNodes = targetNodes.slice(0, 3);
         }
-        targetNodes = targetNodes.filter(node => (node.address || node.id).startsWith('node-'));
+        targetNodes = targetNodes.filter(node => (node.id || node.address).startsWith('node-'));
         for (const node of targetNodes) {
-          const nodePeerId = node.address || node.id;
+          const nodePeerId = node.id || node.address;
           const nodePeer = this.peers.get(nodePeerId);
           if (nodePeer && nodePeer.connected && nodePeer.conn) {
             nodePeer.conn.send({ type: 'storeChunk', chunkHash, chunkData, peerId: this.peerId });
@@ -717,13 +819,12 @@ export class DHT {
             console.log(`Sent chunk ${chunkHash} to node ${nodePeerId}`);
           }
         }
-        // Store peerToChunkMap in DHT on last chunk
         if (chunkIndex === totalChunks - 1) {
           const peerToChunkMap = {};
           this.chunkToPeerMap.forEach((peers, hash) => {
             peerToChunkMap[hash] = Array.from(peers);
           });
-          const ipHash = this.chunkToIpHash.get(chunkHash) || chunkHash; // Map chunk to ipHash
+          const ipHash = this.chunkToIpHash.get(chunkHash) || chunkHash;
           await this.storeDHT(ipHash, JSON.stringify(peerToChunkMap));
         }
       } else {
@@ -764,7 +865,7 @@ export class DHT {
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
       this.knownObjects.set(ipHash, ipObject);
       await this.dbPut('store', { id: ipHash, value: JSON.stringify(ipObject) });
-      this.chunkToIpHash = new Map(); // Track chunk to ipHash mapping
+      this.chunkToIpHash = new Map();
       chunkHashes.forEach(chunkHash => this.chunkToIpHash.set(chunkHash, ipHash));
       for (let i = 0; i < chunks.length; i++) await this.publishChunk(chunkHashes[i], chunks[i], i, chunks.length);
       if (this.activeNodes.size > 0) this.broadcastIP(ipHash, updatedMetadata, chunkHashes);
@@ -786,7 +887,6 @@ export class DHT {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
       if (!ipObject) throw new Error('IP not found');
-      // Fetch peerToChunkMap from DHT
       const peerToChunkMapRaw = await this.findDHT(ipObject.metadata.hash || ipObject.chunks[0]);
       const peerToChunkMap = JSON.parse(peerToChunkMapRaw);
       this.chunkToPeerMap = new Map();
@@ -842,14 +942,12 @@ export class DHT {
     try {
       const ipObject = this.knownObjects.get(hash);
       if (ipObject) return ipObject;
-      // Try fetching from DHT
       const peerToChunkMapRaw = await this.findDHT(hash);
       const peerToChunkMap = JSON.parse(peerToChunkMapRaw);
       this.chunkToPeerMap = new Map();
       Object.entries(peerToChunkMap).forEach(([chunkHash, peers]) => {
         this.chunkToPeerMap.set(chunkHash, new Set(peers));
       });
-      // Fetch metadata from a node
       const peerEntry = Array.from(this.activeNodes).find(peerId => peerId.startsWith('node-'));
       if (!peerEntry) throw new Error('No nodes available');
       const peerId = peerEntry;
@@ -1082,16 +1180,19 @@ export class DHT {
     return bytes;
   }
 
-  destroy() {
+  async destroy() {
     if (this.peer && !this.peer.destroyed) {
       this.peer.destroy();
       console.log('PeerJS peer destroyed');
+    }
+    if (this.libp2p) {
+      await this.libp2p.stop();
+      console.log('libp2p stopped');
     }
     this.peers.clear();
     this.activeNodes.clear();
     this.pendingRequests.clear();
     this.bootstrapNodes.clear();
-    this.kado.router.clear(); // Clear kado routing table
   }
 }
 

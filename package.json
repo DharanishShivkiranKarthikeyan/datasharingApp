@@ -8,9 +8,13 @@
     "serve": "vite preview --port=8080"
   },
   "dependencies": {
+    "@libp2p/kad-dht": "^15.0.2",
+    "@libp2p/peer-id": "^5.1.2",
+    "@multiformats/multiaddr": "^12.4.0",
     "crypto-js": "^4.2.0",
     "firebase": "^11.4.0",
     "kado": "^4.4.0",
+    "libp2p": "^2.8.5",
     "peerjs": "^1.5.4"
   },
   "devDependencies": {
