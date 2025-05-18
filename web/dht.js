@@ -3,7 +3,7 @@ import { createLibp2p } from 'libp2p';
 import { kadDHT } from '@libp2p/kad-dht';
 import CryptoJS from 'crypto-js';
 import { db } from './firebase.js';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
 import { multiaddr } from '@multiformats/multiaddr';
 import { createFromPrivKey, createEd25519PeerId } from '@libp2p/peer-id-factory';
