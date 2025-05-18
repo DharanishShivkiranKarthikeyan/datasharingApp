@@ -155,14 +155,19 @@ export class DHT {
     try {
       this.peerId = this.isNode ? `node-${this.keypair}` : this.keypair;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
-      this.peer = new Peer(this.peerId, { host: '0.peerjs.com', port: 443, path: '/', secure: true, debug: 2,
+      this.peer = new Peer(this.peerId, {
+        host: '0.peerjs.com',
+        port: 443,
+        path: '/',
+        secure: true,
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
           ]
-        }
-       });
+        },
+        debug: 3 // Enable detailed PeerJS logs
+      });
       return await new Promise((resolve, reject) => {
         this.peer.on('open', id => {
           console.log(`PeerJS connection opened with ID: ${id}`);
@@ -223,37 +228,52 @@ export class DHT {
     });
   }
 
-  connectToPeer(peerId) {
+  connectToPeer(peerId, attempt = 1) {
     if (this.peers.get(peerId)?.connected) return;
-    console.log("here");
-    const attempts = this.connectionAttempts.get(peerId) || 0;
-    if (attempts >= this.maxConnectionAttempts) return;
-    console.log(`Connecting to peer: ${peerId} (Attempt ${attempts + 1}/${this.maxConnectionAttempts})`);
+    console.log(`Connecting to peer: ${peerId} (Attempt ${attempt}/3)`);
     const conn = this.peer.connect(peerId, { reliable: true });
     conn.on('open', () => {
-      console.log(`Connected to peer: ${peerId}`);
+      console.log(`Connection opened with peer: ${peerId}`);
       this.peers.set(peerId, { connected: true, conn });
       this.activeNodes.add(peerId);
-      this.connectionAttempts.delete(peerId);
       conn.send({ type: 'handshake', peerId: this.peerId });
     });
-    conn.on('data', data => this.handlePeerData(data, peerId));
-    conn.on('close', () => this.handlePeerDisconnect(peerId));
-    conn.on('error', err => {
-      console.warn(`Connection error with peer ${peerId}: ${err.message}`);
+    conn.on('data', (data) => {
+      console.log(`Received data from peer ${peerId}:`, data);
+      this.handlePeerData(data, peerId);
+    });
+    conn.on('close', () => {
+      console.log(`Connection closed with peer ${peerId}`);
       this.handlePeerDisconnect(peerId);
     });
-    this.connectionAttempts.set(peerId, attempts + 1);
+    conn.on('error', (err) => {
+      console.error(`Connection error with peer ${peerId}:`, err);
+      if (attempt < 3) {
+        setTimeout(() => this.connectToPeer(peerId, attempt + 1), 5000 * attempt);
+      } else {
+        console.log(`Max attempts reached for peer ${peerId}. Marking as unreachable.`);
+        this.handlePeerDisconnect(peerId);
+      }
+    });
   }
 
   handleConnection(conn) {
     const peerId = conn.peer;
-    console.log(`Incoming connection from peer: ${peerId} time ${Date.now()}`);
-    this.peers.set(peerId, { connected: true, conn });
-    this.activeNodes.add(peerId);
-    conn.on('data', data => this.handlePeerData(data, peerId));
-    conn.on('close', () => this.handlePeerDisconnect(peerId));
-    conn.on('error', err => {
+    console.log(`Incoming connection from peer: ${peerId} at ${Date.now()}`);
+    conn.on('open', () => {
+      console.log(`Connection opened with peer: ${peerId}`);
+      this.peers.set(peerId, { connected: true, conn });
+      this.activeNodes.add(peerId);
+    });
+    conn.on('data', (data) => {
+      console.log(`Received data from peer ${peerId}:`, data);
+      this.handlePeerData(data, peerId);
+    });
+    conn.on('close', () => {
+      console.log(`Connection closed with peer ${peerId}`);
+      this.handlePeerDisconnect(peerId);
+    });
+    conn.on('error', (err) => {
       console.error(`Connection error with peer ${peerId}:`, err);
       this.handlePeerDisconnect(peerId);
     });
