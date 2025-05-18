@@ -1,5 +1,6 @@
-// web/dht.js
 import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
+import Kademlia from 'https://cdn.jsdelivr.net/npm/kademlia@0.2.2/+esm';
+import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
@@ -22,8 +23,22 @@ export class DHT {
     this.maxConnectionAttempts = 3;
     this.connectionRetryDelay = 5000;
     this.averageLatency = 0;
+    this.bootstrapNodes = new Set();
+    this.kademlia = null;
 
-    console.log('DHT initialized with keypair:', keypair);
+    // Generate 160-bit Kademlia ID
+    this.peerId = this.isNode ? `node-${this.keypair}` : keypair;
+    const hash = CryptoJS.SHA256(this.peerId).toString(CryptoJS.enc.Hex);
+    this.kademliaId = hash.substring(0, 40); // 160-bit ID
+
+    // Initialize Kademlia
+    if (this.isNode) {
+      this.kademlia = new Kademlia(this.kademliaId, { k: 20 });
+    } else {
+      this.kademlia = new Kademlia(this.kademliaId, { k: 20 }); // Minimal for regular users
+    }
+
+    console.log('DHT initialized with keypair:', keypair, 'isNode:', isNode);
     this.initializeKnownNodes();
   }
 
@@ -32,10 +47,17 @@ export class DHT {
       try {
         const nodesSnapshot = await getDocs(collection(db, 'nodes'));
         this.nodes.clear();
-        if (!nodesSnapshot.empty) {
-          nodesSnapshot.forEach(doc => this.nodes.add(`node-${doc.id}`));
-        }
+        nodesSnapshot.forEach(doc => this.nodes.add(`node-${doc.id}`));
         console.log('Fetched nodes:', Array.from(this.nodes));
+
+        // Select a bootstrap node
+        if (this.nodes.size > 0) {
+          const bootstrapNode = await this.selectBootstrapNode();
+          if (bootstrapNode) {
+            this.bootstrapNodes.add(bootstrapNode);
+            await this.queryBootstrapNode(bootstrapNode);
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch nodes from Firestore:', error);
         this.nodes.clear();
@@ -43,41 +65,130 @@ export class DHT {
     };
     await fetchNodes();
     setInterval(fetchNodes, 5 * 60 * 1000);
+    if (this.isNode) {
+      setInterval(() => this.refreshRoutingTable(), 10 * 60 * 1000); // Refresh every 10 minutes
+      setInterval(() => this.republishData(), 6 * 60 * 60 * 1000); // Republish every 6 hours
+      setInterval(() => this.cleanupDHTStore(), 24 * 60 * 60 * 1000); // Cleanup daily
+    }
+  }
+
+  async selectBootstrapNode() {
+    const nodes = Array.from(this.nodes).filter(id => id !== this.peerId);
+    if (nodes.length === 0) return null;
+
+    // Try to select by latency
+    let minLatency = Infinity;
+    let selectedNode = null;
+    for (const nodeId of nodes.slice(0, 5)) {
+      const latency = await this.measureLatencyToPeer(nodeId);
+      if (latency !== null && latency < minLatency) {
+        minLatency = latency;
+        selectedNode = nodeId;
+      }
+    }
+    // Fallback to random selection
+    if (!selectedNode) {
+      selectedNode = nodes[Math.floor(Math.random() * nodes.length)];
+    }
+    return selectedNode;
+  }
+
+  async queryBootstrapNode(bootstrapNode) {
+    try {
+      await this.connectToPeer(bootstrapNode);
+      const peer = this.peers.get(bootstrapNode);
+      if (peer && peer.connected && peer.conn) {
+        const requestId = `${bootstrapNode}-getKnownNodes-${Date.now()}`;
+        peer.conn.send({ type: 'getKnownNodes', requestId, peerId: this.peerId });
+        return new Promise((resolve, reject) => {
+          this.pendingRequests.set(requestId, {
+            resolve: (nodes) => {
+              nodes.forEach(nodeId => {
+                if (nodeId !== this.peerId) {
+                  this.bootstrapNodes.add(nodeId);
+                  if (this.isNode) {
+                    const nodeHash = CryptoJS.SHA256(nodeId).toString(CryptoJS.enc.Hex).substring(0, 40);
+                    this.kademlia.addNode(nodeId, nodeHash);
+                  }
+                }
+              });
+              console.log('Received known nodes from bootstrap:', nodes);
+              resolve();
+            },
+            reject,
+          });
+          setTimeout(() => {
+            if (this.pendingRequests.has(requestId)) {
+              this.pendingRequests.delete(requestId);
+              reject(new Error('Bootstrap query timed out'));
+            }
+          }, 10000);
+        });
+      }
+    } catch (error) {
+      console.error('Failed to query bootstrap node:', error);
+    }
+  }
+
+  async measureLatencyToPeer(peerId) {
+    const peer = this.peers.get(peerId);
+    if (peer && peer.connected && peer.conn) {
+      const start = Date.now();
+      try {
+        await new Promise((resolve, reject) => {
+          const requestId = `${peerId}-ping-${Date.now()}`;
+          peer.conn.send({ type: 'ping', requestId });
+          this.pendingRequests.set(requestId, { resolve, reject });
+          setTimeout(() => {
+            if (this.pendingRequests.has(requestId)) {
+              this.pendingRequests.delete(requestId);
+              reject(new Error('Ping timeout'));
+            }
+          }, 2000);
+        });
+        const latency = Date.now() - start;
+        if (this.isNode) {
+          const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+          this.kademlia.setNodeLatency(nodeHash, latency);
+        }
+        return latency;
+      } catch (error) {
+        console.warn(`Failed to measure latency for peer ${peerId}:`, error);
+        return null;
+      }
+    }
+    return null;
   }
 
   async measureLatency() {
     const latencies = [];
     const peersToTest = Array.from(this.activeNodes).slice(0, 5);
     for (const peerId of peersToTest) {
-      const peer = this.peers.get(peerId);
-      if (peer && peer.connected && peer.conn) {
-        const start = Date.now();
-        try {
-          await new Promise((resolve, reject) => {
-            const requestId = `${peerId}-ping-${Date.now()}`;
-            peer.conn.send({ type: 'ping', requestId });
-            this.pendingRequests.set(requestId, { resolve, reject });
-            setTimeout(() => {
-              if (this.pendingRequests.has(requestId)) {
-                this.pendingRequests.delete(requestId);
-                reject(new Error('Ping timeout'));
-              }
-            }, 2000);
-          });
-          const latency = Date.now() - start;
-          latencies.push(latency);
-        } catch (error) {
-          console.warn(`Failed to measure latency for peer ${peerId}: ${error.message}`);
-        }
-      }
+      const latency = await this.measureLatencyToPeer(peerId);
+      if (latency !== null) latencies.push(latency);
     }
     this.averageLatency = latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : 0;
     console.log(`Average latency: ${this.averageLatency} ms`);
   }
 
+  async refreshRoutingTable() {
+    if (!this.isNode) return;
+    try {
+      // Generate a random ID for FIND_NODE
+      const randomId = CryptoJS.SHA256(String(Math.random())).toString(CryptoJS.enc.Hex).substring(0, 40);
+      const nodes = await this.kademlia.findNodes(randomId);
+      for (const node of nodes) {
+        await this.connectToPeer(node.id);
+      }
+      console.log('Refreshed routing table');
+    } catch (error) {
+      console.error('Failed to refresh routing table:', error);
+    }
+  }
+
   async initDB() {
     return new Promise((resolve, reject) => {
-      const TARGET_VERSION = 5;
+      const TARGET_VERSION = 6;
       const request = indexedDB.open('dcrypt_db', TARGET_VERSION);
       let db;
 
@@ -87,6 +198,7 @@ export class DHT {
         if (!db.objectStoreNames.contains('transactions')) db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
         if (!db.objectStoreNames.contains('offlineQueue')) db.createObjectStore('offlineQueue', { keyPath: 'id', autoIncrement: true });
         if (!db.objectStoreNames.contains('chunkCache')) db.createObjectStore('chunkCache', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('dhtStore')) db.createObjectStore('dhtStore', { keyPath: 'id' });
         console.log('DHT database upgraded to version', TARGET_VERSION);
       };
 
@@ -153,7 +265,6 @@ export class DHT {
 
   async initSwarm() {
     try {
-      this.peerId = this.isNode ? `node-${this.keypair}` : this.keypair;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, {
         host: '0.peerjs.com',
@@ -163,10 +274,10 @@ export class DHT {
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
+            { url: 'turn:192.158.29.39:3478?transport=tcp', credential: 'JZEOEt2V3Qb0y27GRntt2u2PAYA=', username: '28224511:1379330808' }
           ]
         },
-        debug: 3 // Enable detailed PeerJS logs
+        debug: 3
       });
       return await new Promise((resolve, reject) => {
         this.peer.on('open', id => {
@@ -202,12 +313,17 @@ export class DHT {
     }
   }
 
-  discoverPeers() {
+  async discoverPeers() {
     console.log('Discovering peers...');
-    const knownPeerIds = [...Array.from(this.nodes), ...Array.from(this.activeNodes)].filter(id => id !== this.peerId);
+    const knownPeerIds = [...Array.from(this.nodes), ...Array.from(this.bootstrapNodes), ...Array.from(this.activeNodes)].filter(id => id !== this.peerId);
     if (knownPeerIds.length === 0) {
       console.warn('No known peers to connect to.');
       return;
+    }
+    if (this.isNode) {
+      // Kademlia-based discovery
+      const nodes = await this.kademlia.findNodes(this.kademliaId);
+      knownPeerIds.push(...nodes.map(node => node.id));
     }
     knownPeerIds.forEach(peerId => {
       if (!this.peers.has(peerId)) {
@@ -218,17 +334,25 @@ export class DHT {
         this.connectToPeer(peerId);
       }
     });
-    this.peers.forEach((peer, peerId) => {
-      if (!peer.connected && (this.connectionAttempts.get(peerId) || 0) >= this.maxConnectionAttempts) {
-        console.log(`Removing unreachable peer: ${peerId}`);
+    // Enforce connection limit
+    if (this.peers.size > 50) {
+      const peersToRemove = Array.from(this.peers.entries())
+        .filter(([_, peer]) => !peer.connected)
+        .sort((a, b) => (this.connectionAttempts.get(b[0]) || 0) - (this.connectionAttempts.get(a[0]) || 0))
+        .slice(0, this.peers.size - 50);
+      peersToRemove.forEach(([peerId]) => {
         this.peers.delete(peerId);
         this.connectionAttempts.delete(peerId);
         this.activeNodes.delete(peerId);
-      }
-    });
+        if (this.isNode) {
+          const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+          this.kademlia.removeNode(nodeHash);
+        }
+      });
+    }
   }
 
-  connectToPeer(peerId, attempt = 1) {
+  async connectToPeer(peerId, attempt = 1) {
     if (this.peers.get(peerId)?.connected) return;
     console.log(`Connecting to peer: ${peerId} (Attempt ${attempt}/3)`);
     const conn = this.peer.connect(peerId, { reliable: true });
@@ -236,6 +360,10 @@ export class DHT {
       console.log(`Connection opened with peer: ${peerId}`);
       this.peers.set(peerId, { connected: true, conn });
       this.activeNodes.add(peerId);
+      if (this.isNode) {
+        const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+        this.kademlia.addNode(peerId, nodeHash);
+      }
       conn.send({ type: 'handshake', peerId: this.peerId });
     });
     conn.on('data', (data) => {
@@ -264,6 +392,10 @@ export class DHT {
       console.log(`Connection opened with peer: ${peerId}`);
       this.peers.set(peerId, { connected: true, conn });
       this.activeNodes.add(peerId);
+      if (this.isNode) {
+        const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+        this.kademlia.addNode(peerId, nodeHash);
+      }
     });
     conn.on('data', (data) => {
       console.log(`Received data from peer ${peerId}:`, data);
@@ -285,6 +417,10 @@ export class DHT {
       peer.connected = false;
       peer.conn = null;
       this.activeNodes.delete(peerId);
+      if (this.isNode) {
+        const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+        this.kademlia.removeNode(nodeHash);
+      }
       console.log(`Peer disconnected: ${peerId}. Will reconnect on next discovery.`);
     }
   }
@@ -324,7 +460,7 @@ export class DHT {
         this.storeChunkFromPeer(data.chunkHash, data.chunkData, peerId);
         break;
       case 'ping':
-        const peer = this.peers.get(peerId);
+        peer = this.peers.get(peerId);
         if (peer && peer.connected && peer.conn) peer.conn.send({ type: 'pong', requestId: data.requestId });
         break;
       case 'pong':
@@ -337,12 +473,199 @@ export class DHT {
       case 'commission':
         console.log(`Received commission of ${data.amount}. New balance: ${data.newBalance}`);
         break;
+      case 'getKnownNodes':
+        peer = this.peers.get(peerId);
+        if (peer && peer.connected && peer.conn) {
+          const nodes = Array.from(this.activeNodes);
+          peer.conn.send({ type: 'knownNodesResponse', requestId: data.requestId, nodes, peerId: this.peerId });
+        }
+        break;
+      case 'knownNodesResponse':
+        const knownNodesRequest = this.pendingRequests.get(data.requestId);
+        if (knownNodesRequest) {
+          knownNodesRequest.resolve(data.nodes);
+          this.pendingRequests.delete(data.requestId);
+        }
+        break;
+      case 'storeDHT':
+        this.storeDHTFromPeer(data.key, data.value, data.ttl, peerId);
+        break;
+      case 'findDHT':
+        this.handleFindDHT(data, peerId);
+        break;
+      case 'findDHTResponse':
+        const findRequest = this.pendingRequests.get(data.requestId);
+        if (findRequest) {
+          findRequest.resolve({ value: data.value, nodes: data.nodes });
+          this.pendingRequests.delete(data.requestId);
+        }
+        break;
       default:
         console.warn(`Unknown data type from peer ${peerId}:`, data.type);
     }
   }
 
+  async storeDHT(key, value, ttl = 86400000) {
+    try {
+      const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
+      let targetNodes = [];
+      if (this.isNode) {
+        targetNodes = await this.kademlia.findNodes(keyHash, 20);
+      } else {
+        // Regular user: Forward to bootstrap node
+        const bootstrapNode = Array.from(this.bootstrapNodes)[0];
+        if (!bootstrapNode) throw new Error('No bootstrap node available');
+        targetNodes = await this.requestNodesFromPeer(bootstrapNode, keyHash);
+      }
+      for (const node of targetNodes) {
+        const peerId = node.id;
+        const peer = this.peers.get(peerId);
+        if (peer && peer.connected && peer.conn) {
+          peer.conn.send({ type: 'storeDHT', key, value, ttl, peerId: this.peerId });
+        }
+      }
+      if (this.isNode) {
+        await this.storeDHTFromPeer(key, value, ttl, this.peerId);
+      }
+      console.log(`Stored DHT key ${key} on ${targetNodes.length} nodes`);
+    } catch (error) {
+      console.error('Failed to store DHT key:', error);
+      throw error;
+    }
+  }
+
+  async storeDHTFromPeer(key, value, ttl, peerId) {
+    if (!this.isNode) return; // Only nodes store DHT data
+    try {
+      await this.dbPut('dhtStore', { id: key, value, ttl, timestamp: Date.now() });
+      console.log(`Stored DHT key ${key} from peer ${peerId}`);
+    } catch (error) {
+      console.error(`Failed to store DHT key ${key} from peer ${peerId}:`, error);
+    }
+  }
+
+  async findDHT(key) {
+    try {
+      const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
+      if (this.isNode) {
+        const result = await this.kademlia.findValue(keyHash);
+        if (result.value) {
+          const stored = await this.dbGet('dhtStore', key);
+          if (stored && stored.timestamp + stored.ttl > Date.now()) {
+            return stored.value;
+          }
+        }
+        // Query closer nodes
+        const nodes = result.nodes || await this.kademlia.findNodes(keyHash, 20);
+        for (const node of nodes) {
+          const value = await this.requestDHTFromPeer(node.id, key);
+          if (value) return value;
+        }
+      } else {
+        // Regular user: Query bootstrap node
+        const bootstrapNode = Array.from(this.bootstrapNodes)[0];
+        if (!bootstrapNode) throw new Error('No bootstrap node available');
+        const value = await this.requestDHTFromPeer(bootstrapNode, key);
+        if (value) return value;
+      }
+      throw new Error(`DHT key ${key} not found`);
+    } catch (error) {
+      console.error('Failed to find DHT key:', error);
+      throw error;
+    }
+  }
+
+  async requestNodesFromPeer(peerId, keyHash) {
+    const peer = this.peers.get(peerId);
+    if (!peer || !peer.connected || !peer.conn) throw new Error(`Peer ${peerId} is not connected`);
+    const requestId = `${peerId}-findNodes-${Date.now()}`;
+    peer.conn.send({ type: 'findDHT', key: keyHash, requestId, peerId: this.peerId });
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(requestId, {
+        resolve: ({ nodes }) => resolve(nodes.map(nodeId => ({ id: nodeId }))),
+        reject,
+      });
+      setTimeout(() => {
+        if (this.pendingRequests.has(requestId)) {
+          this.pendingRequests.delete(requestId);
+          reject(new Error(`Request for nodes for key ${keyHash} timed out`));
+        }
+      }, 10000);
+    });
+  }
+
+  async requestDHTFromPeer(peerId, key) {
+    const peer = this.peers.get(peerId);
+    if (!peer || !peer.connected || !peer.conn) throw new Error(`Peer ${peerId} is not connected`);
+    const requestId = `${peerId}-findDHT-${Date.now()}`;
+    peer.conn.send({ type: 'findDHT', key, requestId, peerId: this.peerId });
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(requestId, {
+        resolve: ({ value, nodes }) => resolve(value || null),
+        reject,
+      });
+      setTimeout(() => {
+        if (this.pendingRequests.has(requestId)) {
+          this.pendingRequests.delete(requestId);
+          reject(new Error(`Request for DHT key ${key} timed out`));
+        }
+      }, 10000);
+    });
+  }
+
+  async handleFindDHT(data, peerId) {
+    if (!this.isNode) return; // Only nodes handle DHT queries
+    const { key, requestId } = data;
+    const peer = this.peers.get(peerId);
+    if (!peer || !peer.connected || !peer.conn) return;
+    const stored = await this.dbGet('dhtStore', key);
+    if (stored && stored.timestamp + stored.ttl > Date.now()) {
+      peer.conn.send({ type: 'findDHTResponse', requestId, value: stored.value, nodes: [], peerId: this.peerId });
+    } else {
+      const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
+      const nodes = await this.kademlia.findNodes(keyHash, 20);
+      peer.conn.send({ type: 'findDHTResponse', requestId, value: null, nodes: nodes.map(node => node.id), peerId: this.peerId });
+    }
+  }
+
+  async republishData() {
+    if (!this.isNode) return;
+    try {
+      const entries = await this.dbGetAll('dhtStore');
+      for (const entry of entries) {
+        if (entry.timestamp + entry.ttl > Date.now()) {
+          await this.storeDHT(entry.id, entry.value, entry.ttl);
+        }
+      }
+      console.log('Republished DHT data');
+    } catch (error) {
+      console.error('Failed to republish DHT data:', error);
+    }
+  }
+
+  async cleanupDHTStore() {
+    if (!this.isNode) return;
+    try {
+      const tx = this.db.transaction('dhtStore', 'readwrite');
+      const store = tx.objectStore('dhtStore');
+      const entries = await new Promise(resolve => {
+        store.getAll().onsuccess = e => resolve(e.target.result);
+      });
+      for (const entry of entries) {
+        if (entry.timestamp + entry.ttl <= Date.now()) {
+          await new Promise(resolve => {
+            store.delete(entry.id).onsuccess = resolve;
+          });
+        }
+      }
+      console.log('Cleaned up expired DHT entries');
+    } catch (error) {
+      console.error('Failed to clean up DHT store:', error);
+    }
+  }
+
   async storeChunkFromPeer(chunkHash, chunkData, peerId) {
+    if (!this.isNode) return; // Only nodes store chunks
     try {
       await this.dbPut('chunkCache', { id: chunkHash, value: chunkData });
       let peerSet = this.chunkToPeerMap.get(chunkHash) || new Set();
@@ -363,28 +686,34 @@ export class DHT {
       peerSet.add(this.peerId);
       this.chunkToPeerMap.set(chunkHash, peerSet);
       if (this.activeNodes.size > 0) {
-        const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
-        if (activeNodeList.length > 0) {
-          const nodeIndex = chunkIndex % activeNodeList.length;
-          const targetNode = activeNodeList[nodeIndex];
-          const nodePeer = this.peers.get(targetNode);
+        const chunkKeyHash = CryptoJS.SHA256(chunkHash).toString(CryptoJS.enc.Hex).substring(0, 40);
+        let targetNodes = [];
+        if (this.isNode) {
+          targetNodes = await this.kademlia.findNodes(chunkKeyHash, 3); // Store on 3 nodes
+        } else {
+          const bootstrapNode = Array.from(this.bootstrapNodes)[0];
+          if (!bootstrapNode) throw new Error('No bootstrap node available');
+          targetNodes = await this.requestNodesFromPeer(bootstrapNode, chunkKeyHash);
+          targetNodes = targetNodes.slice(0, 3);
+        }
+        targetNodes = targetNodes.filter(node => node.id.startsWith('node-'));
+        for (const node of targetNodes) {
+          const nodePeer = this.peers.get(node.id);
           if (nodePeer && nodePeer.connected && nodePeer.conn) {
             nodePeer.conn.send({ type: 'storeChunk', chunkHash, chunkData, peerId: this.peerId });
-            peerSet.add(targetNode);
+            peerSet.add(node.id);
             this.chunkToPeerMap.set(chunkHash, peerSet);
-            console.log(`Sent chunk ${chunkHash} to node ${targetNode}`);
+            console.log(`Sent chunk ${chunkHash} to node ${node.id}`);
           }
         }
-        const regularPeers = Array.from(this.activeNodes).filter(peerId => !peerId.startsWith('node-') && peerId !== this.peerId);
-        if (regularPeers.length > 0) {
-          const randomPeerId = regularPeers[Math.floor(Math.random() * regularPeers.length)];
-          const randomPeer = this.peers.get(randomPeerId);
-          if (randomPeer && randomPeer.connected && randomPeer.conn) {
-            randomPeer.conn.send({ type: 'storeChunk', chunkHash, chunkData, peerId: this.peerId });
-            peerSet.add(randomPeerId);
-            this.chunkToPeerMap.set(chunkHash, peerSet);
-            console.log(`Sent chunk ${chunkHash} to peer ${randomPeerId}`);
-          }
+        // Store peerToChunkMap in DHT on last chunk
+        if (chunkIndex === totalChunks - 1) {
+          const peerToChunkMap = {};
+          this.chunkToPeerMap.forEach((peers, hash) => {
+            peerToChunkMap[hash] = Array.from(peers);
+          });
+          const ipHash = this.chunkToIpHash.get(chunkHash) || chunkHash; // Map chunk to ipHash
+          await this.storeDHT(ipHash, JSON.stringify(peerToChunkMap));
         }
       } else {
         await this.queueOfflineOperation({ type: 'publishChunk', chunkHash, chunkData, chunkIndex, totalChunks });
@@ -424,6 +753,8 @@ export class DHT {
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
       this.knownObjects.set(ipHash, ipObject);
       await this.dbPut('store', { id: ipHash, value: JSON.stringify(ipObject) });
+      this.chunkToIpHash = new Map(); // Track chunk to ipHash mapping
+      chunkHashes.forEach(chunkHash => this.chunkToIpHash.set(chunkHash, ipHash));
       for (let i = 0; i < chunks.length; i++) await this.publishChunk(chunkHashes[i], chunks[i], i, chunks.length);
       if (this.activeNodes.size > 0) this.broadcastIP(ipHash, updatedMetadata, chunkHashes);
       else await this.queueOfflineOperation({ type: 'publishIP', ipHash, metadata: updatedMetadata, chunkHashes });
@@ -444,6 +775,13 @@ export class DHT {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
       if (!ipObject) throw new Error('IP not found');
+      // Fetch peerToChunkMap from DHT
+      const peerToChunkMapRaw = await this.findDHT(ipObject.metadata.hash || ipObject.chunks[0]);
+      const peerToChunkMap = JSON.parse(peerToChunkMapRaw);
+      this.chunkToPeerMap = new Map();
+      Object.entries(peerToChunkMap).forEach(([chunkHash, peers]) => {
+        this.chunkToPeerMap.set(chunkHash, new Set(peers));
+      });
       const chunks = [];
       for (const chunkHash of ipObject.chunks) {
         const cachedChunk = await this.dbGet('chunkCache', chunkHash);
@@ -490,21 +828,37 @@ export class DHT {
   }
 
   async getIPmetadata(hash) {
-    const peerEntry = this.peers.entries().next().value;
-    if (!peerEntry) throw new Error('No peers available');
-    const [peerId, peer] = peerEntry;
-    const requestId = `${peerId}-${hash}-${Date.now()}`;
-    const message = { type: 'metadataRequest', requestId, ipHash: hash, peerId: this.peerId };
-    peer.conn.send(message);
-    return new Promise((resolve, reject) => {
-      this.pendingRequests.set(requestId, { resolve, reject, hash });
-      setTimeout(() => {
-        if (this.pendingRequests.has(requestId)) {
-          this.pendingRequests.delete(requestId);
-          reject(new Error(`Request for object ${hash} from peer timed out`));
-        }
-      }, 10000);
-    });
+    try {
+      const ipObject = this.knownObjects.get(hash);
+      if (ipObject) return ipObject;
+      // Try fetching from DHT
+      const peerToChunkMapRaw = await this.findDHT(hash);
+      const peerToChunkMap = JSON.parse(peerToChunkMapRaw);
+      this.chunkToPeerMap = new Map();
+      Object.entries(peerToChunkMap).forEach(([chunkHash, peers]) => {
+        this.chunkToPeerMap.set(chunkHash, new Set(peers));
+      });
+      // Fetch metadata from a node
+      const peerEntry = Array.from(this.activeNodes).find(peerId => peerId.startsWith('node-'));
+      if (!peerEntry) throw new Error('No nodes available');
+      const peerId = peerEntry;
+      const requestId = `${peerId}-${hash}-${Date.now()}`;
+      const peer = this.peers.get(peerId);
+      if (!peer || !peer.connected || !peer.conn) throw new Error(`Peer ${peerId} is not connected`);
+      peer.conn.send({ type: 'metadataRequest', requestId, ipHash: hash, peerId: this.peerId });
+      return new Promise((resolve, reject) => {
+        this.pendingRequests.set(requestId, { resolve, reject, hash });
+        setTimeout(() => {
+          if (this.pendingRequests.has(requestId)) {
+            this.pendingRequests.delete(requestId);
+            reject(new Error(`Request for object ${hash} from peer timed out`));
+          }
+        }, 10000);
+      });
+    } catch (error) {
+      console.error('getIPmetadata failed:', error);
+      throw error;
+    }
   }
 
   async fetchChunkFromPeer(peerId, hash) {
@@ -725,6 +1079,7 @@ export class DHT {
     this.peers.clear();
     this.activeNodes.clear();
     this.pendingRequests.clear();
+    this.bootstrapNodes.clear();
   }
 }
 

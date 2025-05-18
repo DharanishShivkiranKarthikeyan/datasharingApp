@@ -487,7 +487,7 @@ async function storeKeypair(indexedDB, userId) {
   });
 }
 
-async function init(userId,indexedDB) {
+async function init(userId, indexedDB) {
   if (isInitializing) {
     console.log('Initialization already in progress, skipping...');
     return;
@@ -495,7 +495,7 @@ async function init(userId,indexedDB) {
   isInitializing = true;
   console.log('Initializing app with userId:', userId);
   try {
-    if(!indexedDB){
+    if (!indexedDB) {
       indexedDB = await initializeIndexedDB();
     }
     let keypair = await loadKeypair(indexedDB);
@@ -523,7 +523,22 @@ async function init(userId,indexedDB) {
     await dht.initDB();
     console.log('DHT database initialized.');
 
-    await dht.initSwarm();
+    // Retry initialization if no nodes are available
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        await dht.initSwarm();
+        break;
+      } catch (error) {
+        if (error.message.includes('No bootstrap node available') && retries > 1) {
+          console.warn('No nodes available, retrying...', retries);
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          retries--;
+        } else {
+          throw error;
+        }
+      }
+    }
     console.log('DHT swarm initialized.');
 
     await dht.syncUserData();
@@ -542,6 +557,8 @@ async function init(userId,indexedDB) {
     console.error('Error initializing application:', error);
     if (error.message.includes('ID conflict')) {
       showToast('Failed to connect to the network due to an ID conflict. Please try signing out and signing in again.', true);
+    } else if (error.message.includes('No bootstrap node available')) {
+      showToast('No nodes available in the network. Please try again later.', true);
     } else {
       showToast(`Initialization failed: ${error.message}`, true);
     }
@@ -895,7 +912,7 @@ async function buySnippet(hash) {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
     let ipObject = await dht.getIPmetadata(hash);
-    console.log(ipObject,"IP OBJECT");
+    console.log('IP Object:', ipObject);
 
     const isPremium = ipObject.metadata.isPremium || false;
     const priceUsd = isPremium ? (ipObject.metadata.priceUsd || 0) : 0;
@@ -936,7 +953,7 @@ async function buySnippet(hash) {
       }
     }
 
-    displaySnippetContent(data, fileType, ipObject.metadata.content_type);
+    displaySnippetContent(data, fileType, ipObject.metadata.title || ipObject.metadata.content_type);
     return { data, fileType };
   } catch (error) {
     console.error('buySnippet failed:', error);
@@ -1004,11 +1021,12 @@ async function flagSnippet(ipHash) {
 
 async function becomeNode() {
   const nodeId = generateUUID();
-  console.log(nodeId);
+  console.log('Generated nodeId:', nodeId);
   localStorage.setItem('nodeId', nodeId);
   localStorage.setItem('role', 'node');
   const nodeRef = doc(db, 'nodes', nodeId);
   await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
+  console.log('Node registered in Firestore:', nodeId);
 
   if (!window.location.pathname.includes('node-instructions.html')) {
     console.log('Redirecting to node-instructions.html for node role');
@@ -1026,14 +1044,20 @@ async function initNode() {
     localStorage.removeItem('role');
     sessionStorage.setItem('nodeId', nodeId);
     sessionStorage.setItem('role', role);
-    console.log("Moved to session storage");
+    console.log('Moved to session storage');
     if (role !== 'node' || !nodeId) {
       showToast('You must be signed in as a node to view this page.');
       window.location.href = '/datasharingApp/signup.html';
       return;
     }
 
-    dht = new DHT(nodeId, true);
+    // Hash nodeId for DHT
+    const hashedNodeId = uint8ArrayToBase64Url(
+      new TextEncoder().encode(CryptoJS.SHA256(nodeId).toString(CryptoJS.enc.Hex).substring(0, 40))
+    );
+    dht = new DHT(hashedNodeId, true);
+    window.dht = dht;
+
     await dht.initDB();
     await dht.initSwarm();
     await dht.syncUserData();
@@ -1049,10 +1073,9 @@ async function initNode() {
     }
   } catch (error) {
     console.error('Error initializing node instructions:', error);
-    showToast(`Initialization failed: ${error.message}`);
+    showToast(`Initialization failed: ${error.message}`, true);
   }
 }
-
 async function updateUserProfile(userId) {
   if (!userId) return;
 
