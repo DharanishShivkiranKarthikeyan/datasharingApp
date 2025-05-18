@@ -1,12 +1,12 @@
 import Peer from 'peerjs';
 import { createLibp2p } from 'libp2p';
 import { kadDHT } from '@libp2p/kad-dht';
-import { createFromJSON } from '@libp2p/peer-id';
 import CryptoJS from 'crypto-js';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'firebase/firestore';
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
 import { multiaddr } from '@multiformats/multiaddr';
+import { createFromPrivKey, createEd25519PeerId } from '@libp2p/peer-id-factory';
 
 // Custom PeerJsTransport for libp2p
 class PeerJsTransport {
@@ -133,7 +133,25 @@ export class DHT {
       this.peer.on('error', reject);
     });
 
-    const peerId = await createFromJSON({ id: this.kademliaId });
+    let peerId;
+    try {
+      // Assume keypair is a base64-encoded private key
+      const privKeyBytes = this.base64UrlToUint8Array(this.keypair);
+      peerId = await createFromPrivKey(privKeyBytes);
+      // Verify the peerId matches kademliaId
+      const derivedId = CryptoJS.SHA256(peerId.toString()).toString(CryptoJS.enc.Hex).substring(0, 40);
+      if (derivedId !== this.kademliaId) {
+        console.warn('Derived PeerId does not match kademliaId, generating new PeerId');
+        throw new Error('PeerId mismatch');
+      }
+    } catch (error) {
+      console.warn('Failed to create PeerId from keypair, generating new Ed25519 PeerId:', error);
+      peerId = await createEd25519PeerId();
+      // Update kademliaId to match generated PeerId
+      this.kademliaId = CryptoJS.SHA256(peerId.toString()).toString(CryptoJS.enc.Hex).substring(0, 40);
+      this.peerId = this.isNode ? `node-${this.uint8ArrayToBase64Url(peerId.privateKey)}` : this.uint8ArrayToBase64Url(peerId.privateKey);
+    }
+
     this.libp2p = await createLibp2p({
       peerId,
       transports: [new PeerJsTransport(this.peer)],
@@ -149,7 +167,7 @@ export class DHT {
     });
 
     this.kadDht = this.libp2p.services.dht;
-    console.log('libp2p and kad-dht initialized');
+    console.log('libp2p and kad-dht initialized with PeerId:', peerId.toString());
   }
 
   async initializeKnownNodes() {
