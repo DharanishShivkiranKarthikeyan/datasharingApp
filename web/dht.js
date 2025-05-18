@@ -248,7 +248,7 @@ export class DHT {
 
   handleConnection(conn) {
     const peerId = conn.peer;
-    console.log(`Incoming connection from peer: ${peerId}`);
+    console.log(`Incoming connection from peer: ${peerId} time ${Date.now()}`);
     this.peers.set(peerId, { connected: true, conn });
     this.activeNodes.add(peerId);
     conn.on('data', data => this.handlePeerData(data, peerId));
