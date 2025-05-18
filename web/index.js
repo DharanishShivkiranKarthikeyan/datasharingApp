@@ -894,10 +894,8 @@ async function buySnippet(hash) {
   try {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
-
-    let ipObject = dht.knownObjects.get(hash);
+    let ipObject = dht.getIPmetadata(hash);
     if (!ipObject) {
-      // Fetch from Firestore if not in knownObjects
       const snippetRef = doc(db, 'snippets', hash);
       const snippetSnap = await getDoc(snippetRef);
       if (!snippetSnap.exists()) throw new Error('Snippet not found');

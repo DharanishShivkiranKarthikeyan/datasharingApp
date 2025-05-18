@@ -2,7 +2,7 @@
 import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getIpMetadata, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
+import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
 
 export class DHT {
   constructor(keypair, isNode = false) {
@@ -152,7 +152,7 @@ export class DHT {
       this.peerId = this.isNode ? `node-${this.keypair}` : this.keypair;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, { host: '0.peerjs.com', port: 443, path: '/', secure: true, debug: 2 });
-
+      console.log(this.knownObjects);
       return await new Promise((resolve, reject) => {
         this.peer.on('open', id => {
           console.log(`PeerJS connection opened with ID: ${id}`);
@@ -280,6 +280,12 @@ export class DHT {
       case 'chunkResponse':
         this.handleChunkResponse(data);
         break;
+      case 'metadataRequest':
+        this.handleMetadataRequest(data,peerId);
+        break;
+      case 'metadataResponse':
+        this.handleMetadataResponse(data);
+        break;
       case 'userData':
         console.log(`Received user data from peer ${peerId}:`, data);
         break;
@@ -382,8 +388,10 @@ export class DHT {
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
       const chunks = await chunkEncrypt(ip, this.keypair, minChunks);
+      console.log(chunks, "CHUNKS")
       const chunkHashes = await Promise.all(chunks.map(chunk => getChunkHash(chunk).then(hash => this.uint8ArrayToBase64Url(hash))));
-      const updatedMetadata = { ...metadata, chunk_count: chunks.length, isPremium, priceUsd };
+      console.log(chunkHashes);
+      const updatedMetadata = { ...metadata, chunk_count: chunks.length, isPremium, priceUsd, chunks:chunkHashes };
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
       this.knownObjects.set(ipHash, ipObject);
       await this.dbPut('store', { id: ipHash, value: JSON.stringify(ipObject) });
@@ -398,6 +406,7 @@ export class DHT {
   }
 
   broadcastIP(ipHash, metadata, chunkHashes) {
+    console.log(chunkHashes);
     const message = { type: 'ip', ipHash, metadata, chunkHashes, peerId: this.peerId };
     this.broadcast(message);
     console.log(`Broadcasted IP ${ipHash} to ${this.activeNodes.size} peers`);
@@ -407,8 +416,10 @@ export class DHT {
     console.log("HEYYYYY")
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
+      console.log("got here");
       if (!ipHash || typeof ipHash !== 'string') throw new Error('Invalid IP hash');
       const ipObject = this.knownObjects.get(ipHash);
+      console.log(ipObject);
       if (!ipObject) throw new Error('IP not found');
       const chunks = [];
       for (const chunkHash of ipObject.chunks) {
@@ -437,6 +448,7 @@ export class DHT {
               lastError = error;
               console.error(`Failed to fetch chunk ${chunkHash} from peer ${peerId}:`, error);
             }
+          
           }
         }
         if (!chunkFetched) throw lastError || new Error(`No available peer for chunk ${chunkHash}`);
@@ -457,6 +469,21 @@ export class DHT {
       console.error('requestData failed:', error);
       throw error;
     }
+  }
+  async getIPmetadata(hash){
+    const peer = this.peers.entries().next().value[1];
+    const requestId = `${this.peers.entries().next().value[0]}-${hash}-${Date.now()}`;
+    const message = { type: 'metadataRequest', requestId, ipHash: hash, peerId: this.peerId };
+    peer.conn.send(message);
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(requestId, { resolve, reject, hash });
+      setTimeout(() => {
+        if (this.pendingRequests.has(requestId)) {
+          this.pendingRequests.delete(requestId);
+          reject(new Error(`Request for object ${hash} from peer timed out`));
+        }
+      }, 10000);
+    });
   }
 
   async fetchChunkFromPeer(peerId, hash) {
@@ -489,6 +516,27 @@ export class DHT {
         console.warn(`Chunk ${chunkHash} not found for peer ${peerId}`);
       }
     }).catch(error => console.error(`Failed to retrieve chunk ${chunkHash} for peer ${peerId}:`, error));
+  }
+
+  handleMetadataRequest(data){
+    const {requestId, ipHash, peerId} = data;
+    const ipObject = this.knownObjects.get(ipHash);
+    const peer = this.peers.get(peerId);
+    if (peer && peer.connected && peer.conn) {
+      peer.conn.send({ type: 'metadataResponse', requestId, ipObject, peerId: this.peerId, ipHash });
+    }
+  }
+
+  handleMetadataResponse(data){
+    const {requestId, ipObject, ipHash } = data;
+    const request = this.pendingRequests.get(requestId);
+    if (request) {
+      if (ipHash === request.hash) {
+        request.resolve(ipObject);
+      }
+      this.pendingRequests.delete(requestId);
+    }
+
   }
 
   handleChunkResponse(data) {

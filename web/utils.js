@@ -41,17 +41,6 @@ export function getChunkHash(chunk) {
     return computeFullHash(dataToHash);
   }
 
-export function getIpMetadata(ip) {
-  return {
-    content_type: ip.content_type,
-    tags: ip.tags,
-    is_premium: ip.is_premium,
-    price_usd: ip.price_usd,
-    creator_id: ip.creator_id,
-    file_type: ip.file_type,
-  };
-}
-
 export function getChunkIndex(chunk) {
   return chunk.index;
 }
