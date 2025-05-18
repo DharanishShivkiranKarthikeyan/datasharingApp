@@ -10,6 +10,7 @@
   "dependencies": {
     "crypto-js": "^4.2.0",
     "firebase": "^11.4.0",
+    "kado": "^4.4.0",
     "peerjs": "^1.5.4"
   },
   "devDependencies": {

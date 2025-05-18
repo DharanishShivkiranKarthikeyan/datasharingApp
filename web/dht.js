@@ -1,8 +1,8 @@
-import Peer from 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm';
-import Kademlia from 'https://cdn.jsdelivr.net/npm/kademlia@0.2.2/+esm';
-import CryptoJS from 'https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/+esm';
+import Peer from 'peerjs';
+import { Kado } from '@kado/core';
+import CryptoJS from 'crypto-js';
 import { db } from './firebase.js';
-import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+import { collection, getDocs } from 'firebase/firestore';
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
 
 export class DHT {
@@ -24,19 +24,20 @@ export class DHT {
     this.connectionRetryDelay = 5000;
     this.averageLatency = 0;
     this.bootstrapNodes = new Set();
-    this.kademlia = null;
+    this.kado = null;
+    this.nodeLatencies = new Map(); // Custom latency tracking
 
     // Generate 160-bit Kademlia ID
     this.peerId = this.isNode ? `node-${this.keypair}` : keypair;
     const hash = CryptoJS.SHA256(this.peerId).toString(CryptoJS.enc.Hex);
     this.kademliaId = hash.substring(0, 40); // 160-bit ID
 
-    // Initialize Kademlia
-    if (this.isNode) {
-      this.kademlia = new Kademlia(this.kademliaId, { k: 20 });
-    } else {
-      this.kademlia = new Kademlia(this.kademliaId, { k: 20 }); // Minimal for regular users
-    }
+    // Initialize Kado
+    this.kado = new Kado({
+      identity: this.kademliaId,
+      storage: 'memory', // In-memory storage; use IndexedDB adapter if needed
+      k: 20, // Bucket size
+    });
 
     console.log('DHT initialized with keypair:', keypair, 'isNode:', isNode);
     this.initializeKnownNodes();
@@ -108,7 +109,8 @@ export class DHT {
                   this.bootstrapNodes.add(nodeId);
                   if (this.isNode) {
                     const nodeHash = CryptoJS.SHA256(nodeId).toString(CryptoJS.enc.Hex).substring(0, 40);
-                    this.kademlia.addNode(nodeId, nodeHash);
+                    this.kado.router.addContact({ identity: nodeHash, address: nodeId });
+                    this.nodeLatencies.set(nodeHash, Infinity); // Initialize latency
                   }
                 }
               });
@@ -149,7 +151,7 @@ export class DHT {
         const latency = Date.now() - start;
         if (this.isNode) {
           const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-          this.kademlia.setNodeLatency(nodeHash, latency);
+          this.nodeLatencies.set(nodeHash, latency); // Custom latency tracking
         }
         return latency;
       } catch (error) {
@@ -176,9 +178,9 @@ export class DHT {
     try {
       // Generate a random ID for FIND_NODE
       const randomId = CryptoJS.SHA256(String(Math.random())).toString(CryptoJS.enc.Hex).substring(0, 40);
-      const nodes = await this.kademlia.findNodes(randomId);
+      const nodes = await this.kado.findNode(randomId, { count: 20 });
       for (const node of nodes) {
-        await this.connectToPeer(node.id);
+        await this.connectToPeer(node.address);
       }
       console.log('Refreshed routing table');
     } catch (error) {
@@ -321,9 +323,9 @@ export class DHT {
       return;
     }
     if (this.isNode) {
-      // Kademlia-based discovery
-      const nodes = await this.kademlia.findNodes(this.kademliaId);
-      knownPeerIds.push(...nodes.map(node => node.id));
+      // Kado-based discovery
+      const nodes = await this.kado.findNode(this.kademliaId, { count: 20 });
+      knownPeerIds.push(...nodes.map(node => node.address));
     }
     knownPeerIds.forEach(peerId => {
       if (!this.peers.has(peerId)) {
@@ -346,7 +348,7 @@ export class DHT {
         this.activeNodes.delete(peerId);
         if (this.isNode) {
           const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-          this.kademlia.removeNode(nodeHash);
+          this.kado.router.removeContact(nodeHash);
         }
       });
     }
@@ -362,7 +364,8 @@ export class DHT {
       this.activeNodes.add(peerId);
       if (this.isNode) {
         const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-        this.kademlia.addNode(peerId, nodeHash);
+        this.kado.router.addContact({ identity: nodeHash, address: peerId });
+        this.nodeLatencies.set(nodeHash, Infinity);
       }
       conn.send({ type: 'handshake', peerId: this.peerId });
     });
@@ -394,7 +397,8 @@ export class DHT {
       this.activeNodes.add(peerId);
       if (this.isNode) {
         const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-        this.kademlia.addNode(peerId, nodeHash);
+        this.kado.router.addContact({ identity: nodeHash, address: peerId });
+        this.nodeLatencies.set(nodeHash, Infinity);
       }
     });
     conn.on('data', (data) => {
@@ -419,7 +423,8 @@ export class DHT {
       this.activeNodes.delete(peerId);
       if (this.isNode) {
         const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
-        this.kademlia.removeNode(nodeHash);
+        this.kado.router.removeContact(nodeHash);
+        this.nodeLatencies.delete(nodeHash);
       }
       console.log(`Peer disconnected: ${peerId}. Will reconnect on next discovery.`);
     }
@@ -510,7 +515,7 @@ export class DHT {
       const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
       let targetNodes = [];
       if (this.isNode) {
-        targetNodes = await this.kademlia.findNodes(keyHash, 20);
+        targetNodes = await this.kado.findNode(keyHash, { count: 20 });
       } else {
         // Regular user: Forward to bootstrap node
         const bootstrapNode = Array.from(this.bootstrapNodes)[0];
@@ -518,7 +523,7 @@ export class DHT {
         targetNodes = await this.requestNodesFromPeer(bootstrapNode, keyHash);
       }
       for (const node of targetNodes) {
-        const peerId = node.id;
+        const peerId = node.address || node.id; // Handle both kado and peerjs node formats
         const peer = this.peers.get(peerId);
         if (peer && peer.connected && peer.conn) {
           peer.conn.send({ type: 'storeDHT', key, value, ttl, peerId: this.peerId });
@@ -526,6 +531,7 @@ export class DHT {
       }
       if (this.isNode) {
         await this.storeDHTFromPeer(key, value, ttl, this.peerId);
+        await this.kado.put(keyHash, value, { ttl }); // Store in kado
       }
       console.log(`Stored DHT key ${key} on ${targetNodes.length} nodes`);
     } catch (error) {
@@ -538,6 +544,8 @@ export class DHT {
     if (!this.isNode) return; // Only nodes store DHT data
     try {
       await this.dbPut('dhtStore', { id: key, value, ttl, timestamp: Date.now() });
+      const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
+      await this.kado.put(keyHash, value, { ttl });
       console.log(`Stored DHT key ${key} from peer ${peerId}`);
     } catch (error) {
       console.error(`Failed to store DHT key ${key} from peer ${peerId}:`, error);
@@ -548,17 +556,17 @@ export class DHT {
     try {
       const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
       if (this.isNode) {
-        const result = await this.kademlia.findValue(keyHash);
-        if (result.value) {
+        const value = await this.kado.get(keyHash);
+        if (value) {
           const stored = await this.dbGet('dhtStore', key);
           if (stored && stored.timestamp + stored.ttl > Date.now()) {
             return stored.value;
           }
         }
         // Query closer nodes
-        const nodes = result.nodes || await this.kademlia.findNodes(keyHash, 20);
+        const nodes = await this.kado.findNode(keyHash, { count: 20 });
         for (const node of nodes) {
-          const value = await this.requestDHTFromPeer(node.id, key);
+          const value = await this.requestDHTFromPeer(node.address, key);
           if (value) return value;
         }
       } else {
@@ -582,7 +590,7 @@ export class DHT {
     peer.conn.send({ type: 'findDHT', key: keyHash, requestId, peerId: this.peerId });
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(requestId, {
-        resolve: ({ nodes }) => resolve(nodes.map(nodeId => ({ id: nodeId }))),
+        resolve: ({ nodes }) => resolve(nodes.map(nodeId => ({ address: nodeId }))),
         reject,
       });
       setTimeout(() => {
@@ -623,8 +631,8 @@ export class DHT {
       peer.conn.send({ type: 'findDHTResponse', requestId, value: stored.value, nodes: [], peerId: this.peerId });
     } else {
       const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
-      const nodes = await this.kademlia.findNodes(keyHash, 20);
-      peer.conn.send({ type: 'findDHTResponse', requestId, value: null, nodes: nodes.map(node => node.id), peerId: this.peerId });
+      const nodes = await this.kado.findNode(keyHash, { count: 20 });
+      peer.conn.send({ type: 'findDHTResponse', requestId, value: null, nodes: nodes.map(node => node.address), peerId: this.peerId });
     }
   }
 
@@ -656,6 +664,8 @@ export class DHT {
           await new Promise(resolve => {
             store.delete(entry.id).onsuccess = resolve;
           });
+          const keyHash = CryptoJS.SHA256(entry.id).toString(CryptoJS.enc.Hex).substring(0, 40);
+          await this.kado.delete(keyHash);
         }
       }
       console.log('Cleaned up expired DHT entries');
@@ -689,21 +699,22 @@ export class DHT {
         const chunkKeyHash = CryptoJS.SHA256(chunkHash).toString(CryptoJS.enc.Hex).substring(0, 40);
         let targetNodes = [];
         if (this.isNode) {
-          targetNodes = await this.kademlia.findNodes(chunkKeyHash, 3); // Store on 3 nodes
+          targetNodes = await this.kado.findNode(chunkKeyHash, { count: 3 }); // Store on 3 nodes
         } else {
           const bootstrapNode = Array.from(this.bootstrapNodes)[0];
           if (!bootstrapNode) throw new Error('No bootstrap node available');
           targetNodes = await this.requestNodesFromPeer(bootstrapNode, chunkKeyHash);
           targetNodes = targetNodes.slice(0, 3);
         }
-        targetNodes = targetNodes.filter(node => node.id.startsWith('node-'));
+        targetNodes = targetNodes.filter(node => (node.address || node.id).startsWith('node-'));
         for (const node of targetNodes) {
-          const nodePeer = this.peers.get(node.id);
+          const nodePeerId = node.address || node.id;
+          const nodePeer = this.peers.get(nodePeerId);
           if (nodePeer && nodePeer.connected && nodePeer.conn) {
             nodePeer.conn.send({ type: 'storeChunk', chunkHash, chunkData, peerId: this.peerId });
-            peerSet.add(node.id);
+            peerSet.add(nodePeerId);
             this.chunkToPeerMap.set(chunkHash, peerSet);
-            console.log(`Sent chunk ${chunkHash} to node ${node.id}`);
+            console.log(`Sent chunk ${chunkHash} to node ${nodePeerId}`);
           }
         }
         // Store peerToChunkMap in DHT on last chunk
@@ -1080,6 +1091,7 @@ export class DHT {
     this.activeNodes.clear();
     this.pendingRequests.clear();
     this.bootstrapNodes.clear();
+    this.kado.router.clear(); // Clear kado routing table
   }
 }
 
