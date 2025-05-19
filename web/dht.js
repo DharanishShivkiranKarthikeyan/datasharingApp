@@ -20,7 +20,7 @@ async function sha256(str) {
 
 // Custom PeerJsTransport for libp2p
 class PeerJsTransport {
-  static tag = 'peerjs-webrtc'; // Added static tag
+  static tag = 'peerjs-webrtc';
   constructor(peer) {
     this.peer = peer;
     this.connections = new Map();
@@ -98,7 +98,8 @@ class PeerJsTransport {
     };
   }
 
-  filter(multiaddrs) {
+  listenFilter(multiaddrs) {
+    console.log('Filtering listen addresses:', multiaddrs.map(ma => ma.toString()));
     return multiaddrs.filter(ma => ma.protoNames().includes('webrtc'));
   }
 }
@@ -168,7 +169,14 @@ export class DHT {
   
     let peerId;
     try {
+      console.log('Keypair input:', this.keypair);
+      if (!this.keypair || typeof this.keypair !== 'string') {
+        throw new Error('Invalid keypair: must be a non-empty string');
+      }
       const privKeyBytes = this.base64UrlToUint8Array(this.keypair);
+      if (!privKeyBytes || !(privKeyBytes instanceof Uint8Array)) {
+        throw new Error('Failed to decode keypair to Uint8Array');
+      }
       peerId = await createFromPrivKey(privKeyBytes);
       const derivedId = await sha256(peerId.toString());
       if (derivedId !== this.kademliaId) {
