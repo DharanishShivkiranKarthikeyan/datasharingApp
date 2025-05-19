@@ -18,10 +18,11 @@ async function sha256(str) {
 
 // Custom PeerJsTransport for libp2p
 class PeerJsTransport {
+  static tag = 'peerjs-webrtc';
   constructor(peer) {
     this.peer = peer;
     this.connections = new Map();
-    this.tag = 'peerjs-webrtc';
+    
   }
 
   async dial(multiaddr) {
