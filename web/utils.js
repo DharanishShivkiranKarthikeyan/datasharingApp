@@ -1,5 +1,6 @@
 // Use the global crypto.subtle for Web Crypto API in the browser
 const subtle = globalThis.crypto?.subtle;
+
 if (!subtle) {
   throw new Error('Web Crypto API is not available in this environment');
 }

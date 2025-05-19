@@ -6,7 +6,15 @@ import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/f
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
 import { multiaddr } from '@multiformats/multiaddr';
 import { createFromPrivKey, createEd25519PeerId } from '@libp2p/peer-id-factory';
-import 'crypto-js'
+
+// Helper function for SHA-256 hashing using Web Crypto
+async function sha256(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hash));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 40);
+}
 
 // Custom PeerJsTransport for libp2p
 class PeerJsTransport {
@@ -101,19 +109,22 @@ export class DHT {
     this.connectionRetryDelay = 5000;
     this.averageLatency = 0;
     this.bootstrapNodes = new Set();
-    this.nodeLatencies = new Map(); // Custom latency tracking
+    this.nodeLatencies = new Map();
 
     // Generate 160-bit Kademlia ID
     this.peerId = this.isNode ? `node-${this.keypair}` : keypair;
-    const hash = CryptoJS.SHA256(this.peerId).toString(CryptoJS.enc.Hex);
-    this.kademliaId = hash.substring(0, 40); // 160-bit ID
-
-    console.log('DHT initialized with keypair:', keypair, 'isNode:', isNode);
-    this.initializeKnownNodes();
+    sha256(this.peerId).then(hash => {
+      this.kademliaId = hash;
+      console.log('DHT initialized with keypair:', keypair, 'isNode:', isNode);
+      this.initializeKnownNodes();
+    }).catch(error => {
+      console.error('Failed to generate Kademlia ID:', error);
+      throw error;
+    });
   }
 
   async initializeLibp2p() {
-    if (!this.isNode) return; // Only nodes run libp2p
+    if (!this.isNode) return;
     this.peer = new Peer(this.peerId, {
       host: '0.peerjs.com',
       port: 443,
@@ -135,11 +146,9 @@ export class DHT {
 
     let peerId;
     try {
-      // Assume keypair is a base64-encoded private key
       const privKeyBytes = this.base64UrlToUint8Array(this.keypair);
       peerId = await createFromPrivKey(privKeyBytes);
-      // Verify the peerId matches kademliaId
-      const derivedId = CryptoJS.SHA256(peerId.toString()).toString(CryptoJS.enc.Hex).substring(0, 40);
+      const derivedId = await sha256(peerId.toString());
       if (derivedId !== this.kademliaId) {
         console.warn('Derived PeerId does not match kademliaId, generating new PeerId');
         throw new Error('PeerId mismatch');
@@ -147,8 +156,7 @@ export class DHT {
     } catch (error) {
       console.warn('Failed to create PeerId from keypair, generating new Ed25519 PeerId:', error);
       peerId = await createEd25519PeerId();
-      // Update kademliaId to match generated PeerId
-      this.kademliaId = CryptoJS.SHA256(peerId.toString()).toString(CryptoJS.enc.Hex).substring(0, 40);
+      this.kademliaId = await sha256(peerId.toString());
       this.peerId = this.isNode ? `node-${this.uint8ArrayToBase64Url(peerId.privateKey)}` : this.uint8ArrayToBase64Url(peerId.privateKey);
     }
 
@@ -190,15 +198,17 @@ export class DHT {
         this.nodes.clear();
       }
     };
+
     if (this.isNode) {
       await this.initializeLibp2p();
     } else {
       await this.initSwarm();
     }
+
     await fetchNodes();
     setInterval(fetchNodes, 5 * 60 * 1000);
+
     if (this.isNode) {
-      await this.initializeLibp2p();
       setInterval(() => this.refreshRoutingTable(), 10 * 60 * 1000);
       setInterval(() => this.republishData(), 6 * 60 * 60 * 1000);
       setInterval(() => this.cleanupDHTStore(), 24 * 60 * 60 * 1000);
@@ -226,6 +236,9 @@ export class DHT {
 
   async queryBootstrapNode(bootstrapNode) {
     try {
+      if (!this.peer || this.peer.destroyed) {
+        throw new Error('PeerJS not initialized');
+      }
       await this.connectToPeer(bootstrapNode);
       const peer = this.peers.get(bootstrapNode);
       if (peer && peer.connected && peer.conn) {
@@ -234,11 +247,11 @@ export class DHT {
         return new Promise((resolve, reject) => {
           this.pendingRequests.set(requestId, {
             resolve: (nodes) => {
-              nodes.forEach(nodeId => {
+              nodes.forEach(async nodeId => {
                 if (nodeId !== this.peerId) {
                   this.bootstrapNodes.add(nodeId);
-                  if (this.isNode) {
-                    const nodeHash = CryptoJS.SHA256(nodeId).toString(CryptoJS.enc.Hex).substring(0, 40);
+                  if (this.isNode && this.kadDht) {
+                    const nodeHash = await sha256(nodeId);
                     this.kadDht.addPeer(nodeHash, [multiaddr(`/webrtc/p2p/${nodeId}`)]);
                     this.nodeLatencies.set(nodeHash, Infinity);
                   }
@@ -256,6 +269,8 @@ export class DHT {
             }
           }, 10000);
         });
+      } else {
+        console.warn(`Failed to connect to bootstrap node ${bootstrapNode}`);
       }
     } catch (error) {
       console.error('Failed to query bootstrap node:', error);
@@ -279,8 +294,8 @@ export class DHT {
           }, 2000);
         });
         const latency = Date.now() - start;
-        if (this.isNode) {
-          const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+        if (this.isNode && this.kadDht) {
+          const nodeHash = await sha256(peerId);
           this.nodeLatencies.set(nodeHash, latency);
         }
         return latency;
@@ -306,7 +321,7 @@ export class DHT {
   async refreshRoutingTable() {
     if (!this.isNode) return;
     try {
-      const randomId = CryptoJS.SHA256(String(Math.random())).toString(CryptoJS.enc.Hex).substring(0, 40);
+      const randomId = await sha256(String(Math.random()));
       const peers = await this.kadDht.getClosestPeers(randomId);
       for (const peer of peers) {
         await this.connectToPeer(peer.id.toString());
@@ -396,7 +411,7 @@ export class DHT {
 
   async initSwarm() {
     try {
-      if (this.isNode) return; // Nodes initialize in initializeLibp2p
+      if (this.isNode) return;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, {
         host: '0.peerjs.com',
@@ -452,7 +467,7 @@ export class DHT {
       console.warn('No known peers to connect to.');
       return;
     }
-    if (this.isNode) {
+    if (this.isNode && this.kadDht) {
       const peers = await this.kadDht.getClosestPeers(this.kademliaId);
       knownPeerIds.push(...peers.map(peer => peer.id.toString()));
     }
@@ -470,12 +485,12 @@ export class DHT {
         .filter(([_, peer]) => !peer.connected)
         .sort((a, b) => (this.connectionAttempts.get(b[0]) || 0) - (this.connectionAttempts.get(a[0]) || 0))
         .slice(0, this.peers.size - 50);
-      peersToRemove.forEach(([peerId]) => {
+      peersToRemove.forEach(async ([peerId]) => {
         this.peers.delete(peerId);
         this.connectionAttempts.delete(peerId);
         this.activeNodes.delete(peerId);
-        if (this.isNode) {
-          const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+        if (this.isNode && this.kadDht) {
+          const nodeHash = await sha256(peerId);
           this.kadDht.removePeer(nodeHash);
         }
       });
@@ -484,14 +499,21 @@ export class DHT {
 
   async connectToPeer(peerId, attempt = 1) {
     if (this.peers.get(peerId)?.connected) return;
-    console.log(`Connecting to peer: ${peerId} (Attempt ${attempt}/3)`);
+    if (!this.peer || this.peer.destroyed) {
+      console.warn(`Cannot connect to peer ${peerId}: PeerJS not initialized`);
+      if (attempt < this.maxConnectionAttempts) {
+        setTimeout(() => this.connectToPeer(peerId, attempt + 1), this.connectionRetryDelay * attempt);
+      }
+      return;
+    }
+    console.log(`Connecting to peer: ${peerId} (Attempt ${attempt}/${this.maxConnectionAttempts})`);
     const conn = this.peer.connect(peerId, { reliable: true });
-    conn.on('open', () => {
+    conn.on('open', async () => {
       console.log(`Connection opened with peer: ${peerId}`);
       this.peers.set(peerId, { connected: true, conn });
       this.activeNodes.add(peerId);
-      if (this.isNode) {
-        const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+      if (this.isNode && this.kadDht) {
+        const nodeHash = await sha256(peerId);
         this.kadDht.addPeer(nodeHash, [multiaddr(`/webrtc/p2p/${peerId}`)]);
         this.nodeLatencies.set(nodeHash, Infinity);
       }
@@ -507,8 +529,8 @@ export class DHT {
     });
     conn.on('error', (err) => {
       console.error(`Connection error with peer ${peerId}:`, err);
-      if (attempt < 3) {
-        setTimeout(() => this.connectToPeer(peerId, attempt + 1), 5000 * attempt);
+      if (attempt < this.maxConnectionAttempts) {
+        setTimeout(() => this.connectToPeer(peerId, attempt + 1), this.connectionRetryDelay * attempt);
       } else {
         console.log(`Max attempts reached for peer ${peerId}. Marking as unreachable.`);
         this.handlePeerDisconnect(peerId);
@@ -516,15 +538,15 @@ export class DHT {
     });
   }
 
-  handleConnection(conn) {
+  async handleConnection(conn) {
     const peerId = conn.peer;
     console.log(`Incoming connection from peer: ${peerId} at ${Date.now()}`);
-    conn.on('open', () => {
+    conn.on('open', async () => {
       console.log(`Connection opened with peer: ${peerId}`);
       this.peers.set(peerId, { connected: true, conn });
       this.activeNodes.add(peerId);
-      if (this.isNode) {
-        const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+      if (this.isNode && this.kadDht) {
+        const nodeHash = await sha256(peerId);
         this.kadDht.addPeer(nodeHash, [multiaddr(`/webrtc/p2p/${peerId}`)]);
         this.nodeLatencies.set(nodeHash, Infinity);
       }
@@ -543,14 +565,14 @@ export class DHT {
     });
   }
 
-  handlePeerDisconnect(peerId) {
+  async handlePeerDisconnect(peerId) {
     const peer = this.peers.get(peerId);
     if (peer) {
       peer.connected = false;
       peer.conn = null;
       this.activeNodes.delete(peerId);
-      if (this.isNode) {
-        const nodeHash = CryptoJS.SHA256(peerId).toString(CryptoJS.enc.Hex).substring(0, 40);
+      if (this.isNode && this.kadDht) {
+        const nodeHash = await sha256(peerId);
         this.kadDht.removePeer(nodeHash);
         this.nodeLatencies.delete(nodeHash);
       }
@@ -593,7 +615,7 @@ export class DHT {
         this.storeChunkFromPeer(data.chunkHash, data.chunkData, peerId);
         break;
       case 'ping':
-        peer = this.peers.get(peerId);
+        let peer = this.peers.get(peerId);
         if (peer && peer.connected && peer.conn) peer.conn.send({ type: 'pong', requestId: data.requestId });
         break;
       case 'pong':
@@ -607,7 +629,7 @@ export class DHT {
         console.log(`Received commission of ${data.amount}. New balance: ${data.newBalance}`);
         break;
       case 'getKnownNodes':
-        peer = this.peers.get(peerId);
+        let peer = this.peers.get(peerId);
         if (peer && peer.connected && peer.conn) {
           const nodes = Array.from(this.activeNodes);
           peer.conn.send({ type: 'knownNodesResponse', requestId: data.requestId, nodes, peerId: this.peerId });
@@ -640,9 +662,9 @@ export class DHT {
 
   async storeDHT(key, value, ttl = 86400000) {
     try {
-      const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
+      const keyHash = await sha256(key);
       let targetNodes = [];
-      if (this.isNode) {
+      if (this.isNode && this.kadDht) {
         const peers = await this.kadDht.getClosestPeers(keyHash);
         targetNodes = peers.map(peer => ({ id: peer.id.toString() })).slice(0, 20);
       } else {
@@ -657,7 +679,7 @@ export class DHT {
           peer.conn.send({ type: 'storeDHT', key, value, ttl, peerId: this.peerId });
         }
       }
-      if (this.isNode) {
+      if (this.isNode && this.kadDht) {
         await this.storeDHTFromPeer(key, value, ttl, this.peerId);
         await this.kadDht.put(Buffer.from(keyHash), Buffer.from(value));
       }
@@ -672,7 +694,7 @@ export class DHT {
     if (!this.isNode) return;
     try {
       await this.dbPut('dhtStore', { id: key, value, ttl, timestamp: Date.now() });
-      const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
+      const keyHash = await sha256(key);
       await this.kadDht.put(Buffer.from(keyHash), Buffer.from(value));
       console.log(`Stored DHT key ${key} from peer ${peerId}`);
     } catch (error) {
@@ -682,8 +704,8 @@ export class DHT {
 
   async findDHT(key) {
     try {
-      const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
-      if (this.isNode) {
+      const keyHash = await sha256(key);
+      if (this.isNode && this.kadDht) {
         const value = await this.kadDht.get(Buffer.from(keyHash));
         if (value) {
           const stored = await this.dbGet('dhtStore', key);
@@ -756,7 +778,7 @@ export class DHT {
     if (stored && stored.timestamp + stored.ttl > Date.now()) {
       peer.conn.send({ type: 'findDHTResponse', requestId, value: stored.value, nodes: [], peerId: this.peerId });
     } else {
-      const keyHash = CryptoJS.SHA256(key).toString(CryptoJS.enc.Hex).substring(0, 40);
+      const keyHash = await sha256(key);
       const peers = await this.kadDht.getClosestPeers(keyHash);
       peer.conn.send({ type: 'findDHTResponse', requestId, value: null, nodes: peers.map(peer => peer.id.toString()), peerId: this.peerId });
     }
@@ -820,9 +842,9 @@ export class DHT {
       peerSet.add(this.peerId);
       this.chunkToPeerMap.set(chunkHash, peerSet);
       if (this.activeNodes.size > 0) {
-        const chunkKeyHash = CryptoJS.SHA256(chunkHash).toString(CryptoJS.enc.Hex).substring(0, 40);
+        const chunkKeyHash = await sha256(chunkHash);
         let targetNodes = [];
-        if (this.isNode) {
+        if (this.isNode && this.kadDht) {
           const peers = await this.kadDht.getClosestPeers(chunkKeyHash);
           targetNodes = peers.map(peer => ({ id: peer.id.toString() })).slice(0, 3);
         } else {
