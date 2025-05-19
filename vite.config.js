@@ -25,4 +25,26 @@ export default defineConfig({
       cert: './cert.pem'
     }
   },
+  optimizeDeps: {
+    include: [
+      'libp2p',
+      '@libp2p/kad-dht',
+      '@libp2p/peer-id-factory',
+      '@libp2p/identify',
+      '@libp2p/ping',
+      '@multiformats/multiaddr',
+      '@multiformats/cid',
+      'peerjs',
+      'events'
+    ],
+    esbuildOptions: {
+      target: 'esnext'
+    }
+  },
+  resolve: {
+    alias: {
+      crypto: 'crypto-browserify',
+      events: 'events' // Alias Node.js events to events package
+    }
+  }
 });

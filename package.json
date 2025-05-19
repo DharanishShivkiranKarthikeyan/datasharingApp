@@ -15,6 +15,7 @@
     "@libp2p/ping": "^2.0.30",
     "@multiformats/multiaddr": "^12.4.0",
     "crypto-js": "^4.2.0",
+    "events": "^3.3.0",
     "firebase": "^11.4.0",
     "kado": "^4.4.0",
     "libp2p": "^2.8.5",
