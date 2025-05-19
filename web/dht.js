@@ -8,7 +8,7 @@ import { multiaddr } from '@multiformats/multiaddr';
 import { createFromPrivKey, createEd25519PeerId } from '@libp2p/peer-id-factory';
 import { identify } from '@libp2p/identify';
 import { ping } from '@libp2p/ping';
-import { EventEmitter } from "events"
+import {EventEmitter} from 'node:events';
 
 // Helper function for SHA-256 hashing using Web Crypto
 async function sha256(str) {
