@@ -1,12 +1,12 @@
 import Peer from 'peerjs';
 import { createLibp2p } from 'libp2p';
 import { kadDHT } from '@libp2p/kad-dht';
-import CryptoJS from 'crypto-js';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
 import { multiaddr } from '@multiformats/multiaddr';
 import { createFromPrivKey, createEd25519PeerId } from '@libp2p/peer-id-factory';
+import 'crypto-js'
 
 // Custom PeerJsTransport for libp2p
 class PeerJsTransport {
@@ -190,6 +190,11 @@ export class DHT {
         this.nodes.clear();
       }
     };
+    if (this.isNode) {
+      await this.initializeLibp2p();
+    } else {
+      await this.initSwarm();
+    }
     await fetchNodes();
     setInterval(fetchNodes, 5 * 60 * 1000);
     if (this.isNode) {
