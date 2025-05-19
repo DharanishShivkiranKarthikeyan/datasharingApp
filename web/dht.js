@@ -20,11 +20,11 @@ async function sha256(str) {
 
 // Custom PeerJsTransport for libp2p
 class PeerJsTransport {
+  static tag = 'peerjs-webrtc'; // Added static tag
   constructor(peer) {
     this.peer = peer;
     this.connections = new Map();
-    this.tag = 'peerjs-webrtc'; // Instance tag as fallback
-    // Explicitly define Symbol.toStringTag
+    this.tag = 'peerjs-webrtc';
     Object.defineProperty(this, Symbol.toStringTag, {
       value: 'peerjs-webrtc',
       writable: false,
@@ -90,7 +90,11 @@ class PeerJsTransport {
         });
       },
       close: () => this.peer.destroy(),
-      getAddrs: () => [multiaddr(`/webrtc/p2p/${this.peer.id}`)],
+      getAddrs: () => {
+        const addr = multiaddr(`/webrtc/p2p/${this.peer.id}`);
+        console.log('Listener address:', addr.toString());
+        return [addr];
+      },
     };
   }
 
@@ -136,6 +140,7 @@ export class DHT {
 
   async initializeLibp2p() {
     if (!this.isNode) return;
+    console.log('Initializing PeerJS with peerId:', this.peerId);
     this.peer = new Peer(this.peerId, {
       host: '0.peerjs.com',
       port: 443,
@@ -149,12 +154,18 @@ export class DHT {
       },
       debug: 3
     });
-
+  
     await new Promise((resolve, reject) => {
-      this.peer.on('open', resolve);
-      this.peer.on('error', reject);
+      this.peer.on('open', () => {
+        console.log('PeerJS opened');
+        resolve();
+      });
+      this.peer.on('error', (err) => {
+        console.error('PeerJS error:', err);
+        reject(err);
+      });
     });
-
+  
     let peerId;
     try {
       const privKeyBytes = this.base64UrlToUint8Array(this.keypair);
@@ -170,27 +181,39 @@ export class DHT {
       this.kademliaId = await sha256(peerId.toString());
       this.peerId = this.isNode ? `node-${this.uint8ArrayToBase64Url(peerId.privateKey)}` : this.uint8ArrayToBase64Url(peerId.privateKey);
     }
-
-    this.libp2p = await createLibp2p({
-      peerId,
-      transports: [
-        () => new PeerJsTransport(this.peer) // Use a factory function
-      ],
-      addresses: {
-        listen: [`/webrtc/p2p/${this.peerId}`]
-      },
-      services: {
-        dht: kadDHT({
-          kBucketSize: 20,
-          clientMode: false
-        }),
-        identify: identify(),
-        ping:ping()
-      }
-    });
-
+  
+    console.log('Configuring libp2p with peerId:', peerId.toString());
+    try {
+      const listenAddr = multiaddr(`/webrtc/p2p/${peerId.toString()}`);
+      console.log('Listen address:', listenAddr.toString());
+      this.libp2p = await createLibp2p({
+        peerId,
+        transports: [
+          () => {
+            const transport = new PeerJsTransport(this.peer);
+            console.log('Created PeerJsTransport with Symbol.toStringTag:', transport[Symbol.toStringTag], 'static tag:', PeerJsTransport.tag, 'instance tag:', transport.tag);
+            return transport;
+          }
+        ],
+        addresses: {
+          listen: [listenAddr.toString()]
+        },
+        services: {
+          dht: kadDHT({
+            kBucketSize: 20,
+            clientMode: false
+          }),
+          identify: identify(),
+          ping: ping()
+        }
+      });
+    } catch (error) {
+      console.error('Failed to create libp2p:', error);
+      throw error;
+    }
+  
     this.kadDht = this.libp2p.services.dht;
-    console.log('libp2p and kad-dht initialized with PeerId:', peerId.toString());
+    console.log('libp2p initialized with PeerId:', peerId.toString(), 'Services:', Object.keys(this.libp2p.services));
   }
 
   async initializeKnownNodes() {
