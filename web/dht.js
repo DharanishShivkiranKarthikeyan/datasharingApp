@@ -8,6 +8,7 @@ import { multiaddr } from '@multiformats/multiaddr';
 import { createFromPrivKey, createEd25519PeerId } from '@libp2p/peer-id-factory';
 import { identify } from '@libp2p/identify';
 import { ping } from '@libp2p/ping';
+import { EventEmitter } from "events"
 
 // Helper function for SHA-256 hashing using Web Crypto
 async function sha256(str) {
@@ -65,11 +66,12 @@ class PeerJsTransport {
   }
 
   createListener(options) {
-    return {
+    const emitter = new EventEmitter();
+    const listener = {
       listen: (multiaddr) => {
         this.peer.on('connection', conn => {
           this.connections.set(conn.peer, conn);
-          options.onConnection?.({
+          const connection = {
             id: conn.peer,
             remotePeer: conn.peer,
             remoteAddr: multiaddr,
@@ -86,16 +88,25 @@ class PeerJsTransport {
               close: () => conn.close(),
               abort: () => conn.close(),
             }],
-          });
+          };
+          options.onConnection?.(connection);
+          emitter.emit('connection', connection);
         });
+        emitter.emit('listening');
       },
-      close: () => this.peer.destroy(),
+      close: () => {
+        this.peer.destroy();
+        emitter.emit('close');
+      },
       getAddrs: () => {
         const addr = multiaddr(`/webrtc/p2p/${this.peer.id}`);
         console.log('Listener address:', addr.toString());
         return [addr];
       },
+      addEventListener: emitter.addEventListener.bind(emitter),
+      removeEventListener: emitter.removeEventListener.bind(emitter),
     };
+    return listener;
   }
 
   listenFilter(multiaddrs) {
@@ -174,8 +185,9 @@ export class DHT {
         throw new Error('Invalid keypair: must be a non-empty string');
       }
       const privKeyBytes = this.base64UrlToUint8Array(this.keypair);
-      if (!privKeyBytes || !(privKeyBytes instanceof Uint8Array)) {
-        throw new Error('Failed to decode keypair to Uint8Array');
+      console.log('Decoded key bytes:', Array.from(privKeyBytes), 'Length:', privKeyBytes.length);
+      if (!privKeyBytes || !(privKeyBytes instanceof Uint8Array) || privKeyBytes.length !== 32) {
+        throw new Error('Invalid private key: must be 32 bytes for Ed25519');
       }
       peerId = await createFromPrivKey(privKeyBytes);
       const derivedId = await sha256(peerId.toString());
