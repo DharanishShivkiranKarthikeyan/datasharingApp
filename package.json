@@ -8,6 +8,7 @@
     "serve": "vite preview --port=8080"
   },
   "dependencies": {
+    "@libp2p/identify": "^3.0.30",
     "@libp2p/kad-dht": "^15.0.2",
     "@libp2p/peer-id": "^5.1.2",
     "@libp2p/peer-id-factory": "^4.2.4",

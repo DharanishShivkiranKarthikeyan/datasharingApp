@@ -6,6 +6,7 @@ import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/f
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
 import { multiaddr } from '@multiformats/multiaddr';
 import { createFromPrivKey, createEd25519PeerId } from '@libp2p/peer-id-factory';
+import { identify } from '@libp2p/identify';
 
 // Helper function for SHA-256 hashing using Web Crypto
 async function sha256(str) {
@@ -181,7 +182,8 @@ export class DHT {
         dht: kadDHT({
           kBucketSize: 20,
           clientMode: false
-        })
+        }),
+        identify: identify()
       }
     });
 
