@@ -7,6 +7,7 @@ import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt
 import { multiaddr } from '@multiformats/multiaddr';
 import { createFromPrivKey, createEd25519PeerId } from '@libp2p/peer-id-factory';
 import { identify } from '@libp2p/identify';
+import { ping } from '@libp2p/ping';
 
 // Helper function for SHA-256 hashing using Web Crypto
 async function sha256(str) {
@@ -183,7 +184,8 @@ export class DHT {
           kBucketSize: 20,
           clientMode: false
         }),
-        identify: identify()
+        identify: identify(),
+        ping:ping()
       }
     });
 
