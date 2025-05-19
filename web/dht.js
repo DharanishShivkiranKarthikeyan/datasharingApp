@@ -21,6 +21,7 @@ class PeerJsTransport {
   constructor(peer) {
     this.peer = peer;
     this.connections = new Map();
+    this.tag = 'peerjs-webrtc';
   }
 
   async dial(multiaddr) {
