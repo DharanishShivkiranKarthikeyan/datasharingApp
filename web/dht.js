@@ -615,7 +615,7 @@ export class DHT {
         this.storeChunkFromPeer(data.chunkHash, data.chunkData, peerId);
         break;
       case 'ping':
-        let peer = this.peers.get(peerId);
+        peer = this.peers.get(peerId);
         if (peer && peer.connected && peer.conn) peer.conn.send({ type: 'pong', requestId: data.requestId });
         break;
       case 'pong':
@@ -629,7 +629,7 @@ export class DHT {
         console.log(`Received commission of ${data.amount}. New balance: ${data.newBalance}`);
         break;
       case 'getKnownNodes':
-        let peer = this.peers.get(peerId);
+        peer = this.peers.get(peerId);
         if (peer && peer.connected && peer.conn) {
           const nodes = Array.from(this.activeNodes);
           peer.conn.send({ type: 'knownNodesResponse', requestId: data.requestId, nodes, peerId: this.peerId });
