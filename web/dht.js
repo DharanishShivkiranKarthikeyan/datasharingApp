@@ -162,7 +162,9 @@ export class DHT {
 
     this.libp2p = await createLibp2p({
       peerId,
-      transports: [new PeerJsTransport(this.peer)],
+      transports: [
+        () => new PeerJsTransport(this.peer) // Use a factory function
+      ],
       addresses: {
         listen: [`/webrtc/p2p/${this.peerId}`]
       },
