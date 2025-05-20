@@ -22,10 +22,11 @@ async function sha256(str) {
 // Custom PeerJsTransport for libp2p
 class PeerJsTransport {
   static tag = 'peerjs-webrtc';
-  constructor(peer) {
+  constructor(peer, libp2pPeerId) {
     this.peer = peer;
     this.connections = new Map();
     this.tag = 'peerjs-webrtc';
+    this.libp2pPeerId = libp2pPeerId;
     Object.defineProperty(this, Symbol.toStringTag, {
       value: 'peerjs-webrtc',
       writable: false,
@@ -69,42 +70,51 @@ class PeerJsTransport {
     const emitter = new EventEmitter();
     const listener = {
       listen: (multiaddr) => {
-        this.peer.on('connection', conn => {
-          this.connections.set(conn.peer, conn);
-          const connection = {
-            id: conn.peer,
-            remotePeer: conn.peer,
-            remoteAddr: multiaddr,
-            close: () => conn.close(),
-            abort: () => conn.close(),
-            getStreams: () => [{
-              id: `stream-${conn.peer}`,
-              protocol: '/webrtc/1.0.0',
-              read: (cb) => {
-                conn.on('data', data => cb(null, data));
-                conn.on('close', () => cb(new Error('Connection closed')));
-              },
-              write: (data) => conn.send(data),
+        return new Promise((resolve, reject) => {
+          this.peer.on('connection', conn => {
+            this.connections.set(conn.peer, conn);
+            const connection = {
+              id: conn.peer,
+              remotePeer: conn.peer,
+              remoteAddr: multiaddr,
               close: () => conn.close(),
               abort: () => conn.close(),
-            }],
-          };
-          options.onConnection?.(connection);
-          emitter.emit('connection', connection);
+              getStreams: () => [{
+                id: `stream-${conn.peer}`,
+                protocol: '/webrtc/1.0.0',
+                read: (cb) => {
+                  conn.on('data', data => cb(null, data));
+                  conn.on('close', () => cb(new Error('Connection closed')));
+                },
+                write: (data) => conn.send(data),
+                close: () => conn.close(),
+                abort: () => conn.close(),
+              }],
+            };
+            options.onConnection?.(connection);
+            emitter.emit('connection', connection);
+          });
+          emitter.emit('listening');
+          resolve(); // Resolve the promise when the listener is set up
         });
-        emitter.emit('listening');
       },
       close: () => {
         this.peer.destroy();
         emitter.emit('close');
       },
       getAddrs: () => {
-        const addr = multiaddr(`/webrtc/p2p/${this.peer.id}`);
+        const addr = multiaddr(`/webrtc/p2p/${this.libp2pPeerId.toString()}`);
         console.log('Listener address:', addr.toString());
         return [addr];
       },
-      addEventListener: emitter.addEventListener.bind(emitter),
-      removeEventListener: emitter.removeEventListener.bind(emitter),
+      addEventListener: (type, listener) => {
+        console.log(`Adding event listener for type: ${type}`);
+        emitter.on(type, listener);
+      },
+      removeEventListener: (type, listener) => {
+        console.log(`Removing event listener for type: ${type}`);
+        emitter.off(type, listener);
+      },
     };
     return listener;
   }
@@ -210,7 +220,7 @@ export class DHT {
         peerId,
         transports: [
           () => {
-            const transport = new PeerJsTransport(this.peer);
+            const transport = new PeerJsTransport(this.peer,peerId);
             console.log('Created PeerJsTransport with Symbol.toStringTag:', transport[Symbol.toStringTag], 'static tag:', PeerJsTransport.tag, 'instance tag:', transport.tag);
             return transport;
           }
