@@ -1,8 +1,9 @@
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, increment, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js';
-import { DHT, sha256 } from './dht.js';
+import { DHT } from './dht.js';
 import { uint8ArrayToBase64Url } from './dht.js';
+import { sha256 } from './utils.js';
 
 import './utils.js';
 

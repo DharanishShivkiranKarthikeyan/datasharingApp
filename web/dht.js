@@ -3,21 +3,12 @@ import { createLibp2p } from 'libp2p';
 import { kadDHT } from '@libp2p/kad-dht';
 import { db } from './firebase.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
+import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType, sha256 } from './utils.js';
 import { multiaddr } from '@multiformats/multiaddr';
 import { createFromPrivKey, createEd25519PeerId } from '@libp2p/peer-id-factory';
 import { identify } from '@libp2p/identify';
 import { ping } from '@libp2p/ping';
 import { EventEmitter } from 'events';
-
-// Helper function for SHA-256 hashing using Web Crypto
-export async function sha256(str) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hash));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 40);
-}
 
 // Custom PeerJsTransport for libp2p
 class PeerJsTransport {

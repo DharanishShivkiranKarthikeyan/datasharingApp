@@ -14,6 +14,14 @@ function generateNonce() {
   return nonce;
 }
 
+// Helper function for SHA-256 hashing using Web Crypto
+export async function sha256(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hash));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 40);
+}
 export function createIntellectualProperty(content, contentType, tags, isPremium, priceUsd, creatorId, fileType) {
   return {
     content: new Uint8Array(content),
