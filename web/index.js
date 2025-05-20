@@ -1021,12 +1021,15 @@ async function flagSnippet(ipHash) {
 
 async function becomeNode() {
   const nodeId = generateUUID();
-  console.log('Generated nodeId:', nodeId);
-  localStorage.setItem('nodeId', nodeId);
+  const hashedNodeId = uint8ArrayToBase64Url(
+    new TextEncoder().encode(await sha256(nodeId))
+  );
+  console.log('Generated nodeId:', hashedNodeId);
+  localStorage.setItem('nodeId', hashedNodeId);
   localStorage.setItem('role', 'node');
-  const nodeRef = doc(db, 'nodes', nodeId);
+  const nodeRef = doc(db, 'nodes', hashedNodeId);
   await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
-  console.log('Node registered in Firestore:', nodeId);
+  console.log('Node registered in Firestore:', hashedNodeId);
 
   if (!window.location.pathname.includes('node-instructions.html')) {
     console.log('Redirecting to node-instructions.html for node role');

@@ -251,7 +251,12 @@ export class DHT {
       try {
         const nodesSnapshot = await getDocs(collection(db, 'nodes'));
         this.nodes.clear();
-        nodesSnapshot.forEach(doc => this.nodes.add(`node-${doc.id}`));
+        nodesSnapshot.forEach((doc) => {
+          console.log(doc.id,this.keypair)
+          if(this.keypair!=doc.id){
+            this.nodes.add(`node-${doc.id}`);
+          }
+        });
         console.log('Fetched nodes:', Array.from(this.nodes));
 
         if (this.nodes.size > 0) {
