@@ -11,7 +11,7 @@ import { ping } from '@libp2p/ping';
 import { EventEmitter } from 'events';
 
 // Helper function for SHA-256 hashing using Web Crypto
-async function sha256(str) {
+export async function sha256(str) {
   const encoder = new TextEncoder();
   const data = encoder.encode(str);
   const hash = await crypto.subtle.digest('SHA-256', data);
