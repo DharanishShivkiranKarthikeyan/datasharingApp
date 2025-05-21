@@ -166,7 +166,7 @@ export class DHT {
             { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
           ]
         },
-        debug: 3 // Enable detailed PeerJS logs
+        debug: 2 // Enable detailed PeerJS logs
       });
       return await new Promise((resolve, reject) => {
         this.peer.on('open', id => {
