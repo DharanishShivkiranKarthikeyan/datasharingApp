@@ -117,9 +117,26 @@
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
     }
   </style>
-  <script type="module" crossorigin src="/datasharingApp/assets/index.js"></script>
 </head>
 <body>
+  <!-- Loading -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.birds.min.js"></script>
+  <script>
+    VANTA.BIRDS({
+      el: "#background-loading",
+      mouseControls: false,
+      touchControls: false,
+      gyroControls: false,
+      minHeight: 100.00,
+      minWidth: 100.00,
+      scale: 1.00,
+      scaleMobile: 1.00,
+      backgroundColor: 0x00000,
+      color1: 0x140061,
+      color2: 0x530098
+    });
+  </script>
   <!-- Toast -->
   <div class="toast" id="toast"></div>
   <!-- Initial Signup Modal -->
@@ -181,6 +198,7 @@
       </form>
     </div>
   </div>
+  <script type="module" src="/datasharingApp/assets/app.js"></script>
   <script>
     function openUserSignupModal() {
       document.getElementById('signupOptionsModal').classList.remove('active');
