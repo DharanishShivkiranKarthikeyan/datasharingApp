@@ -243,13 +243,13 @@ export class DHT {
         const nodesSnapshot = await getDocs(collection(db, 'nodes'));
         this.nodes.clear();
         nodesSnapshot.forEach((doc) => {
-          console.log(doc.id,this.keypair)
-          if(this.keypair!=doc.id){
-            this.nodes.add(`node-${doc.id}`);
+          const data = doc.data();
+          if (data.peerId && data.peerId !== this.peerId) {
+            this.nodes.add(data.peerId);
           }
         });
         console.log('Fetched nodes:', Array.from(this.nodes));
-
+  
         if (this.nodes.size > 0) {
           const bootstrapNode = await this.selectBootstrapNode();
           if (bootstrapNode) {
@@ -262,16 +262,16 @@ export class DHT {
         this.nodes.clear();
       }
     };
-
+  
     if (this.isNode) {
       await this.initializeLibp2p();
     } else {
       await this.initSwarm();
     }
-
+  
     await fetchNodes();
     setInterval(fetchNodes, 5 * 60 * 1000);
-
+  
     if (this.isNode) {
       setInterval(() => this.refreshRoutingTable(), 10 * 60 * 1000);
       setInterval(() => this.republishData(), 6 * 60 * 60 * 1000);
@@ -562,6 +562,10 @@ export class DHT {
   }
 
   async connectToPeer(peerId, attempt = 1) {
+    if (peerId === this.peerId) {
+      console.log('Skipping connection to self');
+      return;
+    }
     if (this.peers.get(peerId)?.connected) return;
     if (!this.peer || this.peer.destroyed) {
       console.warn(`Cannot connect to peer ${peerId}: PeerJS not initialized`);

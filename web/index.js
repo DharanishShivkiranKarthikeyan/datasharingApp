@@ -1025,12 +1025,18 @@ async function becomeNode() {
   const hashedNodeId = uint8ArrayToBase64Url(
     new TextEncoder().encode(await sha256(nodeId))
   );
-  console.log('Generated nodeId:', hashedNodeId);
+  const peerId = `node-${hashedNodeId}`;
+  console.log('Generated nodeId:', hashedNodeId, 'peerId:', peerId);
   localStorage.setItem('nodeId', hashedNodeId);
   localStorage.setItem('role', 'node');
   const nodeRef = doc(db, 'nodes', hashedNodeId);
-  await setDoc(nodeRef, { role: 'node', createdAt: Date.now(), status: 'active' }, { merge: true });
-  console.log('Node registered in Firestore:', hashedNodeId);
+  await setDoc(nodeRef, { 
+    role: 'node', 
+    createdAt: Date.now(), 
+    status: 'active', 
+    peerId: peerId 
+  }, { merge: true });
+  console.log('Node registered in Firestore:', hashedNodeId, 'with peerId:', peerId);
 
   if (!window.location.pathname.includes('node-instructions.html')) {
     console.log('Redirecting to node-instructions.html for node role');
@@ -1054,19 +1060,7 @@ async function initNode() {
       window.location.href = '/datasharingApp/signup.html';
       return;
     }
-    async function sha256(str) {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(str);
-      const hash = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hash));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 40);
-    }
-
-    // Hash nodeId for DHT
-    const hashedNodeId = uint8ArrayToBase64Url(
-      new TextEncoder().encode(await sha256(nodeId))
-    );
-    dht = new DHT(hashedNodeId, true);
+    dht = new DHT(nodeId, true);
     window.dht = dht;
 
     await dht.initDB();
