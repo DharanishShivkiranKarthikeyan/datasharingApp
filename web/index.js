@@ -842,7 +842,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
       priceUsd: priceUsd,
     };
 
-    const ipHash = await dht.publishIP(metadata, finalContent, fileType);
+    const {ipHash, targetPeer} = await dht.publishIP(metadata, finalContent, fileType);
     const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
     const snippetRef = doc(db, 'snippets', ipHash);
 
@@ -858,6 +858,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
       dislikes: 0,
       createdAt: Date.now(),
       creatorId: userId,
+      targetNode: targetPeer,
     };
     console.log('Saving snippet to Firestore: ', snippetData); // Debug log to verify data
 
@@ -886,6 +887,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
 }
 
 async function buySnippet(hash) {
+  
   if (!isAuthenticated()) {
     showToast('Please sign in to buy.');
     return null;
@@ -896,6 +898,11 @@ async function buySnippet(hash) {
     if (!hash) throw new Error('Hash is required');
     let ipObject = await dht.getIPmetadata(hash);
     console.log(ipObject,"IP OBJECT");
+    const snippetRef = doc(db, 'snippets', hash);
+    const snippetSnap = await getDoc(snippetRef);
+    if (!snippetSnap.exists()) throw new Error('Snippet not found');
+
+    const snippet = snippetSnap.data();
 
     const isPremium = ipObject.metadata.isPremium || false;
     const priceUsd = isPremium ? (ipObject.metadata.priceUsd || 0) : 0;
@@ -914,7 +921,7 @@ async function buySnippet(hash) {
       await dht.dbAdd('transactions', { type: 'buy', amount: 0, timestamp: Date.now() });
     }
 
-    const { data, fileType } = await dht.requestData(ipObject);
+    const { data, fileType } = await dht.requestData(ipObject,snippet.targetNode,hash);
     showToast('Snippet retrieved successfully!');
 
     await Promise.all([
