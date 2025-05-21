@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { cpSync } from 'fs';
+import { resolve } from 'path';
 
 export default defineConfig({
   root: './web',
@@ -7,6 +8,11 @@ export default defineConfig({
     outDir: '../dist',
     emptyOutDir: true,
     rollupOptions: {
+      input:{
+        main: resolve("./web/","index.html"),
+        signup: resolve("./web/","signup.html"),
+        nodeinstructions: resolve("./web/","node-instructions.html")
+      },
       output: {
         // Bundle all JavaScript into a single file
         manualChunks: undefined, // Disable chunk splitting
@@ -25,4 +31,26 @@ export default defineConfig({
       cert: './cert.pem'
     }
   },
+  optimizeDeps: {
+    include: [
+      'libp2p',
+      '@libp2p/kad-dht',
+      '@libp2p/peer-id-factory',
+      '@libp2p/identify',
+      '@libp2p/ping',
+      '@multiformats/multiaddr',
+      '@multiformats/cid',
+      'peerjs',
+      'events'
+    ],
+    esbuildOptions: {
+      target: 'esnext'
+    }
+  },
+  resolve: {
+    alias: {
+      crypto: 'crypto-browserify',
+      events: 'events' // Alias Node.js events to events package
+    }
+  }
 });
