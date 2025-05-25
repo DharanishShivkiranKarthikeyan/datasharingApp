@@ -425,7 +425,7 @@ export class DHT {
       const ipHashBytes = await computeFullHash(contentBytes);
       const ipHash = this.uint8ArrayToBase64Url(ipHashBytes);
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
-      const targetPeer = activeNodeList[Math.floor(Math.random()*activeNodeList.length)];
+      const targetPeer = activeNodeList[Math.floor(Math.random() * activeNodeList.length)];
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
       const chunks = await chunkEncrypt(ip, this.keypair, minChunks);
       const chunkHashes = await Promise.all(chunks.map(chunk => getChunkHash(chunk).then(hash => this.uint8ArrayToBase64Url(hash))));
@@ -437,8 +437,8 @@ export class DHT {
       if (this.activeNodes.size > 0) this.broadcastIP(ipHash, updatedMetadata, chunkHashes);
       else await this.queueOfflineOperation({ type: 'publishIP', ipHash, metadata: updatedMetadata, chunkHashes });
       this.sendMapToPeer(targetPeer);
-      
-      return {ipHash, targetPeer};
+      console.log("sent to", targetPeer)
+      return { ipHash, targetPeer };
     } catch (error) {
       console.error('publishIP failed:', error);
       throw error;
@@ -455,6 +455,7 @@ export class DHT {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
       if (!ipObject) throw new Error('IP not found');
+      await this.getPeersWithChunk(targetPeer, ipHash);
       const chunks = [];
       for (const chunkHash of ipObject.chunks) {
         const cachedChunk = await this.dbGet('chunkCache', chunkHash);
@@ -462,8 +463,7 @@ export class DHT {
           chunks.push({ chunk: cachedChunk.value, hash: chunkHash });
           continue;
         }
-        const peersWithChunk = this.getPeersWithChunk(targetPeer, ipHash)
-        
+        const peersWithChunk = this.chunkToPeerMap.get(chunkHash);
         if (!peersWithChunk || peersWithChunk.size === 0) throw new Error(`No peers found with chunk ${chunkHash}`);
         const nodePeers = Array.from(peersWithChunk).filter(peerId => peerId.startsWith('node-'));
         const regularPeers = Array.from(peersWithChunk).filter(peerId => !peerId.startsWith('node-'));
@@ -500,16 +500,24 @@ export class DHT {
       throw error;
     }
   }
-  sendMapToPeer(peerId){
-    const peer = this.peers.get(peerId)
-    const message = { type: 'saveMapRequest', map: this.chunkToPeerMap };
+  sendMapToPeer(peerId) {
+    const peer = this.peers.get(peerId);
+    const serializedMap = {};
+    for (const [chunkHash, peerSet] of this.chunkToPeerMap) {
+      serializedMap[chunkHash] = Array.from(peerSet);
+    }
+    const message = { type: 'saveMapRequest', map: serializedMap };
     peer.conn.send(message);
   }
-  handleMapReception(map){
-    this.chunkToPeerMap = new Map([this.chunkToPeerMap,map]);
+
+  handleMapReception(data) {
+    const receivedMap = data.map;
+    for (const [chunkHash, peerArray] of Object.entries(receivedMap)) {
+      this.chunkToPeerMap.set(chunkHash, new Set(peerArray));
+    }
   }
-  async getPeersWithChunk(peerId, hash){
-    const peer = this.peers.get(peerId)
+  async getPeersWithChunk(peerId, hash) {
+    const peer = this.peers.get(peerId);
     const requestId = `${peerId}-${hash}-${Date.now()}`;
     const message = { type: 'peersWithChunkRequest', requestId, ipHash: hash, peerId: this.peerId };
     peer.conn.send(message);
@@ -593,22 +601,36 @@ export class DHT {
       this.pendingRequests.delete(requestId);
     }
   }
-  handlePeersWithChunkRequest(data, peerId){
+  handlePeersWithChunkRequest(data, peerId) {
     const { requestId, ipHash } = data;
-    
-    const peers = Array.from(this.chunkToPeerMap.get(ipHash));
+    const ipObject = this.knownObjects.get(ipHash);
+    if (!ipObject) {
+      console.warn(`IP ${ipHash} not found`);
+      return;
+    }
+    const chunkPeers = {};
+    for (const chunkHash of ipObject.chunks) {
+      const peers = this.chunkToPeerMap.get(chunkHash);
+      if (peers) {
+        chunkPeers[chunkHash] = Array.from(peers);
+      }
+    }
     const peer = this.peers.get(peerId);
     if (peer && peer.connected && peer.conn) {
-      peer.conn.send({ type: 'peersWithChunkResponse', requestId, peers, peerId: this.peerId, ipHash });
+      peer.conn.send({ type: 'peersWithChunkResponse', requestId, chunkPeers, peerId: this.peerId, ipHash });
     }
   }
-  handlePeersWithChunkResponse(data){
-    const {requestId, peers} = data;
+
+  handlePeersWithChunkResponse(data) {
+    const { requestId, chunkPeers } = data;
     const request = this.pendingRequests.get(requestId);
     if (request) {
-        request.resolve(peers);
+      for (const [chunkHash, peers] of Object.entries(chunkPeers)) {
+        this.chunkToPeerMap.set(chunkHash, new Set(peers));
+      }
+      request.resolve();
+      this.pendingRequests.delete(requestId);
     }
-    this.pendingRequests.delete(requestId);
   }
   handleChunkResponse(data) {
     const { requestId, chunkHash, chunkData } = data;
