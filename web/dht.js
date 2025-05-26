@@ -258,6 +258,7 @@ export class DHT {
   }
 
   handleConnection(conn) {
+    console.log("handle connection called")
     const peerId = conn.peer;
     console.log(`Incoming connection from peer: ${peerId} at ${Date.now()}`);
     conn.on('open', () => {
@@ -427,7 +428,7 @@ export class DHT {
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const targetPeer = activeNodeList[Math.floor(Math.random() * activeNodeList.length)];
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
-      const chunks = await chunkEncrypt(ip, this.keypair, minChunks);
+      const chunks = await chunkEncrypt(ip, minChunks,ipHash);
       const chunkHashes = await Promise.all(chunks.map(chunk => getChunkHash(chunk).then(hash => this.uint8ArrayToBase64Url(hash))));
       const updatedMetadata = { ...metadata, chunk_count: chunks.length, isPremium, priceUsd, chunks: chunkHashes };
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
@@ -452,54 +453,98 @@ export class DHT {
   }
 
   async requestData(ipObject, targetPeer, ipHash) {
-    if (!this.db) throw new Error('IndexedDB not initialized');
-    try {
-      if (!ipObject) throw new Error('IP not found');
-      await this.getPeersWithChunk(targetPeer, ipHash);
-      const chunks = [];
-      for (const chunkHash of ipObject.chunks) {
+  if (!this.db) throw new Error('IndexedDB not initialized');
+  try {
+    if (!ipObject) throw new Error('IP not found');
+
+    // Step 1: Get peers with chunks
+    await this.getPeersWithChunk(targetPeer, ipHash);
+    const chunks = [];
+
+    // Step 2: Fetch and store chunks
+    for (const chunkHash of ipObject.chunks) {
+      try {
+        // Check cache first
         const cachedChunk = await this.dbGet('chunkCache', chunkHash);
         if (cachedChunk && cachedChunk.value) {
           chunks.push({ chunk: cachedChunk.value, hash: chunkHash });
           continue;
         }
+
+        // Fetch from peers
         const peersWithChunk = this.chunkToPeerMap.get(chunkHash);
-        if (!peersWithChunk || peersWithChunk.size === 0) throw new Error(`No peers found with chunk ${chunkHash}`);
+        if (!peersWithChunk || peersWithChunk.size === 0) {
+          throw new Error(`No peers found with chunk ${chunkHash}`);
+        }
+
         const nodePeers = Array.from(peersWithChunk).filter(peerId => peerId.startsWith('node-'));
-        const regularPeers = Array.from(peersWithChunk).filter(peerId => !peerId.startsWith('node-'));
         let chunkFetched = false;
         let lastError = null;
-        for (const peerId of [...nodePeers, ...regularPeers]) {
+
+        for (const peerId of nodePeers) {
           if (this.activeNodes.has(peerId)) {
             try {
               const chunk = await this.fetchChunkFromPeer(peerId, chunkHash);
-              await this.dbPut('chunkCache', { id: chunkHash, value: chunk });
+
+              let value = {
+                data: new Uint8Array(chunk.data),
+                nonce: new Uint8Array(chunk.nonce),
+                index: chunk.index,
+                file_type: chunk.file_type
+              }
+              console.log(value)
+              // Store in IndexedDB
+              await this.dbPut('chunkCache', { id: chunkHash, value: value });
               chunks.push({ chunk, hash: chunkHash });
               chunkFetched = true;
               break;
             } catch (error) {
               lastError = error;
-              console.error(`Failed to fetch chunk ${chunkHash} from peer ${peerId}:`, error);
+              console.error(`Failed to fetch/store chunk ${chunkHash} from peer ${peerId}:`, error);
             }
           }
         }
         if (!chunkFetched) throw lastError || new Error(`No available peer for chunk ${chunkHash}`);
+      } catch (error) {
+        console.error(`Error processing chunk ${chunkHash}:`, error);
+        throw error;
       }
-      const sortedChunks = chunks.sort((a, b) => getChunkIndex(a.chunk) - getChunkIndex(b.chunk));
-      const decryptedData = await Promise.all(sortedChunks.map(({ chunk }) => decryptChunk(chunk, this.keypair)));
-      const fullData = new Uint8Array(decryptedData.reduce((acc, chunk) => acc + chunk.length, 0));
-      let offset = 0;
-      for (const chunk of decryptedData) {
-        fullData.set(chunk, offset);
-        offset += chunk.length;
-      }
-      const fileType = getChunkFileType(sortedChunks[0].chunk);
-      return { data: fullData, fileType };
-    } catch (error) {
-      console.error('requestData failed:', error);
-      throw error;
     }
+
+    // Step 3: Process chunks
+    const sortedChunks = chunks.sort((a, b) => getChunkIndex(a.chunk) - getChunkIndex(b.chunk));
+    console.log(sortedChunks, "SORTED")
+    const decryptedData = await Promise.all(sortedChunks.map(({ chunk }, index) => {
+      console.log(chunk)
+      try {
+        let t = decryptChunk(chunk, ipHash);
+        console.log("DECRYPTED",t)
+        return t;
+        
+      } catch (error) {
+        console.error(`Decryption failed for chunk at index ${index} (hash: ${sortedChunks[index].hash}):`, error);
+        throw error;
+      }
+    }));
+
+    // Step 4: Combine chunks
+    const fullData = new Uint8Array(decryptedData.reduce((acc, chunk) => acc + chunk.length, 0));
+    console.log("GOT FULL DATA", fullData);
+    let offset = 0;
+    for (const chunk of decryptedData) {
+      fullData.set(chunk, offset);
+      offset += chunk.length;
+    }
+    console.log("got here")
+
+    const fileType = getChunkFileType(sortedChunks[0].chunk);
+    console.log("Got filetype everything worked")
+    return { data: fullData, fileType };
+  } catch (error) {
+    console.error('requestData failed:', error);
+    throw error;
   }
+}
   sendMapToPeer(peerId) {
     const peer = this.peers.get(peerId);
     const serializedMap = {};

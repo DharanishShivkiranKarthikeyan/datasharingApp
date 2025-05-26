@@ -50,18 +50,14 @@ function stringToArrayBuffer(str) {
   return encoder.encode(str).buffer;
 }
 
-export async function chunkEncrypt(ip, key, minChunks) {
+export async function chunkEncrypt(ip, minChunks, ipHash) {
   const content = ip.content;
   const chunkSize = Math.ceil(content.length / minChunks);
   const chunks = [];
 
-  // Ensure key is a string, not an array
-  if (Array.isArray(key)) {
-    key = key.join(''); // Convert array of characters back to string if needed
-  }
 
   // Hash the key string to get a 256-bit (32-byte) key
-  const keyData = await subtle.digest('SHA-256', stringToArrayBuffer(key));
+  const keyData = await subtle.digest('SHA-256', stringToArrayBuffer(ipHash));
   const keyBuffer = await subtle.importKey(
     'raw',
     keyData, // This is now a 32-byte ArrayBuffer
@@ -94,30 +90,61 @@ export async function chunkEncrypt(ip, key, minChunks) {
   return chunks;
 }
 
-export async function decryptChunk(chunk, key) {
-  // Ensure key is a string, not an array
-  if (Array.isArray(key)) {
-    key = key.join(''); // Convert array of characters back to string if needed
-  }
+export async function decryptChunk(chunk, ipHash) {  
 
   // Hash the key string to get a 256-bit (32-byte) key
-  const keyData = await subtle.digest('SHA-256', stringToArrayBuffer(key));
+  const keyData = await subtle.digest('SHA-256', stringToArrayBuffer(ipHash));
+  console.log("GOT TO KEYDATA");
   const keyBuffer = await subtle.importKey(
     'raw',
-    keyData, // This is now a 32-byte ArrayBuffer
+    keyData,
     { name: 'AES-GCM' },
     false,
     ['decrypt']
   );
+  console.log("GOT KEYBUFFER");
+
+  // Validate and convert chunk.data
+  let encryptedData = chunk.data;
+  if (encryptedData instanceof ArrayBuffer) {
+    encryptedData = new Uint8Array(encryptedData);
+  } else if (Array.isArray(encryptedData)) {
+    encryptedData = new Uint8Array(encryptedData);
+  } else if (encryptedData instanceof Uint8Array) {
+    // Already a Uint8Array, no conversion needed
+  } else {
+    throw new Error(`chunk.data must be ArrayBuffer, Array, or Uint8Array, got ${encryptedData ? encryptedData.constructor.name : typeof encryptedData}`);
+  }
+
+  // Validate and convert chunk.nonce
+  let iv = chunk.nonce;
+  if (iv instanceof ArrayBuffer) {
+    iv = new Uint8Array(iv);
+  } else if (Array.isArray(iv)) {
+    iv = new Uint8Array(iv);
+  } else if (iv instanceof Uint8Array) {
+    // Already a Uint8Array, no conversion needed
+  } else {
+    throw new Error(`chunk.nonce must be ArrayBuffer, Array, or Uint8Array, got ${iv ? iv.constructor.name : typeof iv}`);
+  }
+
+  // Check IV length (should be 12 bytes for AES-GCM)
+  if (iv.length !== 12) {
+    throw new Error(`Invalid IV length: ${iv.length}, expected 12 bytes for AES-GCM`);
+  }
+
+  console.log("Encrypted Data:", encryptedData);
+  console.log("IV:", iv);
 
   const decrypted = await subtle.decrypt(
-    { name: 'AES-GCM', iv: chunk.nonce },
+    { name: 'AES-GCM', iv: iv },
     keyBuffer,
-    chunk.data
+    encryptedData
   );
-
+  console.log("GOT TO END");
   return new Uint8Array(decrypted);
 }
+
 export function getChunkFileType(chunk) {
   return chunk.file_type;
 }
