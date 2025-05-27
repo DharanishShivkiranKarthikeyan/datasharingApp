@@ -943,7 +943,7 @@ async function buySnippet(hash) {
       }
     }
 
-    displaySnippetContent(data, fileType, ipObject.metadata.content_type);
+    displaySnippetContent(data, fileType, ipObject.metadata.title);
     return { data, fileType };
   } catch (error) {
     console.error('buySnippet failed:', error);
