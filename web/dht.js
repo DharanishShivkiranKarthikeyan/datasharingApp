@@ -157,7 +157,7 @@ export class DHT {
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, {
         host: 'signalingserver-sdqw.onrender.com',
-        port: 10000,
+        port: 443,
         path: '/peerjs',
         secure: true,
         key: 'peerjs',
