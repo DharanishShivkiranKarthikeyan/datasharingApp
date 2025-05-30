@@ -156,7 +156,7 @@ export class DHT {
       this.peerId = this.isNode ? `node-${this.keypair}` : this.keypair;
       console.log('Initializing PeerJS with Peer ID:', this.peerId);
       this.peer = new Peer(this.peerId, {
-        host: '0.peerjs.com',
+        host: 'signalingserver-sdqw.onrender.com',
         port: 443,
         path: '/',
         secure: true,
