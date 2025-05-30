@@ -158,8 +158,9 @@ export class DHT {
       this.peer = new Peer(this.peerId, {
         host: 'signalingserver-sdqw.onrender.com',
         port: 443,
-        path: '/',
+        path: '/peerjs',
         secure: true,
+        key: 'peerjs',
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
