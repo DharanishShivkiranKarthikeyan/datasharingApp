@@ -569,76 +569,7 @@ async function checkIfUserIsNode(userId) {
   }
 }
 
-async function compressImage(file, maxWidth = 800, maxHeight = 800, quality = 0.7) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
 
-      if (width > height) {
-        if (width > maxWidth) {
-          height *= maxWidth / width;
-          width = maxWidth;
-        }
-      } else {
-        if (height > maxHeight) {
-          width *= maxHeight / height;
-          height = maxHeight;
-        }
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-
-      canvas.toBlob(
-        (blob) => resolve(blob),
-        file.type,
-        quality
-      );
-    };
-    img.onerror = reject;
-  });
-}
-
-async function uploadProfileImage(userId, file) {
-  if (!file) {
-    console.log('No file provided for upload');
-    return null;
-  }
-  if (!auth.currentUser || auth.currentUser.uid !== userId) {
-    console.error('User not authenticated or ID mismatch');
-    showToast('Please sign in to upload a profile image.', true);
-    return null;
-  }
-  try {
-    const compressedBlob = await compressImage(file);
-    const reader = new FileReader();
-    const base64Promise = new Promise((resolve, reject) => {
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(compressedBlob);
-    });
-    const base64String = await base64Promise;
-
-    const userDocRef = doc(db, 'users', userId);
-    await setDoc(userDocRef, {
-      profileImage: base64String,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-
-    console.log('Compressed profile image stored in Firestore for user:', userId);
-    return base64String;
-  } catch (error) {
-    console.error('Failed to store profile image in Firestore:', error);
-    showToast(`Failed to store profile image: ${error.message}`, true);
-    return null;
-  }
-}
 
 async function handleSignup() {
   console.log('handleSignup function called');
@@ -663,15 +594,11 @@ async function handleSignup() {
     console.log('Sign-up successful, user:', result.user);
 
     const username = document.getElementById('usernameInput').value;
-    const profileImageInput = document.getElementById('profileImageInput');
-    const profileImageFile = profileImageInput.files[0];
-    console.log(profileImageFile);
-    const profileImageUrl = profileImageFile ? await uploadProfileImage(result.user.uid, profileImageFile) : null;
 
     const userRef = doc(db, 'users', result.user.uid);
     await setDoc(userRef, {
       username: username || result.user.displayName || 'Anonymous User',
-      profileImageUrl: profileImageUrl || null,
+      profileImageUrl: result.user.photoURL,
       createdAt: Date.now(),
       snippetsPosted: 0,
     }, { merge: true });
@@ -1077,7 +1004,7 @@ async function updateUserProfile(userId) {
       }
       if (userAvatarElement) {
         if (userData.profileImageUrl) {
-          userAvatarElement.innerHTML = `<img src="${userData.profileImageUrl}" alt="Profile Image" class="w-12 h-12 rounded-full object-cover">`;
+          userAvatarElement.innerHTML = `<img src=${userData.profileImageUrl} alt="Profile Image" class="w-12 h-12 rounded-full object-cover">`;
         } else {
           userAvatarElement.innerHTML = '<i class="fas fa-user text-lg"></i>';
         }
