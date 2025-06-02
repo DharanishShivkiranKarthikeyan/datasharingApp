@@ -1039,11 +1039,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     await minLoadingTime;
 
   }
-  document.getElementById("body").classList = [];
+  
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
   if (window.location.pathname.includes("signup")) {
-      document.getElementById("body").classList = [];
     const userSignupForm = document.getElementById('userSignupForm');
     if (userSignupForm) {
       userSignupForm.addEventListener('submit', async (e) => {
@@ -1073,6 +1072,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (isIndexPage) {
+    document.getElementById("body").classList = [];
     const indexedDB = await initializeIndexedDB();
     const keypair = await loadKeypair(indexedDB);
     try {
