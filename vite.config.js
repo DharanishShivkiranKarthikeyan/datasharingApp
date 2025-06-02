@@ -11,7 +11,8 @@ export default defineConfig({
       input:{
         main: resolve("./web/","index.html"),
         signup: resolve("./web/","signup.html"),
-        nodeinstructions: resolve("./web/","node-instructions.html")
+        nodeinstructions: resolve("./web/","node-instructions.html"),
+        landing: resolve("./web/","landing.html")
       },
       output: {
         // Bundle all JavaScript into a single file
