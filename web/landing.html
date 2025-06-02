@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Dcrypt - A decentralized platform for sharing and monetizing code snippets securely.">
+  <meta name="keywords" content="decentralized, data sharing, code snippets, blockchain, cryptocurrency, DCT">
+  <title>Dcrypt - Decentralized Data Sharing</title>
+  <link rel="stylesheet" href="landing.css">
+</head>
+<body>
+  <header class="header" data-aos="fade-down">
+    <h1>Dcrypt</h1>
+    <nav>
+      <a href="#hero">Home</a>
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#nodes">Nodes</a>
+      <a href="#join">Join Us</a>
+    </nav>
+    <button id="themeToggle" class="theme-toggle"><i class="fas fa-sun"></i></button>
+  </header>
+  <main>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <section id="hero" class="card" data-aos="fade-up">
+      <h2>Secure, Private, Decentralized Data Sharing</h2>
+      <p>Take control of your data and monetize your creations with confidence.</p>
+      <p class="highlight">Keep <span>90%</span> of your earnings</p>
+      <div class="cta-buttons">
+        <a href="/datasharingApp/signup.html" class="btn btn-primary">Sign Up</a>
+      </div>
+    </section>
+    <section id="features" class="card" data-aos="fade-up">
+      <h2>Key Features</h2>
+      <div class="feature-grid">
+        <div class="feature" data-aos="fade-up" data-aos-delay="100">
+          <i class="fas fa-lock"></i>
+          <h3>Privacy First</h3>
+          <p>End-to-end encryption ensures your data stays private.</p>
+        </div>
+        <div class="feature" data-aos="fade-up" data-aos-delay="200">
+          <i class="fas fa-users"></i>
+          <h3>Decentralized Network</h3>
+          <p>No single point of failure; your data is distributed across nodes.</p>
+        </div>
+        <div class="feature" data-aos="fade-up" data-aos-delay="300">
+          <i class="fas fa-coins"></i>
+          <h3>Monetize Your Content</h3>
+          <p>Keep 90% of your earnings from premium content.</p>
+        </div>
+        <div class="feature" data-aos="fade-up" data-aos-delay="400">
+          <i class="fas fa-shield-alt"></i>
+          <h3>Secure and Safe</h3>
+          <p>Advanced security measures protect your intellectual property.</p>
+        </div>
+      </div>
+    </section>
+    <section id="how-it-works" class="card" data-aos="fade-up">
+      <h2>How It Works</h2>
+      <div class="steps">
+        <div class="step" data-aos="fade-right" data-aos-delay="100">
+          <h3>Create</h3>
+          <p>Upload your code snippets or content.</p>
+        </div>
+        <div class="step" data-aos="fade-right" data-aos-delay="200">
+          <h3>Share</h3>
+          <p>Set privacy levels and monetize if desired.</p>
+        </div>
+        <div class="step" data-aos="fade-right" data-aos-delay="300">
+          <h3>Earn</h3>
+          <p>Receive 90% of the revenue from your premium content.</p>
+        </div>
+      </div>
+    </section>
+    <section id="nodes" class="card" data-aos="fade-up">
+      <h2>What Are Nodes?</h2>
+      <div class="node-info" data-aos="fade-up" data-aos-delay="100">
+        <i class="fas fa-server fa-3x"></i>
+        <p>Nodes are the backbone of our decentralized network. They store and serve content chunks, ensuring availability and speed. By running a node, you earn a portion of the transaction fees, incentivizing participation and maintaining the network's health.</p>
+      </div>
+    </section>
+    <section id="join" class="card" data-aos="fade-up">
+      <h2>Join Dcrypt Today</h2>
+      <p>Be part of the decentralized future. Sign up now to start sharing and earning.</p>
+      <a href="/datasharingApp/signup.html" class="btn btn-primary">Sign Up</a>
+    </section>
+  </main>
+  <footer class="card" data-aos="fade-up">
+    <p>© 2025 Dcrypt. All rights reserved.</p>
+    <div class="social-links">
+      <a href="#"><i class="fab fa-twitter"></i></a>
+      <a href="#"><i class="fab fa-github"></i></a>
+      <a href="#"><i class="fab fa-linkedin"></i></a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+  <script>
+    AOS.init({
+      duration: 800,
+      once: true,
+    });
+
+    const themeToggle = document.getElementById('themeToggle');
+    themeToggle.addEventListener('click', () => {
+      document.body.classList.toggle('light-mode');
+      if (document.body.classList.contains('light-mode')) {
+        themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+      } else {
+        themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+      }
+    });
+  </script>
+</body>
+</html>

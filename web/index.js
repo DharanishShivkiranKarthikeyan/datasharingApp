@@ -205,8 +205,8 @@ async function updateLiveFeed() {
             <td class="py-2 px-4">${snippetInfo.dislikes}</td>
             <td class="py-2 px-4">
             
-              <button onclick="window.openBuyModal('${key}')" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
-              <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
+              <button onclick="window.openBuyModal('${key}')" class="text-white rounded btn btn-primary px-3 py-1 mr-2">Get (${costDisplay})</button>
+              <button onclick="window.flagSnippet('${key}')" class="text-white rounded btn btn-primary px-3 py-1">Flag</button>
             </td>
           `;
           publishedItemsTableBody.appendChild(row);
@@ -240,7 +240,7 @@ async function updateMySnippets() {
         <td class="py-2 px-4">${data.title || 'No title'}</td>
         <td class="py-2 px-4">${data.ipHash}</td>
         <td class="py-2 px-4">
-          <button onclick="window.copyHash('${data.ipHash}')" class="bg-blue-500 text-white rounded hover:bg-blue-600 px-3 py-1">Copy Hash</button>
+          <button onclick="window.copyHash('${data.ipHash}')" class="btn btn-primary text-white px-3 py-1">Copy Hash</button>
         </td>
       `;
       mySnippetsTableBody.appendChild(row);
@@ -488,6 +488,7 @@ async function storeKeypair(indexedDB, userId) {
 }
 
 async function init(userId,indexedDB) {
+  
   if (isInitializing) {
     console.log('Initialization already in progress, skipping...');
     return;
@@ -577,6 +578,7 @@ async function handleSignup() {
     console.log('Signup already in progress, ignoring additional clicks');
     return;
   }
+  localStorage.setItem("visited", "y");
 
   isSigningUp = true;
   const signupButton = document.getElementById('signupButton');
@@ -1029,10 +1031,19 @@ async function copyHash(hash) {
   }
 }
 
+
 document.addEventListener('DOMContentLoaded', async () => {
+  if(!(localStorage.getItem("visited")==="y") && !(window.location.pathname.includes("signup"))){
+    window.location.href = "/datasharingApp/landing.html"
+    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1000));
+    await minLoadingTime;
+
+  }
+  document.getElementById("body").classList = [];
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
   if (window.location.pathname.includes("signup")) {
+      document.getElementById("body").classList = [];
     const userSignupForm = document.getElementById('userSignupForm');
     if (userSignupForm) {
       userSignupForm.addEventListener('submit', async (e) => {
@@ -1054,13 +1065,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
-  const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html") || window.location.pathname.includes("publish"));
+  
+  const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html") || window.location.pathname.includes("landing"));
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
     window.location.href = '/datasharingApp/node-instructions.html';
   }
 
-  if (isIndexPage || window.location.pathname.includes("publish")) {
+  if (isIndexPage) {
     const indexedDB = await initializeIndexedDB();
     const keypair = await loadKeypair(indexedDB);
     try {
