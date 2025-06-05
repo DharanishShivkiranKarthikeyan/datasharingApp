@@ -158,18 +158,6 @@
                  class="input-field mt-1 block w-full px-4 py-3 placeholder-gray-500"
                  placeholder="Enter your username">
         </div>
-        <!-- Profile Image -->
-        <div>
-          <label for="profileImageInput" class="block text-sm font-medium text-gray-300">Profile Image (Optional)</label>
-          <div class="mt-1 flex items-center">
-            <label class="input-field px-4 py-3 cursor-pointer flex items-center">
-              <span id="profileImageLabel" class="text-gray-500">No file chosen</span>
-              <input id="profileImageInput" name="profile-image" type="file" accept="image/*" class="hidden"
-                     onchange="document.getElementById('profileImageLabel').textContent = this.files[0]?.name || 'No file chosen'">
-              <span class="ml-3 text-gray-400"><i class="fas fa-upload"></i></span>
-            </label>
-          </div>
-        </div>
         <!-- Sign Up Button -->
         <div>
           <button type="submit"
