@@ -1033,7 +1033,7 @@ async function copyHash(hash) {
 
 
 document.addEventListener('DOMContentLoaded', async () => {
-  if(!(localStorage.getItem("visited")==="y") && !(window.location.pathname.includes("signup"))){
+  if(!(localStorage.getItem("visited")==="y") && !(window.location.pathname.includes("signup"))&&!(window.location.pathname.includes("node"))){
     window.location.href = "/datasharingApp/landing.html"
     const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1000));
     await minLoadingTime;
