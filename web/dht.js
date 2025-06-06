@@ -166,7 +166,7 @@ export class DHT {
             { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
           ]
         },
-        debug: 2 // Enable detailed PeerJS logs
+        debug: 2
       });
       return await new Promise((resolve, reject) => {
         this.peer.on('open', id => {
@@ -246,7 +246,7 @@ export class DHT {
       console.log(`Connection closed with peer ${peerId}`);
       this.handlePeerDisconnect(peerId);
     });
-    conn.on('error', (err) => {
+    conn.on('error-', (err) => {
       console.error(`Connection error with peer ${peerId}:`, err);
       if (attempt < 3) {
         setTimeout(() => this.connectToPeer(peerId, attempt + 1), 5000 * attempt);
@@ -258,7 +258,7 @@ export class DHT {
   }
 
   handleConnection(conn) {
-    console.log("handle connection called")
+    console.log("handle connection called");
     const peerId = conn.peer;
     console.log(`Incoming connection from peer: ${peerId} at ${Date.now()}`);
     conn.on('open', () => {
@@ -307,13 +307,14 @@ export class DHT {
         console.log(`Received IP ${data.ipHash} from peer ${peerId}`);
         break;
       case 'peersWithChunkRequest':
-        this.handlePeersWithChunkRequest(data,peerId);
+        this.handlePeersWithChunkRequest(data, peerId);
         break;
       case 'peersWithChunkResponse':
         this.handlePeersWithChunkResponse(data);
         break;
       case 'saveMapRequest':
-        this.handleMapReception(data)
+        this.handleMapReception(data);
+        break;
       case 'chunkRequest':
         this.handleChunkRequest(data, peerId);
         break;
@@ -363,7 +364,7 @@ export class DHT {
     }
   }
 
-  async publishChunk(chunkHash, chunkData, chunkIndex, totalChunks ) {
+  async publishChunk(chunkHash, chunkData, chunkIndex, totalChunks) {
     if (!this.db) throw new Error('IndexedDB not initialized');
     try {
       if (!chunkHash || typeof chunkHash !== 'string' || chunkHash.trim() === '') throw new Error('Invalid chunk hash');
@@ -428,7 +429,7 @@ export class DHT {
       const activeNodeList = Array.from(this.activeNodes).filter(peerId => peerId.startsWith('node-'));
       const targetPeer = activeNodeList[Math.floor(Math.random() * activeNodeList.length)];
       const minChunks = activeNodeList.length > 0 ? activeNodeList.length : 1;
-      const chunks = await chunkEncrypt(ip, minChunks,ipHash);
+      const chunks = await chunkEncrypt(ip, minChunks, ipHash);
       const chunkHashes = await Promise.all(chunks.map(chunk => getChunkHash(chunk).then(hash => this.uint8ArrayToBase64Url(hash))));
       const updatedMetadata = { ...metadata, chunk_count: chunks.length, isPremium, priceUsd, chunks: chunkHashes };
       const ipObject = { metadata: updatedMetadata, chunks: chunkHashes };
@@ -438,7 +439,7 @@ export class DHT {
       if (this.activeNodes.size > 0) this.broadcastIP(ipHash, updatedMetadata, chunkHashes);
       else await this.queueOfflineOperation({ type: 'publishIP', ipHash, metadata: updatedMetadata, chunkHashes });
       this.sendMapToPeer(targetPeer);
-      console.log("sent to", targetPeer)
+      console.log("sent to", targetPeer);
       return { ipHash, targetPeer };
     } catch (error) {
       console.error('publishIP failed:', error);
@@ -453,98 +454,90 @@ export class DHT {
   }
 
   async requestData(ipObject, targetPeer, ipHash) {
-  if (!this.db) throw new Error('IndexedDB not initialized');
-  try {
-    if (!ipObject) throw new Error('IP not found');
+    if (!this.db) throw new Error('IndexedDB not initialized');
+    try {
+      if (!ipObject) throw new Error('IP not found');
 
-    // Step 1: Get peers with chunks
-    await this.getPeersWithChunk(targetPeer, ipHash);
-    const chunks = [];
+      await this.getPeersWithChunk(targetPeer, ipHash);
+      const chunks = [];
 
-    // Step 2: Fetch and store chunks
-    for (const chunkHash of ipObject.chunks) {
-      try {
-        // Check cache first
-        const cachedChunk = await this.dbGet('chunkCache', chunkHash);
-        if (cachedChunk && cachedChunk.value) {
-          chunks.push({ chunk: cachedChunk.value, hash: chunkHash });
-          continue;
-        }
+      for (const chunkHash of ipObject.chunks) {
+        try {
+          const cachedChunk = await this.dbGet('chunkCache', chunkHash);
+          if (cachedChunk && cachedChunk.value) {
+            chunks.push({ chunk: cachedChunk.value, hash: chunkHash });
+            continue;
+          }
 
-        // Fetch from peers
-        const peersWithChunk = this.chunkToPeerMap.get(chunkHash);
-        if (!peersWithChunk || peersWithChunk.size === 0) {
-          throw new Error(`No peers found with chunk ${chunkHash}`);
-        }
+          const peersWithChunk = this.chunkToPeerMap.get(chunkHash);
+          if (!peersWithChunk || peersWithChunk.size === 0) {
+            throw new Error(`No peers found with chunk ${chunkHash}`);
+          }
 
-        const nodePeers = Array.from(peersWithChunk).filter(peerId => peerId.startsWith('node-'));
-        let chunkFetched = false;
-        let lastError = null;
+          const nodePeers = Array.from(peersWithChunk).filter(peerId => peerId.startsWith('node-'));
+          let chunkFetched = false;
+          let lastError = null;
 
-        for (const peerId of nodePeers) {
-          if (this.activeNodes.has(peerId)) {
-            try {
-              const chunk = await this.fetchChunkFromPeer(peerId, chunkHash);
-
-              let value = {
-                data: new Uint8Array(chunk.data),
-                nonce: new Uint8Array(chunk.nonce),
-                index: chunk.index,
-                file_type: chunk.file_type
+          for (const peerId of nodePeers) {
+            if (this.activeNodes.has(peerId)) {
+              try {
+                const chunk = await this.fetchChunkFromPeer(peerId, chunkHash);
+                let value = {
+                  data: new Uint8Array(chunk.data),
+                  nonce: new Uint8Array(chunk.nonce),
+                  index: chunk.index,
+                  file_type: chunk.file_type
+                };
+                console.log(value);
+                await this.dbPut('chunkCache', { id: chunkHash, value: value });
+                chunks.push({ chunk, hash: chunkHash });
+                chunkFetched = true;
+                break;
+              } catch (error) {
+                lastError = error;
+                console.error(`Failed to fetch/store chunk ${chunkHash} from peer ${peerId}:`, error);
               }
-              console.log(value)
-              // Store in IndexedDB
-              await this.dbPut('chunkCache', { id: chunkHash, value: value });
-              chunks.push({ chunk, hash: chunkHash });
-              chunkFetched = true;
-              break;
-            } catch (error) {
-              lastError = error;
-              console.error(`Failed to fetch/store chunk ${chunkHash} from peer ${peerId}:`, error);
             }
           }
+          if (!chunkFetched) throw lastError || new Error(`No available peer for chunk ${chunkHash}`);
+        } catch (error) {
+          console.error(`Error processing chunk ${chunkHash}:`, error);
+          throw error;
         }
-        if (!chunkFetched) throw lastError || new Error(`No available peer for chunk ${chunkHash}`);
-      } catch (error) {
-        console.error(`Error processing chunk ${chunkHash}:`, error);
-        throw error;
       }
-    }
 
-    // Step 3: Process chunks
-    const sortedChunks = chunks.sort((a, b) => getChunkIndex(a.chunk) - getChunkIndex(b.chunk));
-    console.log(sortedChunks, "SORTED")
-    const decryptedData = await Promise.all(sortedChunks.map(({ chunk }, index) => {
-      console.log(chunk)
-      try {
-        let t = decryptChunk(chunk, ipHash);
-        console.log("DECRYPTED",t)
-        return t;
-        
-      } catch (error) {
-        console.error(`Decryption failed for chunk at index ${index} (hash: ${sortedChunks[index].hash}):`, error);
-        throw error;
+      const sortedChunks = chunks.sort((a, b) => getChunkIndex(a.chunk) - getChunkIndex(b.chunk));
+      console.log(sortedChunks, "SORTED");
+      const decryptedData = await Promise.all(sortedChunks.map(({ chunk }, index) => {
+        console.log(chunk);
+        try {
+          let t = decryptChunk(chunk, ipHash);
+          console.log("DECRYPTED", t);
+          return t;
+        } catch (error) {
+          console.error(`Decryption failed for chunk at index ${index} (hash: ${sortedChunks[index].hash}):`, error);
+          throw error;
+        }
+      }));
+
+      const fullData = new Uint8Array(decryptedData.reduce((acc, chunk) => acc + chunk.length, 0));
+      console.log("GOT FULL DATA", fullData);
+      let offset = 0;
+      for (const chunk of decryptedData) {
+        fullData.set(chunk, offset);
+        offset += chunk.length;
       }
-    }));
+      console.log("got here");
 
-    // Step 4: Combine chunks
-    const fullData = new Uint8Array(decryptedData.reduce((acc, chunk) => acc + chunk.length, 0));
-    console.log("GOT FULL DATA", fullData);
-    let offset = 0;
-    for (const chunk of decryptedData) {
-      fullData.set(chunk, offset);
-      offset += chunk.length;
+      const fileType = getChunkFileType(sortedChunks[0].chunk);
+      console.log("Got filetype everything worked");
+      return { data: fullData, fileType };
+    } catch (error) {
+      console.error('requestData failed:', error);
+      throw error;
     }
-    console.log("got here")
-
-    const fileType = getChunkFileType(sortedChunks[0].chunk);
-    console.log("Got filetype everything worked")
-    return { data: fullData, fileType };
-  } catch (error) {
-    console.error('requestData failed:', error);
-    throw error;
   }
-}
+
   sendMapToPeer(peerId) {
     const peer = this.peers.get(peerId);
     const serializedMap = {};
@@ -561,6 +554,7 @@ export class DHT {
       this.chunkToPeerMap.set(chunkHash, new Set(peerArray));
     }
   }
+
   async getPeersWithChunk(peerId, hash) {
     const peer = this.peers.get(peerId);
     const requestId = `${peerId}-${hash}-${Date.now()}`;
@@ -611,7 +605,7 @@ export class DHT {
       }, 10000);
     });
   }
-  
+
   handleChunkRequest(data, peerId) {
     const { requestId, chunkHash } = data;
     this.dbGet('chunkCache', chunkHash).then(chunk => {
@@ -629,23 +623,31 @@ export class DHT {
 
   handleMetadataRequest(data, peerId) {
     const { requestId, ipHash } = data;
-    const ipObject = this.knownObjects.get(ipHash);
+    let ipObjects = [];
+    if (ipHash === 'all') {
+      const allObjects = Array.from(this.knownObjects.entries()).slice(0, 50);
+      ipObjects = allObjects.map(([hash, obj]) => ({ hash, metadata: obj.metadata, chunks: obj.chunks }));
+    } else {
+      const ipObject = this.knownObjects.get(ipHash);
+      if (ipObject) {
+        ipObjects = [{ hash: ipHash, metadata: ipObject.metadata, chunks: ipObject.chunks }];
+      }
+    }
     const peer = this.peers.get(peerId);
     if (peer && peer.connected && peer.conn) {
-      peer.conn.send({ type: 'metadataResponse', requestId, ipObject, peerId: this.peerId, ipHash });
+      peer.conn.send({ type: 'metadataResponse', requestId, ipObjects, peerId: this.peerId, ipHash });
     }
   }
 
   handleMetadataResponse(data) {
-    const { requestId, ipObject, ipHash } = data;
+    const { requestId, ipObjects } = data;
     const request = this.pendingRequests.get(requestId);
     if (request) {
-      if (ipHash === request.hash) {
-        request.resolve(ipObject);
-      }
+      request.resolve(ipObjects);
       this.pendingRequests.delete(requestId);
     }
   }
+
   handlePeersWithChunkRequest(data, peerId) {
     const { requestId, ipHash } = data;
     const ipObject = this.knownObjects.get(ipHash);
@@ -677,6 +679,7 @@ export class DHT {
       this.pendingRequests.delete(requestId);
     }
   }
+
   handleChunkResponse(data) {
     const { requestId, chunkHash, chunkData } = data;
     const request = this.pendingRequests.get(requestId);
@@ -843,6 +846,10 @@ export class DHT {
     this.peers.clear();
     this.activeNodes.clear();
     this.pendingRequests.clear();
+  }
+
+  get hasActiveConnections() {
+    return this.activeNodes.size > 0;
   }
 }
 

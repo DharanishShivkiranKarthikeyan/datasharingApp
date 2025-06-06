@@ -70,19 +70,22 @@ function redirectToPublish() {
     showToast('Failed to open publish modal. Please try again.', true);
   }
 }
-async function openBuyModal(key) {
-  let data = dht.knownObjects.get(key).metadata;
-  window.currentProduct = data.hash;
+
+async function openBuyModal(hash) {
   if (!isAuthenticated() || !dht) {
     showToast('Please sign in and ensure the app is initialized before viewing.', true);
     return;
   }
 
   try {
+    const ipObject = await dht.getIPmetadata(hash);
+    if (!ipObject) throw new Error('Snippet not found');
+
+    window.currentProduct = hash;
     const modal = document.getElementById('buyModal');
-    document.getElementById('snippetTitle').value = data.content_type;
-    document.getElementById('snippetDescription').value = data.description;
-    document.getElementById('snippetPrice').value = data.priceUsd==0?"Free":data.priceUsd;
+    document.getElementById('snippetTitle').value = ipObject.metadata.title || 'Untitled';
+    document.getElementById('snippetDescription').value = ipObject.metadata.description || 'No description';
+    document.getElementById('snippetPrice').value = ipObject.metadata.isPremium ? `${ipObject.metadata.priceUsd} DCT` : 'Free';
     modal.classList.add('active');
   } catch (error) {
     console.error('Failed to open buy/preview modal:', error);
@@ -92,7 +95,7 @@ async function openBuyModal(key) {
 
 function updateUIForSignOut() {
   const elements = {
-    publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
+    snippetGallery: document.getElementById('snippetGallery'),
     mySnippetsTableBody: document.getElementById('mySnippets')?.querySelector('tbody'),
     transactionList: document.getElementById('transactionList'),
     userBalanceElement: document.getElementById('userBalance'),
@@ -101,7 +104,7 @@ function updateUIForSignOut() {
     snippetsPostedElement: document.getElementById('snippetsPosted'),
   };
 
-  if (elements.publishedItemsTableBody) elements.publishedItemsTableBody.innerHTML = '';
+  if (elements.snippetGallery) elements.snippetGallery.innerHTML = '';
   if (elements.mySnippetsTableBody) elements.mySnippetsTableBody.innerHTML = '';
   if (elements.transactionList) elements.transactionList.innerHTML = 'No transactions yet.';
   if (elements.userBalanceElement) elements.userBalanceElement.textContent = 'Balance: 0 DCT';
@@ -162,63 +165,42 @@ async function updateTransactionHistory() {
   }
 }
 
-async function updateLiveFeed() {
-  const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
-  if (!publishedItemsTableBody) return;
+async function updateSnippetGallery() {
+  const snippetGallery = document.getElementById('snippetGallery');
+  if (!snippetGallery) return;
 
-  publishedItemsTableBody.innerHTML = '';
+  snippetGallery.innerHTML = '';
   try {
-    // Use onSnapshot for real-time updates
-    const snippetsQuery = query(collection(db, 'snippets'));
-    onSnapshot(snippetsQuery, async (snapshots) => {
-      const snippetsData = {};
-      snapshots.forEach((doc) => {
-        snippetsData[doc.id] = doc.data();
-      });
+    if (!dht || !dht.hasActiveConnections) {
+      showToast('Waiting for node connection to load snippets...', false);
+      return;
+    }
 
-      if (dht) {
-        // Synchronize dht.knownObjects with Firestore
-        dht.knownObjects.clear();
-        for (const [ipHash, data] of Object.entries(snippetsData)) {
-          const metadata = {
-            content_type: data.title,
-            hash: data.ipHash,
-            description: data.description || 'No description',
-            tags: data.tags || [],
-            isPremium: data.isPremium || false,
-            priceUsd: data.priceUsd || 0
-          };
-          dht.knownObjects.set(ipHash, { metadata, chunks: data.chunks || [] });
-        }
+    const ipObjects = await dht.getIPmetadata('all');
+    if (!ipObjects || ipObjects.length === 0) {
+      snippetGallery.innerHTML = '<p>No snippets available.</p>';
+      return;
+    }
 
-        dht.knownObjects.forEach((value, key) => {
-          const snippetInfo = snippetsData[key];
-          //value.metadata.hash,value.metadata.content_type,value.metadata.description,value.metadata.priceUsd
-          const isPremium = value.metadata.isPremium || false;
-          const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
-          const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td class="py-2 px-4">${value.metadata.content_type}</td>
-            <td class="py-2 px-4">${value.metadata.tags.join(', ') || 'No tags'}</td>
-            <td class="py-2 px-4">${snippetInfo.likes}</td>
-            <td class="py-2 px-4">${snippetInfo.dislikes}</td>
-            <td class="py-2 px-4">
-            
-              <button onclick="window.openBuyModal('${key}')" class="text-white rounded btn btn-primary px-3 py-1 mr-2">Get (${costDisplay})</button>
-              <button onclick="window.flagSnippet('${key}')" class="text-white rounded btn btn-primary px-3 py-1">Flag</button>
-            </td>
-          `;
-          publishedItemsTableBody.appendChild(row);
-        });
-      }
-    }, (error) => {
-      console.error('Live feed snapshot error:', error);
-      showToast('Failed to load live feed.', true);
+    ipObjects.slice(0, 50).forEach(({ hash, metadata }) => {
+      const card = document.createElement('div');
+      card.className = 'bg-gray-800 rounded-lg overflow-hidden shadow-lg';
+      card.innerHTML = `
+        <img src="${metadata.coverImage || 'default-cover.jpg'}" alt="Cover Image" class="w-full h-48 object-cover">
+        <div class="p-4">
+          <h3 class="text-lg font-semibold">${metadata.title || 'Untitled'}</h3>
+          <p class="text-sm text-gray-400">${metadata.tags.join(', ') || 'No tags'}</p>
+          <div class="mt-2 flex justify-between">
+            <button onclick="window.openBuyModal('${hash}')" class="btn btn-primary">Get (${metadata.isPremium ? `${metadata.priceUsd} DCT` : 'Free'})</button>
+            <button onclick="window.flagSnippet('${hash}')" class="btn btn-danger">Flag</button>
+          </div>
+        </div>
+      `;
+      snippetGallery.appendChild(card);
     });
   } catch (error) {
-    console.error('Failed to update live feed:', error);
-    showToast('Failed to load live feed.', true);
+    console.error('Failed to update snippet gallery:', error);
+    showToast('Failed to load snippets.', true);
   }
 }
 
@@ -252,64 +234,42 @@ async function updateMySnippets() {
 }
 
 async function searchSnippets(searchTerm) {
-  const publishedItemsTableBody = document.getElementById('publishedItems')?.querySelector('tbody');
-  if (!publishedItemsTableBody) return;
+  const snippetGallery = document.getElementById('snippetGallery');
+  if (!snippetGallery) return;
 
-  publishedItemsTableBody.innerHTML = '';
+  snippetGallery.innerHTML = '';
   try {
+    if (!dht || !dht.hasActiveConnections) {
+      showToast('Waiting for node connection to search snippets...', false);
+      return;
+    }
+
+    const ipObjects = await dht.getIPmetadata('all');
+    if (!ipObjects || ipObjects.length === 0) {
+      snippetGallery.innerHTML = '<p>No snippets available.</p>';
+      return;
+    }
+
     const searchTags = searchTerm.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag);
-    let snippetsSnapshot;
+    ipObjects.slice(0, 50).forEach(({ hash, metadata }) => {
+      const tags = (metadata.tags || []).map(tag => tag.toLowerCase());
+      if (searchTags.length > 0 && !searchTags.some(tag => tags.includes(tag))) return;
 
-    if (searchTags.length === 0) {
-      snippetsSnapshot = await getDocs(query(collection(db, 'snippets'), where('reviewStatus', '==', 'active')));
-    } else {
-      // Query Firestore for snippets with matching tags
-      snippetsSnapshot = await getDocs(query(collection(db, 'snippets'), where('reviewStatus', '==', 'active')));
-    }
-
-    const snippetsData = {};
-    snippetsSnapshot.forEach((doc) => {
-      snippetsData[doc.id] = doc.data();
+      const card = document.createElement('div');
+      card.className = 'bg-gray-800 rounded-lg overflow-hidden shadow-lg';
+      card.innerHTML = `
+        <img src="${metadata.coverImage || 'default-cover.jpg'}" alt="Cover Image" class="w-full h-48 object-cover">
+        <div class="p-4">
+          <h3 class="text-lg font-semibold">${metadata.title || 'Untitled'}</h3>
+          <p class="text-sm text-gray-400">${metadata.tags.join(', ') || 'No tags'}</p>
+          <div class="mt-2 flex justify-between">
+            <button onclick="window.openBuyModal('${hash}')" class="btn btn-primary">Get (${metadata.isPremium ? `${metadata.priceUsd} DCT` : 'Free'})</button>
+            <button onclick="window.flagSnippet('${hash}')" class="btn btn-danger">Flag</button>
+          </div>
+        </div>
+      `;
+      snippetGallery.appendChild(card);
     });
-
-    if (dht) {
-      // Update knownObjects with Firestore data
-      dht.knownObjects.clear();
-      for (const [ipHash, data] of Object.entries(snippetsData)) {
-        const metadata = {
-          content_type: data.title,
-          description: data.description || 'No description',
-          tags: data.tags || [],
-          isPremium: data.isPremium || false,
-          priceUsd: data.priceUsd || 0,
-        };
-        dht.knownObjects.set(ipHash, { metadata, chunks: data.chunks || [] });
-      }
-
-      dht.knownObjects.forEach((value, key) => {
-        const snippetInfo = snippetsData[key] || { likes: 0, dislikes: 0 };
-
-        const tags = (value.metadata.tags || []).map(tag => tag.toLowerCase());
-        if (searchTags.length > 0 && !searchTags.some(tag => tags.includes(tag))) return;
-
-        const isPremium = value.metadata.isPremium || false;
-        const priceUsd = isPremium ? (value.metadata.priceUsd || 0) : 0;
-        const costDisplay = priceUsd > 0 ? `${priceUsd} DCT` : 'Free';
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td class="py-2 px-4">${value.metadata.content_type}</td>
-          <td class="py-2 px-4">${value.metadata.description || 'No description'}</td>
-          <td class="py-2 px-4">${value.metadata.tags.join(', ') || 'No tags'}</td>
-          <td class="py-2 px-4">${snippetInfo.likes}</td>
-          <td class="py-2 px-4">${snippetInfo.dislikes}</td>
-          <td class="py-2 px-4">
-            <button onclick="window.openBuyModal(${key})" class="bg-purple-500 text-white rounded hover:bg-purple-600 px-3 py-1 mr-2">Get (${costDisplay})</button>
-            <button onclick="window.flagSnippet('${key}')" class="bg-red-500 text-white rounded hover:bg-red-600 px-3 py-1">Flag</button>
-          </td>
-        `;
-        publishedItemsTableBody.appendChild(row);
-      });
-    }
   } catch (error) {
     console.error('Failed to search snippets:', error);
     showToast('Search failed.', true);
@@ -487,8 +447,7 @@ async function storeKeypair(indexedDB, userId) {
   });
 }
 
-async function init(userId,indexedDB) {
-  
+async function init(userId, indexedDB) {
   if (isInitializing) {
     console.log('Initialization already in progress, skipping...');
     return;
@@ -496,7 +455,7 @@ async function init(userId,indexedDB) {
   isInitializing = true;
   console.log('Initializing app with userId:', userId);
   try {
-    if(!indexedDB){
+    if (!indexedDB) {
       indexedDB = await initializeIndexedDB();
     }
     let keypair = await loadKeypair(indexedDB);
@@ -531,7 +490,7 @@ async function init(userId,indexedDB) {
     console.log('User data synced.');
 
     await Promise.all([
-      updateLiveFeed(),
+      updateSnippetGallery(),
       updateMySnippets(),
       updateBalanceDisplay(),
       updateTransactionHistory(),
@@ -569,8 +528,6 @@ async function checkIfUserIsNode(userId) {
     return false;
   }
 }
-
-
 
 async function handleSignup() {
   console.log('handleSignup function called');
@@ -761,17 +718,30 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     const isPremium = document.getElementById('modalPremium').checked;
     const priceInput = document.getElementById('modalPriceInput');
     const priceUsd = isPremium && priceInput ? parseFloat(priceInput.value) || 0 : 0;
+    const coverImageInput = document.getElementById('modalCoverImageInput');
+
+    let coverImageBase64 = '';
+    if (coverImageInput?.files?.length) {
+      const coverImage = coverImageInput.files[0];
+      const reader = new FileReader();
+      coverImageBase64 = await new Promise((resolve, reject) => {
+        reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+        reader.onerror = () => reject(new Error('Failed to read cover image'));
+        reader.readAsDataURL(coverImage);
+      });
+    }
 
     const metadata = {
-      content_type: fileType, // Use fileType instead of title for content_type
-      title: title, // Explicitly include title in metadata
+      content_type: fileType,
+      title: title,
       description: description || '',
       tags: tags ? tags.split(',').map((t) => t.trim()).filter((t) => t.length > 0) : [],
       isPremium: isPremium,
       priceUsd: priceUsd,
+      coverImage: coverImageBase64,
     };
 
-    const {ipHash, targetPeer} = await dht.publishIP(metadata, finalContent, fileType);
+    const { ipHash, targetPeer } = await dht.publishIP(metadata, finalContent, fileType);
     const userId = auth.currentUser?.uid || localStorage.getItem('nodeId');
     const snippetRef = doc(db, 'snippets', ipHash);
 
@@ -788,9 +758,8 @@ async function publishSnippet(title, description, tags, content, fileInput) {
       createdAt: Date.now(),
       creatorId: userId,
       targetNode: targetPeer,
+      coverImage: coverImageBase64,
     };
-    console.log('Saving snippet to Firestore: ', snippetData); // Debug log to verify data
-
     await setDoc(snippetRef, snippetData, { merge: true });
 
     const userRef = doc(db, 'users', userId);
@@ -801,7 +770,7 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     showToast('Snippet published successfully!');
     window.closePublishModal();
     await Promise.all([
-      updateLiveFeed(),
+      updateSnippetGallery(),
       updateMySnippets(),
       updateTransactionHistory(),
       updateBalanceDisplay(),
@@ -811,12 +780,10 @@ async function publishSnippet(title, description, tags, content, fileInput) {
   } catch (error) {
     console.error('publishSnippet failed:', error);
     showToast(`Publish failed: ${error.message}`, true);
-    throw error; // Rethrow to ensure errors are not silently ignored
   }
 }
 
 async function buySnippet(hash) {
-  
   if (!isAuthenticated()) {
     showToast('Please sign in to buy.');
     return null;
@@ -826,7 +793,7 @@ async function buySnippet(hash) {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
     let ipObject = await dht.getIPmetadata(hash);
-    console.log(ipObject,"IP OBJECT");
+    console.log(ipObject, "IP OBJECT");
     const snippetRef = doc(db, 'snippets', hash);
     const snippetSnap = await getDoc(snippetRef);
     if (!snippetSnap.exists()) throw new Error('Snippet not found');
@@ -850,7 +817,7 @@ async function buySnippet(hash) {
       await dht.dbAdd('transactions', { type: 'buy', amount: 0, timestamp: Date.now() });
     }
 
-    const { data, fileType } = await dht.requestData(ipObject,snippet.targetNode,hash);
+    const { data, fileType } = await dht.requestData(ipObject, snippet.targetNode, hash);
     showToast('Snippet retrieved successfully!');
 
     await Promise.all([
@@ -866,7 +833,7 @@ async function buySnippet(hash) {
       if (action === 'like' || action === 'dislike') {
         await submitFeedback(hash, action);
         showToast(`You ${action}d this snippet!`);
-        await updateLiveFeed();
+        await updateSnippetGallery();
       } else {
         showToast('Invalid input. Please type "like" or "dislike".', true);
       }
@@ -928,7 +895,7 @@ async function flagSnippet(ipHash) {
     if (flagCount >= 3) {
       await updateDoc(snippetRef, { reviewStatus: 'under_review' });
       showToast('Snippet has been flagged and is under review.');
-      await updateLiveFeed();
+      await updateSnippetGallery();
     } else {
       showToast('Snippet flagged. It will be reviewed if flagged by more users.');
     }
@@ -1031,15 +998,18 @@ async function copyHash(hash) {
   }
 }
 
+function closePublishModal() {
+  const modal = document.getElementById('publishModal');
+  if (modal) modal.classList.remove('active');
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
-  if(!(localStorage.getItem("visited")==="y") && !(window.location.pathname.includes("signup"))&&!(window.location.pathname.includes("node"))){
-    window.location.href = "/datasharingApp/landing.html"
+  if (!(localStorage.getItem("visited") === "y") && !window.location.pathname.includes("signup") && !window.location.pathname.includes("node")) {
+    window.location.href = "/datasharingApp/landing.html";
     const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1000));
     await minLoadingTime;
-
   }
-  
+
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
   if (window.location.pathname.includes("signup")) {
@@ -1064,7 +1034,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const role = localStorage.getItem('role');
   const nodeId = localStorage.getItem('nodeId');
-  
+
   const isIndexPage = !(window.location.pathname.includes("node") || window.location.pathname.includes("signup.html") || window.location.pathname.includes("landing"));
   if (isIndexPage && role === 'node' && nodeId) {
     console.log('Node detected on index.html, redirecting to node-instructions.html');
@@ -1082,7 +1052,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('onAuthStateChanged triggered');
             if (user) {
               console.log('User is signed in:', user.uid);
-              await init(user.uid,indexedDB );
+              await init(user.uid, indexedDB);
             } else {
               console.log('No user is signed in. Checking IndexedDB for keypair...');
               try {
@@ -1115,7 +1085,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       showToast('An error occurred during initialization.', true);
     }
   }
-  
+
   if (isIndexPage) {
     const elements = {
       signupButton: document.getElementById('signupButton'),
@@ -1127,10 +1097,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       withdrawButton: document.getElementById('withdrawButton'),
       toggleHistoryButton: document.getElementById('toggleHistoryButton'),
       transactionHistory: document.getElementById('transactionHistory'),
-      publishedItemsTableBody: document.getElementById('publishedItems')?.querySelector('tbody'),
+      snippetGallery: document.getElementById('snippetGallery'),
       buyHashButton: document.getElementById('buyHashButton'),
     };
-  
+
     console.log('On index.html, setting up UI and event listeners');
 
     if (role === 'node' && nodeId) {
@@ -1149,7 +1119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Logout button clicked');
       signOutUser();
     });
-    
+
     onAuthStateChanged(auth, (user) => {
       if (user) {
         elements.signupButton?.classList.add('hidden');
@@ -1203,4 +1173,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.searchSnippets = searchSnippets;
   window.copyHash = copyHash;
   window.openBuyModal = openBuyModal;
+  window.closePublishModal = closePublishModal;
 });
