@@ -80,7 +80,7 @@
       <section class="card" data-aos="fade-up">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-xl font-semibold">Quick Actions</h2>
-          <button id="publish" class="btn btn-secondary" onclick="window.redirectToPublish()">Post Something!</button>
+          <button id="publishButton" class="btn btn-secondary" onclick="openPublishModal()">Post Something!</button>
         </div>
         <div class="flex space-x-2">
           <input id="searchInput" type="text" placeholder="Search snippets..." class="input-field flex-1">
@@ -88,30 +88,10 @@
         </div>
       </section>
       <section class="card" data-aos="fade-up" data-aos-delay="100">
-        <h2 class="text-xl font-semibold mb-4">Live Feed</h2>
-        <div class="filter-group">
-          <select id="sortBy" class="filter-select">
-            <option value="likes-desc">Sort by Likes (High to Low)</option>
-            <option value="likes-asc">Sort by Likes (Low to High)</option>
-            <option value="dislikes-desc">Sort by Dislikes (High to Low)</option>
-            <option value="dislikes-asc">Sort by Dislikes (Low to High)</option>
-            <option value="date-desc">Sort by Date (Newest)</option>
-            <option value="date-asc">Sort by Date (Oldest)</option>
-          </select>
-          <input id="filterTags" type="text" placeholder="Filter by tags..." class="input-field flex-1">
+        <h2 class="text-xl font-semibold mb-4">Snippet Gallery</h2>
+        <div id="snippetGallery" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Snippet cards will be dynamically inserted here -->
         </div>
-        <table id="publishedItems">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Tags</th>
-              <th>Likes</th>
-              <th>Dislikes</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
       </section>
       <section class="card" data-aos="fade-up" data-aos-delay="200">
         <h2 class="text-xl font-semibold mb-4">My Snippets</h2>
@@ -145,7 +125,7 @@
           Share your code, ideas, or creations with the Dcrypt community.
         </p>
       </div>
-      <form id="publishForm" class="space-y-6">
+      <form id="publishForm" class="space-y-6" onsubmit="event.preventDefault(); window.publishSnippet();">
         <div>
           <label for="modalTitleInput" class="block text-sm font-medium text-gray-300">Title</label>
           <input id="modalTitleInput" name="title" type="text" required
@@ -177,6 +157,17 @@
               <input id="modalFileInput" name="file-upload" type="file" class="hidden"
                      onchange="document.getElementById('modalFileLabel').textContent = this.files[0]?.name || 'No file chosen'">
               <span class="ml-3 text-gray-400"><i class="fas fa-upload"></i></span>
+            </label>
+          </div>
+        </div>
+        <div>
+          <label for="modalCoverImageInput" class="block text-sm font-medium text-gray-300">Cover Image</label>
+          <div class="mt-1 flex items-center">
+            <label class="input-field px-4 py-3 cursor-pointer flex items-center">
+              <span id="modalCoverImageLabel" class="text-gray-500">No file chosen</span>
+              <input id="modalCoverImageInput" name="cover-image" type="file" accept="image/*" class="hidden"
+                     onchange="document.getElementById('modalCoverImageLabel').textContent = this.files[0]?.name || 'No file chosen'">
+              <span class="ml-3 text-gray-400"><i class="fas fa-image"></i></span>
             </label>
           </div>
         </div>
@@ -240,6 +231,11 @@
       once: true,
     });
 
+    function openPublishModal() {
+      const modal = document.getElementById('publishModal');
+      modal.classList.add('active');
+    }
+
     function closePublishModal() {
       const modal = document.getElementById('publishModal');
       modal.classList.remove('active');
@@ -264,8 +260,7 @@
       if (themeToggle) {
         themeToggle.addEventListener('click', () => {
           const isDark = document.body.classList.toggle('light-mode');
-          document.getElementById("sortBy").classList.toggle('light-mode');
-          themeToggle.innerHTML = isDark  ?  '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
+          themeToggle.innerHTML = isDark ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
         });
       }
     });
