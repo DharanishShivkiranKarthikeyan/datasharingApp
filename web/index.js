@@ -172,7 +172,7 @@ async function updateSnippetGallery() {
   snippetGallery.innerHTML = '';
   try {
     if (!dht || !dht.hasActiveConnections) {
-      showToast('Waiting for node connection to load snippets...', false);
+      console.log("no node connections yet!")
       return;
     }
 
