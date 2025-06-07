@@ -800,7 +800,7 @@ async function buySnippet(hash) {
     if (!dht) throw new Error('DHT not initialized');
     if (!hash) throw new Error('Hash is required');
     let ipObject = await dht.getIPmetadata(hash);
-    console.log(ipObject, "IP OBJECT");
+
     const snippetRef = doc(db, 'snippets', hash);
     const snippetSnap = await getDoc(snippetRef);
     if (!snippetSnap.exists()) throw new Error('Snippet not found');

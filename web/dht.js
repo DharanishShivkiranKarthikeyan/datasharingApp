@@ -653,6 +653,17 @@ export class DHT {
 
   handleMetadataResponse(data) {
     const { requestId, ipObjects } = data;
+    console.log(ipObjects, "Metadata response")
+     if(ipObjects.length>1){
+      ipObjects.slice(0, 50).forEach(({ hash, metadata }) => {
+        this.knownObjects.set(hash,metadata);
+      });
+     }
+     else{
+      this.knownObjects.set(ipObjects.hash,ipObjects.metadata);
+     }
+      
+
     const request = this.pendingRequests.get(requestId);
     if (request) {
       request.resolve(ipObjects);
