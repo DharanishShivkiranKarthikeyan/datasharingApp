@@ -5,6 +5,7 @@ import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.22.0/f
 import { createIntellectualProperty, getIpContent, computeFullHash, chunkEncrypt, getChunkHash, getChunkIndex, decryptChunk, getChunkFileType } from './utils.js';
 
 export class DHT {
+
   constructor(keypair, isNode = false) {
     this.peers = new Map();
     this.knownObjects = new Map();
@@ -22,9 +23,20 @@ export class DHT {
     this.maxConnectionAttempts = 3;
     this.connectionRetryDelay = 5000;
     this.averageLatency = 0;
+    this.resolveWhenReady;
+
+    this.readyPromise = new Promise((resolve) => {
+      this.resolveWhenReady = resolve;
+    });
+
+    this.connectionEstablished = false; // Track if already resolved
 
     console.log('DHT initialized with keypair:', keypair);
     this.initializeKnownNodes();
+  }
+
+  waitForConnection() {
+      return this.readyPromise;
   }
 
   async initializeKnownNodes() {
@@ -234,6 +246,7 @@ export class DHT {
     const conn = this.peer.connect(peerId, { reliable: true });
     conn.on('open', () => {
       console.log(`Connection opened with peer: ${peerId}`);
+      this.resolveWhenReady();
       this.peers.set(peerId, { connected: true, conn });
       this.activeNodes.add(peerId);
       conn.send({ type: 'handshake', peerId: this.peerId });
@@ -571,10 +584,9 @@ export class DHT {
     });
   }
 
-  async getIPmetadata(hash) {
-    const peerEntry = this.peers.entries().next().value;
-    if (!peerEntry) throw new Error('No peers available');
-    const [peerId, peer] = peerEntry;
+  async getIPmetadata(hash) {  
+    const peerId = [...this.activeNodes][1]
+    const peer = this.peers.get(peerId);
     const requestId = `${peerId}-${hash}-${Date.now()}`;
     const message = { type: 'metadataRequest', requestId, ipHash: hash, peerId: this.peerId };
     peer.conn.send(message);

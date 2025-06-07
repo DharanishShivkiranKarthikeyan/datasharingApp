@@ -171,7 +171,7 @@ async function updateSnippetGallery() {
 
   snippetGallery.innerHTML = '';
   try {
-    if (!dht || !dht.hasActiveConnections) {
+    if (!dht.hasActiveConnections) {
       console.log("no node connections yet!")
       return;
     }
@@ -184,9 +184,11 @@ async function updateSnippetGallery() {
 
     ipObjects.slice(0, 50).forEach(({ hash, metadata }) => {
       const card = document.createElement('div');
+      let image = new Image();
+      image.src = `data:image/png;base64,${metadata.coverImage}`;
       card.className = 'bg-gray-800 rounded-lg overflow-hidden shadow-lg';
       card.innerHTML = `
-        <img src="${metadata.coverImage || 'default-cover.jpg'}" alt="Cover Image" class="w-full h-48 object-cover">
+        <img src="${`data:image/png;base64,${metadata.coverImage}`}" alt="Cover Image" class="w-full h-48 object-cover">
         <div class="p-4">
           <h3 class="text-lg font-semibold">${metadata.title || 'Untitled'}</h3>
           <p class="text-sm text-gray-400">${metadata.tags.join(', ') || 'No tags'}</p>
@@ -490,11 +492,15 @@ async function init(userId, indexedDB) {
     console.log('User data synced.');
 
     await Promise.all([
-      updateSnippetGallery(),
       updateMySnippets(),
       updateBalanceDisplay(),
-      updateTransactionHistory(),
+      updateTransactionHistory()
     ]);
+    dht.waitForConnection().then(()=>{
+      console.log("done waiting")
+      updateSnippetGallery();
+    })
+    
     console.log('UI updated.');
 
     await updateUserProfile(userId);
@@ -516,6 +522,7 @@ async function init(userId, indexedDB) {
     isInitializing = false;
   }
   uploadUserDataToFirebase();
+  
 }
 
 async function checkIfUserIsNode(userId) {
