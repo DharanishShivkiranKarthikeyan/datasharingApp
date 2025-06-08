@@ -786,7 +786,6 @@ async function publishSnippet(title, description, tags, content, fileInput) {
     ]);
   } catch (error) {
     console.error('publishSnippet failed:', error);
-    showToast(`Publish failed: ${error.message}`, true);
   }
 }
 
