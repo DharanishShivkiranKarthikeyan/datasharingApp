@@ -6,6 +6,7 @@
   <meta name="description" content="Dcrypt - A decentralized platform for sharing and monetizing code snippets securely.">
   <meta name="keywords" content="decentralized, data sharing, code snippets, blockchain, cryptocurrency, DCT">
   <title>Dcrypt - Decentralized Data Sharing</title>
+  <script type="module" src="/index.js"></script>
   <link rel="stylesheet" href="landing.css">
 </head>
 <body>
@@ -27,8 +28,13 @@
       <h2>Secure, Private, Decentralized Data Sharing</h2>
       <p>Take control of your data and monetize your creations with confidence.</p>
       <p class="highlight">Keep <span>90%</span> of your earnings</p>
-      <div class="cta-buttons">
+      <div class="row">
+        <div class="cta-buttons">
         <a href="/datasharingApp/signup.html" class="btn btn-primary">Sign Up</a>
+      </div>
+      <div class="cta-buttons" style="margin-top: 2vh;">
+        <a onclick="window.login()" id="loginButton" class="btn btn-primary">Login</a>
+      </div>
       </div>
     </section>
     <section id="features" class="card" data-aos="fade-up">
@@ -110,6 +116,7 @@
         themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
       }
     });
+    
   </script>
 </body>
 </html>

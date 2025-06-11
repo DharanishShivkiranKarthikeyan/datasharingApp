@@ -584,7 +584,12 @@ export class DHT {
     });
   }
 
-  async getIPmetadata(hash) {  
+  async getIPmetadata(hash) {
+    console.log(this.knownObjects)
+    if(this.knownObjects.get(hash)){
+      console.log("WE HAVE IT")
+      return this.knownObjects.get(hash);
+    }  
     const peerId = [...this.activeNodes][1]
     const peer = this.peers.get(peerId);
     const requestId = `${peerId}-${hash}-${Date.now()}`;
@@ -653,15 +658,10 @@ export class DHT {
 
   handleMetadataResponse(data) {
     const { requestId, ipObjects } = data;
-    console.log(ipObjects, "Metadata response")
-     if(ipObjects.length>1){
-      ipObjects.slice(0, 50).forEach(({ hash, metadata }) => {
-        this.knownObjects.set(hash,metadata);
-      });
-     }
-     else{
-      this.knownObjects.set(ipObjects.hash,ipObjects.metadata);
-     }
+    console.log(ipObjects, "Metadata response");
+    ipObjects.forEach(({hash, metadata})=>{
+      this.knownObjects.set(hash,metadata);
+    })
       
 
     const request = this.pendingRequests.get(requestId);

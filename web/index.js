@@ -79,13 +79,14 @@ async function openBuyModal(hash) {
 
   try {
     const ipObject = await dht.getIPmetadata(hash);
+    console.log(ipObject)
     if (!ipObject) throw new Error('Snippet not found');
 
     window.currentProduct = hash;
     const modal = document.getElementById('buyModal');
-    document.getElementById('snippetTitle').value = ipObject.metadata.title || 'Untitled';
-    document.getElementById('snippetDescription').value = ipObject.metadata.description || 'No description';
-    document.getElementById('snippetPrice').value = ipObject.metadata.isPremium ? `${ipObject.metadata.priceUsd} DCT` : 'Free';
+    document.getElementById('snippetTitle').value = ipObject.title || 'Untitled';
+    document.getElementById('snippetDescription').value = ipObject.description || 'No description';
+    document.getElementById('snippetPrice').value = ipObject.isPremium ? `${ipObject.priceUsd} DCT` : 'Free';
     modal.classList.add('active');
   } catch (error) {
     console.error('Failed to open buy/preview modal:', error);
@@ -650,6 +651,9 @@ async function signIn() {
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
     console.log('Sign-in successful, user:', result.user);
+    if(window.location.pathname.includes("land")){
+      window.location.href = '/datasharingApp/'
+    }
   } catch (error) {
     console.error('Login failed:', error);
     showToast(`Login failed: ${error.message}`, true);
@@ -806,8 +810,8 @@ async function buySnippet(hash) {
 
     const snippet = snippetSnap.data();
 
-    const isPremium = ipObject.metadata.isPremium || false;
-    const priceUsd = isPremium ? (ipObject.metadata.priceUsd || 0) : 0;
+    const isPremium = ipObject.isPremium || false;
+    const priceUsd = isPremium ? (ipObject.priceUsd || 0) : 0;
     const buyCost = priceUsd;
 
     if (buyCost > 0) {
@@ -845,7 +849,7 @@ async function buySnippet(hash) {
       }
     }
 
-    displaySnippetContent(data, fileType, ipObject.metadata.title);
+    displaySnippetContent(data, fileType, ipObject.title);
     return { data, fileType };
   } catch (error) {
     console.error('buySnippet failed:', error);
@@ -1011,10 +1015,13 @@ function closePublishModal() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (!(localStorage.getItem("visited") === "y") && !window.location.pathname.includes("signup") && !window.location.pathname.includes("node")) {
+    localStorage.setItem("visited","y");
     window.location.href = "/datasharingApp/landing.html";
     const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1000));
     await minLoadingTime;
+    
   }
+  window.login = signIn;
 
   console.log('DOMContentLoaded event fired');
   console.log('Current pathname:', window.location.pathname);
@@ -1091,9 +1098,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       showToast('An error occurred during initialization.', true);
     }
   }
+  if(window.location.pathname.includes("landing")){
+    let loginButton = document.getElementById('loginButton');
+    loginButton?.addEventListener('click', (event) => {
+      event.preventDefault();
+      console.log('Login button clicked');
+      signIn();
+    });
+  }
 
   if (isIndexPage) {
-    const elements = {
+    var elements = {
       signupButton: document.getElementById('signupButton'),
       loginButton: document.getElementById('loginButton'),
       logoutButton: document.getElementById('logoutButton'),
